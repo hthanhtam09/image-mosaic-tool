@@ -78,16 +78,15 @@ const SectionHeader = ({
 
 export default function ControlPanel() {
   const {
-    colorCount,
     blockSize,
     showGrid,
     showNumbers,
-    setColorCount,
     setBlockSize,
     toggleGrid,
     toggleNumbers,
     originalImage,
     palette,
+    fixedPaletteIndices,
     mosaicBlocks,
     processedImageData,
   } = useEditorStore();
@@ -110,7 +109,7 @@ export default function ControlPanel() {
 
   const handleExportPalette = () => {
     if (palette.length > 0) {
-      exportPalette(palette);
+      exportPalette(palette, fixedPaletteIndices);
     }
   };
 
@@ -144,38 +143,6 @@ export default function ControlPanel() {
 
         {originalImage && (
           <>
-            <section className="card p-4">
-              <SectionHeader icon={<IconPalette />} title="Color Palette" />
-              <div>
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="colorCount"
-                    className="text-sm text-[var(--text-secondary)]"
-                  >
-                    Number of colors
-                  </label>
-                  <span className="rounded-md bg-[var(--accent-muted)] px-2.5 py-1 text-xs font-medium text-[var(--accent)]">
-                    {colorCount}
-                  </span>
-                </div>
-                <input
-                  id="colorCount"
-                  type="range"
-                  min="8"
-                  max="20"
-                  step="1"
-                  value={colorCount}
-                  onChange={(e) => setColorCount(Number(e.target.value))}
-                  className="mt-3 w-full"
-                  aria-label="Number of colors"
-                />
-                <div className="mt-1.5 flex justify-between text-xs text-[var(--text-muted)]">
-                  <span>8</span>
-                  <span>20</span>
-                </div>
-              </div>
-            </section>
-
             <section className="card p-4">
               <SectionHeader icon={<IconGrid />} title="Block Size" />
               <div>

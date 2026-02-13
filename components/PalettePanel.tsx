@@ -8,9 +8,10 @@
 
 import { useEditorStore } from '@/store/useEditorStore';
 import { rgbToHex, paletteIndexToLabel } from '@/lib/utils';
+import { getPaletteColorName } from '@/lib/palette';
 
 export default function PalettePanel() {
-  const { palette, originalImage } = useEditorStore();
+  const { palette, fixedPaletteIndices, originalImage } = useEditorStore();
 
   if (!originalImage || palette.length === 0) {
     return null;
@@ -24,7 +25,7 @@ export default function PalettePanel() {
             Color Palette
           </h2>
           <span className="text-xs text-[var(--text-muted)]">
-            {palette.length} colors
+            {palette.length} colors (from image)
           </span>
         </div>
 
@@ -32,6 +33,7 @@ export default function PalettePanel() {
           {palette.map((color, index) => {
             const hex = rgbToHex(color);
             const label = paletteIndexToLabel(index);
+            const name = getPaletteColorName(fixedPaletteIndices[index] ?? index);
             return (
               <div
                 key={index}
@@ -43,17 +45,17 @@ export default function PalettePanel() {
                     style={{
                       backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})`,
                     }}
-                    title={`${index + 1}: ${hex}`}
+                    title={name ? `${label} ${name}: ${hex}` : `${label}: ${hex}`}
                   />
                   <span
                     className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--bg-elevated)] px-1.5 text-[10px] font-semibold text-[var(--text-primary)] ring-1 ring-[var(--border-default)]"
-                    aria-label={`Color ${index + 1}`}
+                    aria-label={name ? `Color ${label} ${name}` : `Color ${label}`}
                   >
                     {label}
                   </span>
                 </div>
-                <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                  {hex}
+                <span className="max-w-[4.5rem] truncate text-center text-[10px] text-[var(--text-muted)]" title={name || hex}>
+                  {name || hex}
                 </span>
               </div>
             );
