@@ -88,9 +88,13 @@ export const createMosaicBlocks = (
   return blocks;
 };
 
+/** Border and padding as fraction of min canvas dimension (for numbered template) */
+const NUMBERED_TEMPLATE_BORDER_FRAC = 0.04;
+const NUMBERED_TEMPLATE_PADDING_FRAC = 0.028;
+
 /**
  * Render numbered template to canvas (outline only, with numbers)
- * Fits content into canvas dimensions (centered) for consistent preview/export
+ * Fits content into canvas with thick outer border and padding for preview/export
  */
 export const renderNumberedTemplateToCanvas = (
   canvas: HTMLCanvasElement,
@@ -103,21 +107,35 @@ export const renderNumberedTemplateToCanvas = (
   if (!ctx) return;
 
   const { width, height } = canvas;
+  const minDim = Math.min(width, height);
+  const borderWidth = Math.max(2, minDim * NUMBERED_TEMPLATE_BORDER_FRAC);
+  const padding = Math.max(4, minDim * NUMBERED_TEMPLATE_PADDING_FRAC);
+
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
 
-  const { scale, offsetX, offsetY } = getLetterSizeFit(contentWidth, contentHeight, width, height);
+  const contentAreaWidth = width - 2 * borderWidth - 2 * padding;
+  const contentAreaHeight = height - 2 * borderWidth - 2 * padding;
+  const { scale, offsetX, offsetY } = getLetterSizeFit(
+    contentWidth,
+    contentHeight,
+    contentAreaWidth,
+    contentAreaHeight
+  );
+
+  const originX = borderWidth + padding + offsetX;
+  const originY = borderWidth + padding + offsetY;
 
   ctx.save();
-  ctx.translate(offsetX, offsetY);
+  ctx.translate(originX, originY);
   ctx.scale(scale, scale);
 
   const fontSize = Math.max(12, Math.round(blockSize * 0.6));
   ctx.font = `${fontSize}px 400 "JetBrains Mono", "SF Mono", Monaco, Consolas, monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#222222';
-  ctx.strokeStyle = '#e5e5e5';
+  ctx.fillStyle = '#8a8a8a';
+  ctx.strokeStyle = '#9a9a9a';
   ctx.lineWidth = Math.max(0.5, 1 / scale);
 
   for (const block of blocks) {
@@ -129,11 +147,20 @@ export const renderNumberedTemplateToCanvas = (
   }
 
   ctx.restore();
+
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = borderWidth;
+  ctx.strokeRect(
+    borderWidth / 2,
+    borderWidth / 2,
+    width - borderWidth,
+    height - borderWidth
+  );
 };
 
 /**
  * Render mosaic with colors and optional numbers + grid
- * Fits content into canvas dimensions (centered) for consistent preview/export
+ * Same border/padding as numbered template for consistent preview/export
  */
 export const renderMosaicWithNumbersToCanvas = (
   canvas: HTMLCanvasElement,
@@ -147,13 +174,27 @@ export const renderMosaicWithNumbersToCanvas = (
   if (!ctx) return;
 
   const { width, height } = canvas;
+  const minDim = Math.min(width, height);
+  const borderWidth = Math.max(2, minDim * NUMBERED_TEMPLATE_BORDER_FRAC);
+  const padding = Math.max(4, minDim * NUMBERED_TEMPLATE_PADDING_FRAC);
+
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
 
-  const { scale, offsetX, offsetY } = getLetterSizeFit(contentWidth, contentHeight, width, height);
+  const contentAreaWidth = width - 2 * borderWidth - 2 * padding;
+  const contentAreaHeight = height - 2 * borderWidth - 2 * padding;
+  const { scale, offsetX, offsetY } = getLetterSizeFit(
+    contentWidth,
+    contentHeight,
+    contentAreaWidth,
+    contentAreaHeight
+  );
+
+  const originX = borderWidth + padding + offsetX;
+  const originY = borderWidth + padding + offsetY;
 
   ctx.save();
-  ctx.translate(offsetX, offsetY);
+  ctx.translate(originX, originY);
   ctx.scale(scale, scale);
 
   const fontSize = Math.max(10, blockSize * 0.6);
@@ -175,7 +216,7 @@ export const renderMosaicWithNumbersToCanvas = (
   }
 
   if (showGrid) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
     ctx.lineWidth = Math.max(0.5, 1 / scale);
     for (const block of blocks) {
       ctx.strokeRect(block.x, block.y, blockSize, blockSize);
@@ -183,6 +224,15 @@ export const renderMosaicWithNumbersToCanvas = (
   }
 
   ctx.restore();
+
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = borderWidth;
+  ctx.strokeRect(
+    borderWidth / 2,
+    borderWidth / 2,
+    width - borderWidth,
+    height - borderWidth
+  );
 };
 
 /**
@@ -217,7 +267,7 @@ export const renderMosaicToCanvas = (
   }
 
   if (showGrid) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
     ctx.lineWidth = Math.max(0.5, 1 / scale);
     for (const block of blocks) {
       ctx.strokeRect(block.x, block.y, blockSize, blockSize);

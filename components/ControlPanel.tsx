@@ -9,7 +9,7 @@
 import { useEditorStore } from '@/store/useEditorStore';
 import { downloadCanvas, LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from '@/lib/utils';
 import { exportPalette, exportNumberedTemplate } from '@/lib/export';
-import { renderMosaicToCanvas } from '@/lib/pixelate';
+import { renderMosaicWithNumbersToCanvas } from '@/lib/pixelate';
 import ImageUploader from './ImageUploader';
 
 const IconUpload = () => (
@@ -97,7 +97,7 @@ export default function ControlPanel() {
     const canvas = document.createElement('canvas');
     canvas.width = LETTER_OUTPUT_WIDTH;
     canvas.height = LETTER_OUTPUT_HEIGHT;
-    renderMosaicToCanvas(
+    renderMosaicWithNumbersToCanvas(
       canvas,
       mosaicBlocks,
       blockSize,

@@ -2,54 +2,74 @@
  * Export utilities for palette and numbered template
  */
 
-import type { RGB } from './utils';
-import type { MosaicBlock } from './pixelate';
-import { rgbToHex, paletteIndexToLabel, LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from './utils';
-import { renderNumberedTemplateToCanvas } from './pixelate';
+import type { RGB } from "./utils";
+import type { MosaicBlock } from "./pixelate";
+import {
+  paletteIndexToLabel,
+  rgbToColorNameEn,
+  LETTER_OUTPUT_WIDTH,
+  LETTER_OUTPUT_HEIGHT,
+} from "./utils";
+import { renderNumberedTemplateToCanvas } from "./pixelate";
 
-const downloadCanvasAsImage = (canvas: HTMLCanvasElement, filename: string): void => {
-  const link = document.createElement('a');
+const downloadCanvasAsImage = (
+  canvas: HTMLCanvasElement,
+  filename: string,
+): void => {
+  const link = document.createElement("a");
   link.download = filename;
-  link.href = canvas.toDataURL('image/png');
+  link.href = canvas.toDataURL("image/png");
   link.click();
 };
 
+/** Palette export: row height, padding, square box (text only, no fill) */
+const PALETTE_ROW_HEIGHT = 44;
+const PALETTE_PADDING = 24;
+const PALETTE_BOX_SIZE = 32;
+const GAP_NAME_TO_BOX = 10;
+
 /**
- * Export palette as PNG with color swatches and labels
+ * Export palette as PNG: white background, vertical list.
+ * Each row: English color name (right-aligned next to box), then a box with only number/letter (no fill).
  */
 export const exportPalette = (palette: RGB[]): void => {
-  const swatchSize = 80;
-  const cols = Math.min(5, palette.length);
-  const rows = Math.ceil(palette.length / cols);
-  const padding = 20;
-  const width = cols * swatchSize + (cols + 1) * padding;
-  const height = rows * (swatchSize + 40) + (rows + 1) * padding;
+  const rows = palette.length;
+  const width = 280;
+  const height = rows * PALETTE_ROW_HEIGHT + 2 * PALETTE_PADDING;
 
-  const canvas = document.createElement('canvas');
+  const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
-  ctx.font = '14px sans-serif';
-  ctx.textAlign = 'center';
+
+  ctx.textBaseline = "middle";
+  const boxX = width - PALETTE_PADDING - PALETTE_BOX_SIZE;
+  const nameRightX = boxX - GAP_NAME_TO_BOX;
+  const rowCenterY = (i: number) =>
+    PALETTE_PADDING + (i + 0.5) * PALETTE_ROW_HEIGHT;
 
   palette.forEach((color, index) => {
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    const x = padding + col * (swatchSize + padding);
-    const y = padding + row * (swatchSize + 40 + padding);
+    const yCenter = rowCenterY(index);
+    const boxY = yCenter - PALETTE_BOX_SIZE / 2;
 
-    ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
-    ctx.fillRect(x, y, swatchSize, swatchSize);
-    ctx.strokeStyle = '#ccc';
-    ctx.strokeRect(x, y, swatchSize, swatchSize);
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boxX, boxY, PALETTE_BOX_SIZE, PALETTE_BOX_SIZE);
 
-    ctx.fillStyle = '#333';
-    ctx.fillText(paletteIndexToLabel(index), x + swatchSize / 2, y + swatchSize + 20);
-    ctx.fillText(rgbToHex(color), x + swatchSize / 2, y + swatchSize + 38);
+    const label = paletteIndexToLabel(index);
+    ctx.fillStyle = "#222";
+    ctx.font = "14px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(label, boxX + PALETTE_BOX_SIZE / 2, yCenter);
+
+    const colorName = rgbToColorNameEn(color);
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(colorName, nameRightX, yCenter);
   });
 
   downloadCanvasAsImage(canvas, `palette-${Date.now()}.png`);
@@ -62,11 +82,17 @@ export const exportNumberedTemplate = (
   contentWidth: number,
   contentHeight: number,
   mosaicBlocks: MosaicBlock[],
-  blockSize: number
+  blockSize: number,
 ): void => {
-  const canvas = document.createElement('canvas');
+  const canvas = document.createElement("canvas");
   canvas.width = LETTER_OUTPUT_WIDTH;
   canvas.height = LETTER_OUTPUT_HEIGHT;
-  renderNumberedTemplateToCanvas(canvas, mosaicBlocks, blockSize, contentWidth, contentHeight);
+  renderNumberedTemplateToCanvas(
+    canvas,
+    mosaicBlocks,
+    blockSize,
+    contentWidth,
+    contentHeight,
+  );
   downloadCanvasAsImage(canvas, `template-${Date.now()}.png`);
 };

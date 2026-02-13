@@ -7,7 +7,7 @@
 
 import { create } from 'zustand';
 import { RGB } from '@/lib/utils';
-import { resizeImage } from '@/lib/utils';
+import { resizeImage, deduplicatePalette, deduplicatePaletteByName } from '@/lib/utils';
 import { quantizeImage } from '@/lib/quantize';
 import { createMosaicBlocks, MosaicBlock } from '@/lib/pixelate';
 
@@ -70,12 +70,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       const img = await loadImageFromFile(file);
       const resizedImageData = resizeImage(img, 800);
-      const { palette } = quantizeImage(resizedImageData, get().colorCount);
-      const blocks = createMosaicBlocks(
+      const { palette: rawPalette } = quantizeImage(
         resizedImageData,
-        palette,
+        get().colorCount
+      );
+      const { palette: paletteByRgb, indexMap: mapRgb } = deduplicatePalette(rawPalette);
+      const { palette, indexMap: mapName } = deduplicatePaletteByName(paletteByRgb);
+      const rawBlocks = createMosaicBlocks(
+        resizedImageData,
+        rawPalette,
         get().blockSize
       );
+      const blocks = rawBlocks.map((b) => {
+        const idx1 = mapRgb[b.paletteIndex];
+        const newIndex = mapName[idx1];
+        return {
+          ...b,
+          paletteIndex: newIndex,
+          color: palette[newIndex],
+        };
+      });
 
       set({
         originalImage: img,
@@ -124,8 +138,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ isProcessing: true });
 
     try {
-      const { palette } = quantizeImage(processedImageData, colorCount);
-      const blocks = createMosaicBlocks(processedImageData, palette, blockSize);
+      const { palette: rawPalette } = quantizeImage(
+        processedImageData,
+        colorCount
+      );
+      const { palette: paletteByRgb, indexMap: mapRgb } = deduplicatePalette(rawPalette);
+      const { palette, indexMap: mapName } = deduplicatePaletteByName(paletteByRgb);
+      const rawBlocks = createMosaicBlocks(
+        processedImageData,
+        rawPalette,
+        blockSize
+      );
+      const blocks = rawBlocks.map((b) => {
+        const idx1 = mapRgb[b.paletteIndex];
+        const newIndex = mapName[idx1];
+        return {
+          ...b,
+          paletteIndex: newIndex,
+          color: palette[newIndex],
+        };
+      });
 
       set({
         palette,
