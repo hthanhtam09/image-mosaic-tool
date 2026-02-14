@@ -185,11 +185,11 @@ export const rgbToColorName = (color: RGB): string => {
 };
 
 /**
- * Get label for palette index (1-9, then A, B, C... for color-by-number)
+ * Get label for palette index (0-9, then A, B, …, M for color-by-number)
  */
 export const paletteIndexToLabel = (index: number): string => {
-  if (index < 9) return String(index + 1);
-  return String.fromCharCode(65 + index - 9);
+  if (index <= 9) return String(index);
+  return String.fromCharCode(65 + index - 10);
 };
 
 /**

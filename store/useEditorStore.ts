@@ -5,11 +5,15 @@
  * Centralized store for all image editor state and actions
  */
 
-import { create } from 'zustand';
-import { RGB } from '@/lib/utils';
-import { resizeImage, deduplicatePalette, deduplicatePaletteByName } from '@/lib/utils';
-import { quantizeImage } from '@/lib/quantize';
-import { createMosaicBlocks, MosaicBlock } from '@/lib/pixelate';
+import { create } from "zustand";
+import { RGB, resizeImage } from "@/lib/utils";
+import {
+  createMosaicBlocks,
+  reduceToUsedPalette,
+  MosaicBlock,
+} from "@/lib/pixelate";
+import { FIXED_PALETTE } from "@/lib/palette";
+import type { GridType } from "@/lib/grid";
 
 export interface EditorState {
   // Image state
@@ -17,24 +21,32 @@ export interface EditorState {
   processedImageData: ImageData | null;
   mosaicBlocks: MosaicBlock[];
 
-  // Palette state
+  // Palette state (only colors that appear in the image)
   palette: RGB[];
+  /** For each palette[i], fixedPaletteIndices[i] is the index in the full fixed palette (for names). */
+  fixedPaletteIndices: number[];
 
   // User controls
-  colorCount: number;
   blockSize: number;
   showGrid: boolean;
-  showNumbers: boolean; // Placeholder for future feature
+  showNumbers: boolean;
+
+  // Grid template
+  gridType: GridType;
+  gridRows: number;
+  gridCols: number;
 
   // UI state
   isProcessing: boolean;
 
   // Actions
   setImage: (file: File) => Promise<void>;
-  setColorCount: (count: number) => void;
   setBlockSize: (size: number) => void;
   toggleGrid: () => void;
   toggleNumbers: () => void;
+  setGridType: (type: GridType) => void;
+  setGridRows: (rows: number) => void;
+  setGridCols: (cols: number) => void;
   reset: () => void;
   reprocessImage: () => void;
 }
@@ -44,10 +56,13 @@ const DEFAULT_STATE = {
   processedImageData: null,
   mosaicBlocks: [],
   palette: [],
-  colorCount: 12,
+  fixedPaletteIndices: [] as number[],
   blockSize: 20,
   showGrid: true,
   showNumbers: false,
+  gridType: "square" as GridType,
+  gridRows: 10,
+  gridCols: 10,
   isProcessing: false,
 };
 
@@ -70,53 +85,47 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       const img = await loadImageFromFile(file);
       const resizedImageData = resizeImage(img, 800);
-      const { palette: rawPalette } = quantizeImage(
-        resizedImageData,
-        get().colorCount
-      );
-      const { palette: paletteByRgb, indexMap: mapRgb } = deduplicatePalette(rawPalette);
-      const { palette, indexMap: mapName } = deduplicatePaletteByName(paletteByRgb);
+      const { blockSize } = get();
       const rawBlocks = createMosaicBlocks(
         resizedImageData,
-        rawPalette,
-        get().blockSize
+        FIXED_PALETTE,
+        blockSize,
       );
-      const blocks = rawBlocks.map((b) => {
-        const idx1 = mapRgb[b.paletteIndex];
-        const newIndex = mapName[idx1];
-        return {
-          ...b,
-          paletteIndex: newIndex,
-          color: palette[newIndex],
-        };
-      });
+      const { palette, blocks, fixedIndices } = reduceToUsedPalette(
+        rawBlocks,
+        FIXED_PALETTE,
+      );
 
       set({
         originalImage: img,
         processedImageData: resizedImageData,
         palette,
+        fixedPaletteIndices: fixedIndices,
         mosaicBlocks: blocks,
         isProcessing: false,
       });
     } catch (error) {
-      console.error('Error processing image:', error);
+      console.error("Error processing image:", error);
       set({ isProcessing: false });
     }
-  },
-
-  setColorCount: (count: number) => {
-    set({ colorCount: count });
-    get().reprocessImage();
   },
 
   setBlockSize: (size: number) => {
     set({ blockSize: size });
 
-    const { processedImageData, palette } = get();
-    if (!processedImageData || palette.length === 0) return;
+    const { processedImageData } = get();
+    if (!processedImageData) return;
 
-    const blocks = createMosaicBlocks(processedImageData, palette, size);
-    set({ mosaicBlocks: blocks });
+    const rawBlocks = createMosaicBlocks(
+      processedImageData,
+      FIXED_PALETTE,
+      size,
+    );
+    const { palette, blocks, fixedIndices } = reduceToUsedPalette(
+      rawBlocks,
+      FIXED_PALETTE,
+    );
+    set({ palette, fixedPaletteIndices: fixedIndices, mosaicBlocks: blocks });
   },
 
   toggleGrid: () => {
@@ -127,47 +136,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({ showNumbers: !state.showNumbers }));
   },
 
+  setGridType: (type: GridType) => {
+    set({ gridType: type });
+  },
+
+  setGridRows: (rows: number) => {
+    set({ gridRows: Math.max(1, Math.min(100, rows)) });
+  },
+
+  setGridCols: (cols: number) => {
+    set({ gridCols: Math.max(1, Math.min(100, cols)) });
+  },
+
   reset: () => {
     set(DEFAULT_STATE);
   },
 
   reprocessImage: () => {
-    const { processedImageData, colorCount, blockSize } = get();
+    const { processedImageData, blockSize } = get();
     if (!processedImageData) return;
 
-    set({ isProcessing: true });
-
-    try {
-      const { palette: rawPalette } = quantizeImage(
-        processedImageData,
-        colorCount
-      );
-      const { palette: paletteByRgb, indexMap: mapRgb } = deduplicatePalette(rawPalette);
-      const { palette, indexMap: mapName } = deduplicatePaletteByName(paletteByRgb);
-      const rawBlocks = createMosaicBlocks(
-        processedImageData,
-        rawPalette,
-        blockSize
-      );
-      const blocks = rawBlocks.map((b) => {
-        const idx1 = mapRgb[b.paletteIndex];
-        const newIndex = mapName[idx1];
-        return {
-          ...b,
-          paletteIndex: newIndex,
-          color: palette[newIndex],
-        };
-      });
-
-      set({
-        palette,
-        mosaicBlocks: blocks,
-        isProcessing: false,
-      });
-    } catch (error) {
-      console.error('Error reprocessing image:', error);
-      set({ isProcessing: false });
-    }
+    const rawBlocks = createMosaicBlocks(
+      processedImageData,
+      FIXED_PALETTE,
+      blockSize,
+    );
+    const { palette, blocks, fixedIndices } = reduceToUsedPalette(
+      rawBlocks,
+      FIXED_PALETTE,
+    );
+    set({ palette, fixedPaletteIndices: fixedIndices, mosaicBlocks: blocks });
   },
 }));
 

@@ -6,11 +6,13 @@ import type { RGB } from "./utils";
 import type { MosaicBlock } from "./pixelate";
 import {
   paletteIndexToLabel,
-  rgbToColorNameEn,
   LETTER_OUTPUT_WIDTH,
   LETTER_OUTPUT_HEIGHT,
 } from "./utils";
+import { getPaletteColorName } from "./palette";
 import { renderNumberedTemplateToCanvas } from "./pixelate";
+import { renderToCanvas, PAGE_WIDTH_PX, PAGE_HEIGHT_PX } from "./grid";
+import type { GridConfig, ExportMode } from "./grid";
 
 const downloadCanvasAsImage = (
   canvas: HTMLCanvasElement,
@@ -31,8 +33,12 @@ const GAP_NAME_TO_BOX = 10;
 /**
  * Export palette as PNG: white background, vertical list.
  * Each row: English color name (right-aligned next to box), then a box with only number/letter (no fill).
+ * fixedIndices: for each palette[i], the index in the full fixed palette (for correct names).
  */
-export const exportPalette = (palette: RGB[]): void => {
+export const exportPalette = (
+  palette: RGB[],
+  fixedIndices?: number[],
+): void => {
   const rows = palette.length;
   const width = 280;
   const height = rows * PALETTE_ROW_HEIGHT + 2 * PALETTE_PADDING;
@@ -66,7 +72,9 @@ export const exportPalette = (palette: RGB[]): void => {
     ctx.textAlign = "center";
     ctx.fillText(label, boxX + PALETTE_BOX_SIZE / 2, yCenter);
 
-    const colorName = rgbToColorNameEn(color);
+    const nameIndex = fixedIndices?.[index] ?? index;
+    const colorName =
+      getPaletteColorName(nameIndex) || `${color.r}, ${color.g}, ${color.b}`;
     ctx.font = "14px sans-serif";
     ctx.textAlign = "right";
     ctx.fillText(colorName, nameRightX, yCenter);
@@ -95,4 +103,28 @@ export const exportNumberedTemplate = (
     contentHeight,
   );
   downloadCanvasAsImage(canvas, `template-${Date.now()}.png`);
+};
+
+/**
+ * Export grid template – 8.5" x 11" at 300 DPI. White paper + grid only.
+ */
+export const exportGridTemplate = (
+  gridConfig: GridConfig,
+  cells: Array<{ row: number; col: number; number: string; colorHex?: string }>,
+  options: { exportMode: ExportMode; showNumbers: boolean },
+): void => {
+  const canvas = document.createElement("canvas");
+  canvas.width = PAGE_WIDTH_PX;
+  canvas.height = PAGE_HEIGHT_PX;
+  renderToCanvas(canvas, gridConfig, cells, {
+    showNumbers: options.showNumbers,
+    exportMode: options.exportMode,
+  });
+  const suffix =
+    options.exportMode === "noNumber"
+      ? "no-numbers"
+      : options.exportMode === "colored"
+        ? "colored"
+        : "template";
+  downloadCanvasAsImage(canvas, `grid-${suffix}-${Date.now()}.png`);
 };

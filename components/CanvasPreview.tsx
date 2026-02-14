@@ -1,18 +1,24 @@
-'use client';
+"use client";
 
 /**
  * CanvasPreview Component
  *
- * Clean canvas display with minimal empty state.
+ * Uses grid engine: Squares / Diamonds / Dots – same layout as square (rows×cols, one cell per slot).
  */
 
-import { useEffect, useRef } from 'react';
-import { useEditorStore } from '@/store/useEditorStore';
-import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from '@/lib/utils';
+import { useEffect, useRef } from "react";
+import { useEditorStore } from "@/store/useEditorStore";
 import {
-  renderNumberedTemplateToCanvas,
-  renderMosaicWithNumbersToCanvas,
-} from '@/lib/pixelate';
+  LETTER_OUTPUT_WIDTH,
+  LETTER_OUTPUT_HEIGHT,
+  paletteIndexToLabel,
+  rgbToHex,
+} from "@/lib/utils";
+import {
+  renderToCanvas,
+  mosaicBlocksToCells,
+  STROKE_GRID_PX,
+} from "@/lib/grid";
 
 /** Preview scale - same composition as export, smaller for screen */
 const PREVIEW_SCALE = 0.4;
@@ -43,8 +49,10 @@ export default function CanvasPreview() {
     mosaicBlocks,
     blockSize,
     showGrid,
+    showNumbers,
     isProcessing,
     originalImage,
+    gridType,
   } = useEditorStore();
 
   useEffect(() => {
@@ -58,6 +66,22 @@ export default function CanvasPreview() {
     }
 
     const { width, height } = processedImageData;
+    const rows = Math.ceil(height / blockSize);
+    const cols = Math.ceil(width / blockSize);
+    const cells = mosaicBlocksToCells(
+      mosaicBlocks,
+      blockSize,
+      paletteIndexToLabel,
+      rgbToHex,
+    );
+    const gridConfig = {
+      type: gridType,
+      rows,
+      cols,
+      showBorder: showGrid,
+      borderWidth: STROKE_GRID_PX,
+    };
+    const safeArea = { width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT };
 
     const templateCanvas = templateCanvasRef.current;
     templateCanvas.width = PREVIEW_WIDTH;
@@ -68,23 +92,18 @@ export default function CanvasPreview() {
     mosaicCanvas.height = PREVIEW_HEIGHT;
 
     requestAnimationFrame(() => {
-      renderNumberedTemplateToCanvas(
-        templateCanvas,
-        mosaicBlocks,
-        blockSize,
-        width,
-        height
-      );
-      renderMosaicWithNumbersToCanvas(
-        mosaicCanvas,
-        mosaicBlocks,
-        blockSize,
-        showGrid,
-        width,
-        height
-      );
+      renderToCanvas(templateCanvas, gridConfig, cells, {
+        showNumbers,
+        exportMode: "lineArt",
+        safeAreaOverride: safeArea,
+      });
+      renderToCanvas(mosaicCanvas, gridConfig, cells, {
+        showNumbers,
+        exportMode: "colored",
+        safeAreaOverride: safeArea,
+      });
     });
-  }, [processedImageData, mosaicBlocks, blockSize, showGrid]);
+  }, [processedImageData, mosaicBlocks, blockSize, showGrid, showNumbers, gridType]);
 
   if (!originalImage) {
     return (
@@ -105,10 +124,10 @@ export default function CanvasPreview() {
   }
 
   const canvasStyle = {
-    imageRendering: 'auto' as const,
-    width: '100%',
-    maxWidth: 'min(42vw, 560px)',
-    height: 'auto',
+    imageRendering: "auto" as const,
+    width: "100%",
+    maxWidth: "min(42vw, 560px)",
+    height: "auto",
     aspectRatio: `${LETTER_OUTPUT_WIDTH} / ${LETTER_OUTPUT_HEIGHT}`,
   };
 
