@@ -7,9 +7,16 @@
  */
 
 import { useEditorStore } from '@/store/useEditorStore';
-import { downloadCanvas, LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from '@/lib/utils';
-import { exportPalette, exportNumberedTemplate } from '@/lib/export';
+import {
+  downloadCanvas,
+  LETTER_OUTPUT_WIDTH,
+  LETTER_OUTPUT_HEIGHT,
+  paletteIndexToLabel,
+  rgbToHex,
+} from '@/lib/utils';
+import { exportPalette, exportGridTemplate } from '@/lib/export';
 import { renderMosaicWithNumbersToCanvas } from '@/lib/pixelate';
+import { mosaicBlocksToCells, STROKE_GRID_PX } from '@/lib/grid';
 import ImageUploader from './ImageUploader';
 
 const IconUpload = () => (
@@ -84,11 +91,17 @@ export default function ControlPanel() {
     setBlockSize,
     toggleGrid,
     toggleNumbers,
+    setGridType,
+    setGridRows,
+    setGridCols,
     originalImage,
     palette,
     fixedPaletteIndices,
     mosaicBlocks,
     processedImageData,
+    gridType,
+    gridRows,
+    gridCols,
   } = useEditorStore();
 
   const handleExportMosaic = () => {
@@ -115,12 +128,73 @@ export default function ControlPanel() {
 
   const handleExportTemplate = () => {
     if (processedImageData && mosaicBlocks.length > 0) {
-      exportNumberedTemplate(
-        processedImageData.width,
-        processedImageData.height,
+      const rows = Math.ceil(processedImageData.height / blockSize);
+      const cols = Math.ceil(processedImageData.width / blockSize);
+      const cells = mosaicBlocksToCells(
         mosaicBlocks,
-        blockSize
+        blockSize,
+        paletteIndexToLabel,
+        rgbToHex
       );
+      const gridConfig = {
+        type: gridType,
+        rows,
+        cols,
+        showBorder: showGrid,
+        borderWidth: STROKE_GRID_PX,
+      };
+      exportGridTemplate(gridConfig, cells, {
+        exportMode: 'lineArt',
+        showNumbers: true,
+      });
+    }
+  };
+
+  const handleExportNoNumber = () => {
+    if (processedImageData && mosaicBlocks.length > 0) {
+      const rows = Math.ceil(processedImageData.height / blockSize);
+      const cols = Math.ceil(processedImageData.width / blockSize);
+      const cells = mosaicBlocksToCells(
+        mosaicBlocks,
+        blockSize,
+        paletteIndexToLabel,
+        rgbToHex
+      );
+      const gridConfig = {
+        type: gridType,
+        rows,
+        cols,
+        showBorder: showGrid,
+        borderWidth: STROKE_GRID_PX,
+      };
+      exportGridTemplate(gridConfig, cells, {
+        exportMode: 'noNumber',
+        showNumbers: false,
+      });
+    }
+  };
+
+  const handleExportColored = () => {
+    if (processedImageData && mosaicBlocks.length > 0) {
+      const rows = Math.ceil(processedImageData.height / blockSize);
+      const cols = Math.ceil(processedImageData.width / blockSize);
+      const cells = mosaicBlocksToCells(
+        mosaicBlocks,
+        blockSize,
+        paletteIndexToLabel,
+        rgbToHex
+      );
+      const gridConfig = {
+        type: gridType,
+        rows,
+        cols,
+        showBorder: showGrid,
+        borderWidth: STROKE_GRID_PX,
+      };
+      exportGridTemplate(gridConfig, cells, {
+        exportMode: 'colored',
+        showNumbers: showNumbers,
+      });
     }
   };
 
@@ -176,6 +250,83 @@ export default function ControlPanel() {
             </section>
 
             <section className="card p-4">
+              <SectionHeader icon={<IconGrid />} title="Grid Template" />
+              <div className="space-y-3">
+                <div>
+                  <label
+                    htmlFor="gridType"
+                    className="mb-1.5 block text-sm text-[var(--text-secondary)]"
+                  >
+                    Grid type
+                  </label>
+                  <select
+                    id="gridType"
+                    value={gridType}
+                    onChange={(e) =>
+                      setGridType(e.target.value as 'square' | 'diamond' | 'dot')
+                    }
+                    className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                    aria-label="Grid type"
+                  >
+                    <option value="square">Squares Grid</option>
+                    <option value="diamond">Diamonds Grid</option>
+                    <option value="dot">Dots Grid</option>
+                  </select>
+                </div>
+                {processedImageData && (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Grid: {Math.ceil(processedImageData.height / blockSize)} ×{' '}
+                    {Math.ceil(processedImageData.width / blockSize)} (rows × cols)
+                  </p>
+                )}
+                {!originalImage && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        htmlFor="gridRows"
+                        className="mb-1 block text-xs text-[var(--text-muted)]"
+                      >
+                        Rows
+                      </label>
+                      <input
+                        id="gridRows"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={gridRows}
+                        onChange={(e) =>
+                          setGridRows(Number.parseInt(e.target.value, 10) || 1)
+                        }
+                        className="w-full rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
+                        aria-label="Grid rows"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="gridCols"
+                        className="mb-1 block text-xs text-[var(--text-muted)]"
+                      >
+                        Cols
+                      </label>
+                      <input
+                        id="gridCols"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={gridCols}
+                        onChange={(e) =>
+                          setGridCols(Number.parseInt(e.target.value, 10) || 1)
+                        }
+                        className="w-full rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
+                        aria-label="Grid columns"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="card p-4">
               <SectionHeader icon={<IconDisplay />} title="Display" />
               <div className="space-y-2">
                 <label className="flex cursor-pointer items-center gap-3 rounded-lg py-2.5 transition-colors hover:bg-white/[0.02]">
@@ -190,20 +341,16 @@ export default function ControlPanel() {
                     Grid lines
                   </span>
                 </label>
-                <label className="flex cursor-not-allowed items-center gap-3 rounded-lg py-2.5 opacity-50">
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg py-2.5 transition-colors hover:bg-white/[0.02]">
                   <input
                     type="checkbox"
                     checked={showNumbers}
                     onChange={toggleNumbers}
-                    disabled
                     className="h-4 w-4 rounded border-white/20"
                     aria-label="Show block numbers"
                   />
                   <span className="text-sm text-[var(--text-secondary)]">
                     Block numbers
-                  </span>
-                  <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
-                    Soon
                   </span>
                 </label>
               </div>
@@ -231,10 +378,26 @@ export default function ControlPanel() {
                 <button
                   onClick={handleExportTemplate}
                   className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[var(--bg-secondary)]"
-                  aria-label="Export numbered template"
+                  aria-label="Export numbered template (300 DPI)"
                 >
                   <IconDocument />
-                  Numbered Template
+                  Line Art (300 DPI)
+                </button>
+                <button
+                  onClick={handleExportColored}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[var(--bg-secondary)]"
+                  aria-label="Export colored preview"
+                >
+                  <IconPalette />
+                  Colored Preview
+                </button>
+                <button
+                  onClick={handleExportNoNumber}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[var(--bg-secondary)]"
+                  aria-label="Export template without numbers"
+                >
+                  <IconDocument />
+                  No Number (answer key)
                 </button>
               </div>
               <p className="mt-3 text-xs text-[var(--text-muted)]">

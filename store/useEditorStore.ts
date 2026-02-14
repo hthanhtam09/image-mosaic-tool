@@ -5,10 +5,15 @@
  * Centralized store for all image editor state and actions
  */
 
-import { create } from 'zustand';
-import { RGB, resizeImage } from '@/lib/utils';
-import { createMosaicBlocks, reduceToUsedPalette, MosaicBlock } from '@/lib/pixelate';
-import { FIXED_PALETTE } from '@/lib/palette';
+import { create } from "zustand";
+import { RGB, resizeImage } from "@/lib/utils";
+import {
+  createMosaicBlocks,
+  reduceToUsedPalette,
+  MosaicBlock,
+} from "@/lib/pixelate";
+import { FIXED_PALETTE } from "@/lib/palette";
+import type { GridType } from "@/lib/grid";
 
 export interface EditorState {
   // Image state
@@ -24,7 +29,12 @@ export interface EditorState {
   // User controls
   blockSize: number;
   showGrid: boolean;
-  showNumbers: boolean; // Placeholder for future feature
+  showNumbers: boolean;
+
+  // Grid template
+  gridType: GridType;
+  gridRows: number;
+  gridCols: number;
 
   // UI state
   isProcessing: boolean;
@@ -34,6 +44,9 @@ export interface EditorState {
   setBlockSize: (size: number) => void;
   toggleGrid: () => void;
   toggleNumbers: () => void;
+  setGridType: (type: GridType) => void;
+  setGridRows: (rows: number) => void;
+  setGridCols: (cols: number) => void;
   reset: () => void;
   reprocessImage: () => void;
 }
@@ -47,6 +60,9 @@ const DEFAULT_STATE = {
   blockSize: 20,
   showGrid: true,
   showNumbers: false,
+  gridType: "square" as GridType,
+  gridRows: 10,
+  gridCols: 10,
   isProcessing: false,
 };
 
@@ -73,9 +89,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const rawBlocks = createMosaicBlocks(
         resizedImageData,
         FIXED_PALETTE,
-        blockSize
+        blockSize,
       );
-      const { palette, blocks, fixedIndices } = reduceToUsedPalette(rawBlocks, FIXED_PALETTE);
+      const { palette, blocks, fixedIndices } = reduceToUsedPalette(
+        rawBlocks,
+        FIXED_PALETTE,
+      );
 
       set({
         originalImage: img,
@@ -86,7 +105,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         isProcessing: false,
       });
     } catch (error) {
-      console.error('Error processing image:', error);
+      console.error("Error processing image:", error);
       set({ isProcessing: false });
     }
   },
@@ -100,9 +119,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const rawBlocks = createMosaicBlocks(
       processedImageData,
       FIXED_PALETTE,
-      size
+      size,
     );
-    const { palette, blocks, fixedIndices } = reduceToUsedPalette(rawBlocks, FIXED_PALETTE);
+    const { palette, blocks, fixedIndices } = reduceToUsedPalette(
+      rawBlocks,
+      FIXED_PALETTE,
+    );
     set({ palette, fixedPaletteIndices: fixedIndices, mosaicBlocks: blocks });
   },
 
@@ -112,6 +134,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   toggleNumbers: () => {
     set((state) => ({ showNumbers: !state.showNumbers }));
+  },
+
+  setGridType: (type: GridType) => {
+    set({ gridType: type });
+  },
+
+  setGridRows: (rows: number) => {
+    set({ gridRows: Math.max(1, Math.min(100, rows)) });
+  },
+
+  setGridCols: (cols: number) => {
+    set({ gridCols: Math.max(1, Math.min(100, cols)) });
   },
 
   reset: () => {
@@ -125,9 +159,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const rawBlocks = createMosaicBlocks(
       processedImageData,
       FIXED_PALETTE,
-      blockSize
+      blockSize,
     );
-    const { palette, blocks, fixedIndices } = reduceToUsedPalette(rawBlocks, FIXED_PALETTE);
+    const { palette, blocks, fixedIndices } = reduceToUsedPalette(
+      rawBlocks,
+      FIXED_PALETTE,
+    );
     set({ palette, fixedPaletteIndices: fixedIndices, mosaicBlocks: blocks });
   },
 }));

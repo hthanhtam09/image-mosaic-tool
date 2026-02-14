@@ -2,8 +2,8 @@
  * Pixelate / mosaic block generation and canvas rendering
  */
 
-import type { RGB } from './utils';
-import { paletteIndexToLabel, getLetterSizeFit } from './utils';
+import type { RGB } from "./utils";
+import { paletteIndexToLabel, getLetterSizeFit } from "./utils";
 
 export interface MosaicBlock {
   x: number;
@@ -40,7 +40,7 @@ const rgbToLab = (rgb: RGB): { L: number; a: number; b: number } => {
 /** Delta E 76 – perceptual color distance in Lab (lower = more similar) */
 const deltaE76 = (
   lab1: { L: number; a: number; b: number },
-  lab2: { L: number; a: number; b: number }
+  lab2: { L: number; a: number; b: number },
 ): number => {
   const dL = lab1.L - lab2.L;
   const da = lab1.a - lab2.a;
@@ -76,7 +76,7 @@ const findPaletteIndex = (color: RGB, palette: RGB[]): number => {
 export const createMosaicBlocks = (
   imageData: ImageData,
   palette: RGB[],
-  blockSize: number
+  blockSize: number,
 ): MosaicBlock[] => {
   const { width, height, data } = imageData;
   const blocks: MosaicBlock[] = [];
@@ -133,7 +133,7 @@ export const createMosaicBlocks = (
  */
 export const reduceToUsedPalette = (
   blocks: MosaicBlock[],
-  fullPalette: readonly RGB[]
+  fullPalette: readonly RGB[],
 ): { palette: RGB[]; blocks: MosaicBlock[]; fixedIndices: number[] } => {
   const usedIndices = new Set<number>();
   for (const b of blocks) usedIndices.add(b.paletteIndex);
@@ -163,14 +163,14 @@ export const reduceToUsedPalette = (
 const NUMBERED_TEMPLATE_BORDER_FRAC = 0.06;
 const NUMBERED_TEMPLATE_PADDING_FRAC = 0.028;
 /** Outer border same dark tone as grid gaps, drawn as filled frame so it is bold and not cut */
-const NUMBERED_TEMPLATE_OUTER_BORDER_COLOR = '#252525';
+const NUMBERED_TEMPLATE_OUTER_BORDER_COLOR = "#252525";
 
 /** Gap between cells as fraction of block size (creates "border" effect) */
 const NUMBERED_TEMPLATE_CELL_GAP_FRAC = 0.06;
 /** Corner radius as fraction of cell size (after gap) */
 const NUMBERED_TEMPLATE_CELL_RADIUS_FRAC = 0.12;
 /** Dark background in content area so gaps between cells are visible */
-const NUMBERED_TEMPLATE_GRID_BG = '#252525';
+const NUMBERED_TEMPLATE_GRID_BG = "#252525";
 
 /**
  * Draw a rounded rect on ctx (path only; caller sets fill/stroke)
@@ -181,7 +181,7 @@ const roundRect = (
   y: number,
   w: number,
   h: number,
-  r: number
+  r: number,
 ): void => {
   if (r <= 0) {
     ctx.rect(x, y, w, h);
@@ -206,9 +206,10 @@ const getGridExtent = (
   blocks: MosaicBlock[],
   blockSize: number,
   fallbackW: number,
-  fallbackH: number
+  fallbackH: number,
 ): { gridWidth: number; gridHeight: number } => {
-  if (blocks.length === 0) return { gridWidth: fallbackW, gridHeight: fallbackH };
+  if (blocks.length === 0)
+    return { gridWidth: fallbackW, gridHeight: fallbackH };
   const maxX = Math.max(...blocks.map((b) => b.x));
   const maxY = Math.max(...blocks.map((b) => b.y));
   return { gridWidth: maxX + blockSize, gridHeight: maxY + blockSize };
@@ -223,24 +224,27 @@ export const renderNumberedTemplateToCanvas = (
   blocks: MosaicBlock[],
   blockSize: number,
   contentWidth: number,
-  contentHeight: number
+  contentHeight: number,
 ): void => {
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   const { gridWidth, gridHeight } = getGridExtent(
     blocks,
     blockSize,
     contentWidth,
-    contentHeight
+    contentHeight,
   );
 
   const { width, height } = canvas;
   const minDim = Math.min(width, height);
-  const borderWidth = Math.max(3, Math.round(minDim * NUMBERED_TEMPLATE_BORDER_FRAC));
+  const borderWidth = Math.max(
+    3,
+    Math.round(minDim * NUMBERED_TEMPLATE_BORDER_FRAC),
+  );
   const padding = Math.max(4, minDim * NUMBERED_TEMPLATE_PADDING_FRAC);
 
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
   /* Outer border: filled frame (same color as grid, bold, never cut) */
@@ -248,7 +252,12 @@ export const renderNumberedTemplateToCanvas = (
   ctx.fillRect(0, 0, width, borderWidth);
   ctx.fillRect(0, height - borderWidth, width, borderWidth);
   ctx.fillRect(0, borderWidth, borderWidth, height - 2 * borderWidth);
-  ctx.fillRect(width - borderWidth, borderWidth, borderWidth, height - 2 * borderWidth);
+  ctx.fillRect(
+    width - borderWidth,
+    borderWidth,
+    borderWidth,
+    height - 2 * borderWidth,
+  );
 
   const contentAreaWidth = width - 2 * borderWidth - 2 * padding;
   const contentAreaHeight = height - 2 * borderWidth - 2 * padding;
@@ -256,7 +265,7 @@ export const renderNumberedTemplateToCanvas = (
     gridWidth,
     gridHeight,
     contentAreaWidth,
-    contentAreaHeight
+    contentAreaHeight,
   );
 
   const originX = borderWidth + padding + offsetX;
@@ -273,7 +282,7 @@ export const renderNumberedTemplateToCanvas = (
   ctx.fillStyle = NUMBERED_TEMPLATE_GRID_BG;
   ctx.fillRect(0, 0, gridWidth, gridHeight);
 
-  ctx.fillStyle = '#fafafa';
+  ctx.fillStyle = "#fafafa";
   for (const block of blocks) {
     const x = block.x + gap / 2;
     const y = block.y + gap / 2;
@@ -283,9 +292,9 @@ export const renderNumberedTemplateToCanvas = (
 
   const fontSize = Math.max(12, Math.round(cellSize * 0.55));
   ctx.font = `${fontSize}px 400 "JetBrains Mono", "SF Mono", Monaco, Consolas, monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#5a5a5a';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#5a5a5a";
 
   for (const block of blocks) {
     const cx = block.x + blockSize / 2;
@@ -307,24 +316,27 @@ export const renderMosaicWithNumbersToCanvas = (
   blockSize: number,
   showGrid: boolean,
   contentWidth: number,
-  contentHeight: number
+  contentHeight: number,
 ): void => {
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   const { gridWidth, gridHeight } = getGridExtent(
     blocks,
     blockSize,
     contentWidth,
-    contentHeight
+    contentHeight,
   );
 
   const { width, height } = canvas;
   const minDim = Math.min(width, height);
-  const borderWidth = Math.max(3, Math.round(minDim * NUMBERED_TEMPLATE_BORDER_FRAC));
+  const borderWidth = Math.max(
+    3,
+    Math.round(minDim * NUMBERED_TEMPLATE_BORDER_FRAC),
+  );
   const padding = Math.max(4, minDim * NUMBERED_TEMPLATE_PADDING_FRAC);
 
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
   /* Outer border: same filled frame as numbered template (sync with inner edges) */
@@ -332,7 +344,12 @@ export const renderMosaicWithNumbersToCanvas = (
   ctx.fillRect(0, 0, width, borderWidth);
   ctx.fillRect(0, height - borderWidth, width, borderWidth);
   ctx.fillRect(0, borderWidth, borderWidth, height - 2 * borderWidth);
-  ctx.fillRect(width - borderWidth, borderWidth, borderWidth, height - 2 * borderWidth);
+  ctx.fillRect(
+    width - borderWidth,
+    borderWidth,
+    borderWidth,
+    height - 2 * borderWidth,
+  );
 
   const contentAreaWidth = width - 2 * borderWidth - 2 * padding;
   const contentAreaHeight = height - 2 * borderWidth - 2 * padding;
@@ -340,7 +357,7 @@ export const renderMosaicWithNumbersToCanvas = (
     gridWidth,
     gridHeight,
     contentAreaWidth,
-    contentAreaHeight
+    contentAreaHeight,
   );
 
   const originX = borderWidth + padding + offsetX;
@@ -352,8 +369,8 @@ export const renderMosaicWithNumbersToCanvas = (
 
   const fontSize = Math.max(10, blockSize * 0.6);
   ctx.font = `${fontSize}px 400 "JetBrains Mono", "SF Mono", Monaco, Consolas, monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
 
   for (const block of blocks) {
     const { r, g, b } = block.color;
@@ -364,12 +381,12 @@ export const renderMosaicWithNumbersToCanvas = (
     const cx = block.x + blockSize / 2;
     const cy = block.y + blockSize / 2;
     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    ctx.fillStyle = brightness < 128 ? '#ffffff' : '#333333';
+    ctx.fillStyle = brightness < 128 ? "#ffffff" : "#333333";
     ctx.fillText(label, cx, cy);
   }
 
   if (showGrid) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.strokeStyle = "rgba(0,0,0,0.45)";
     ctx.lineWidth = Math.max(0.5, 1 / scale);
     for (const block of blocks) {
       ctx.strokeRect(block.x, block.y, blockSize, blockSize);
@@ -389,27 +406,27 @@ export const renderMosaicToCanvas = (
   blockSize: number,
   showGrid: boolean,
   contentWidth: number,
-  contentHeight: number
+  contentHeight: number,
 ): void => {
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   const { gridWidth, gridHeight } = getGridExtent(
     blocks,
     blockSize,
     contentWidth,
-    contentHeight
+    contentHeight,
   );
 
   const { width, height } = canvas;
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
   const { scale, offsetX, offsetY } = getLetterSizeFit(
     gridWidth,
     gridHeight,
     width,
-    height
+    height,
   );
 
   ctx.save();
@@ -423,7 +440,7 @@ export const renderMosaicToCanvas = (
   }
 
   if (showGrid) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.strokeStyle = "rgba(0,0,0,0.45)";
     ctx.lineWidth = Math.max(0.5, 1 / scale);
     for (const block of blocks) {
       ctx.strokeRect(block.x, block.y, blockSize, blockSize);
