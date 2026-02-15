@@ -3,7 +3,7 @@
  */
 
 import type { RGB } from "./utils";
-import { paletteIndexToLabel, getLetterSizeFit } from "./utils";
+import { paletteIndexToLabel, getLetterSizeFit, isWhite } from "./utils";
 
 export interface MosaicBlock {
   x: number;
@@ -52,7 +52,7 @@ const deltaE76 = (
  * Find palette index whose color is perceptually closest to the given color.
  * Uses Lab space + Delta E 76 so matching matches human perception.
  */
-const findPaletteIndex = (color: RGB, palette: RGB[]): number => {
+const findPaletteIndex = (color: RGB, palette: readonly RGB[]): number => {
   const colorLab = rgbToLab(color);
   let minDeltaE = Infinity;
   let bestIndex = 0;
@@ -75,7 +75,7 @@ const findPaletteIndex = (color: RGB, palette: RGB[]): number => {
  */
 export const createMosaicBlocks = (
   imageData: ImageData,
-  palette: RGB[],
+  palette: readonly RGB[],
   blockSize: number,
 ): MosaicBlock[] => {
   const { width, height, data } = imageData;
@@ -297,6 +297,7 @@ export const renderNumberedTemplateToCanvas = (
   ctx.fillStyle = "#5a5a5a";
 
   for (const block of blocks) {
+    if (isWhite(block.color)) continue;
     const cx = block.x + blockSize / 2;
     const cy = block.y + blockSize / 2;
     const label = paletteIndexToLabel(block.paletteIndex);
@@ -377,12 +378,14 @@ export const renderMosaicWithNumbersToCanvas = (
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(block.x, block.y, blockSize, blockSize);
 
-    const label = paletteIndexToLabel(block.paletteIndex);
-    const cx = block.x + blockSize / 2;
-    const cy = block.y + blockSize / 2;
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    ctx.fillStyle = brightness < 128 ? "#ffffff" : "#333333";
-    ctx.fillText(label, cx, cy);
+    if (!isWhite(block.color)) {
+      const label = paletteIndexToLabel(block.paletteIndex);
+      const cx = block.x + blockSize / 2;
+      const cy = block.y + blockSize / 2;
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+      ctx.fillStyle = brightness < 128 ? "#ffffff" : "#333333";
+      ctx.fillText(label, cx, cy);
+    }
   }
 
   if (showGrid) {

@@ -43,6 +43,7 @@ export const renderNumbers = (
   ctx.textBaseline = "middle";
   ctx.fillStyle = STROKE_COLOR;
   for (const cell of cells) {
+    if (!cell.number) continue;
     const { x, y } = getCellCenter(layout, cell.row, cell.col, options.gridType);
     ctx.fillText(cell.number, x, y);
   }

@@ -4,6 +4,7 @@
  */
 
 import type { GridConfig, GridLayout, Cell, ExportMode } from "./types";
+import { isWhite } from "../utils";
 import {
   PAGE_WIDTH_PX,
   PAGE_HEIGHT_PX,
@@ -195,6 +196,6 @@ export const mosaicBlocksToCells = (
   blocks.map((b) => ({
     row: Math.floor(b.y / blockSize),
     col: Math.floor(b.x / blockSize),
-    number: indexToLabel(b.paletteIndex),
+    number: isWhite(b.color) ? "" : indexToLabel(b.paletteIndex),
     colorHex: colorToHex(b.color),
   }));

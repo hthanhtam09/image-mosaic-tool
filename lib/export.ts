@@ -6,6 +6,7 @@ import type { RGB } from "./utils";
 import type { MosaicBlock } from "./pixelate";
 import {
   paletteIndexToLabel,
+  isWhite,
   LETTER_OUTPUT_WIDTH,
   LETTER_OUTPUT_HEIGHT,
 } from "./utils";
@@ -66,11 +67,13 @@ export const exportPalette = (
     ctx.lineWidth = 1;
     ctx.strokeRect(boxX, boxY, PALETTE_BOX_SIZE, PALETTE_BOX_SIZE);
 
-    const label = paletteIndexToLabel(index);
-    ctx.fillStyle = "#222";
-    ctx.font = "14px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText(label, boxX + PALETTE_BOX_SIZE / 2, yCenter);
+    if (!isWhite(color)) {
+      const label = paletteIndexToLabel(index);
+      ctx.fillStyle = "#222";
+      ctx.font = "14px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(label, boxX + PALETTE_BOX_SIZE / 2, yCenter);
+    }
 
     const nameIndex = fixedIndices?.[index] ?? index;
     const colorName =
@@ -84,7 +87,7 @@ export const exportPalette = (
 };
 
 /**
- * Export numbered template as PNG - 8.5" x 11" at 150 DPI
+ * Export numbered template as PNG - 8.5" x 11" at 300 DPI
  */
 export const exportNumberedTemplate = (
   contentWidth: number,

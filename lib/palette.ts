@@ -1,5 +1,5 @@
 /**
- * Fixed color palette for color-by-number (0–9, A–M).
+ * Fixed color palette for color-by-number (0–9, A–N). Includes White so imported images keep white.
  * All mosaic colors are mapped to this palette only.
  */
 
@@ -7,15 +7,16 @@ import type { RGB } from './utils';
 
 export const PALETTE_NAMES: readonly string[] = [
   'Black',        // 0
-  'Gray',         // 1
-  'Dark Gray',    // 2
-  'Dark Brown',   // 3
-  'Brown',        // 4
-  'Tan',          // 5
-  'Peach',        // 6
-  'Red',          // 7
-  'Red Orange',   // 8
-  'Orange',       // 9
+  'White',        // 1
+  'Gray',         // 2
+  'Dark Gray',    // 3
+  'Dark Brown',   // 4
+  'Brown',        // 5
+  'Tan',          // 6
+  'Peach',        // 7
+  'Red',          // 8
+  'Red Orange',   // 9
+  'Orange',       // 10 (label A)
   'Yellow Orange',// A
   'Yellow',       // B
   'Yellow Green', // C
@@ -31,12 +32,13 @@ export const PALETTE_NAMES: readonly string[] = [
   'Magenta',      // M
 ];
 
-/** Fixed palette: indices 0–22 → labels 0, 1, …, 9, A, B, …, M */
+/** Fixed palette: indices 0–23 → labels 0, 1, …, 9, A, B, …, N. Includes White so imported white stays white. */
 export const FIXED_PALETTE: readonly RGB[] = [
   { r: 0, g: 0, b: 0 },           // 0 Black
-  { r: 128, g: 128, b: 128 },     // 1 Gray
-  { r: 80, g: 80, b: 80 },        // 2 Dark Gray
-  { r: 92, g: 64, b: 51 },        // 3 Dark Brown
+  { r: 255, g: 255, b: 255 },     // 1 White (early index so white pixels match first)
+  { r: 128, g: 128, b: 128 },     // 2 Gray
+  { r: 80, g: 80, b: 80 },        // 3 Dark Gray
+  { r: 92, g: 64, b: 51 },        // 4 Dark Brown
   { r: 139, g: 69, b: 19 },      // 4 Brown
   { r: 210, g: 180, b: 140 },    // 5 Tan
   { r: 255, g: 218, b: 185 },    // 6 Peach
@@ -58,6 +60,6 @@ export const FIXED_PALETTE: readonly RGB[] = [
   { r: 217, g: 70, b: 239 },     // M Magenta
 ];
 
-/** Get display name for palette index (0–22) in the full fixed palette. */
+/** Get display name for palette index (0–23) in the full fixed palette. */
 export const getPaletteColorName = (index: number): string =>
   index >= 0 && index < PALETTE_NAMES.length ? PALETTE_NAMES[index] : '';

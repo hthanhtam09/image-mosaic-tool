@@ -8,6 +8,15 @@ export interface RGB {
   b: number;
 }
 
+/** Threshold: sRGB channels >= this are treated as white (no number drawn on grid/template/export). */
+export const WHITE_THRESHOLD = 250;
+
+/** True if color is white or near-white; such cells are left without a number everywhere. */
+export const isWhite = (c: RGB): boolean =>
+  c.r >= WHITE_THRESHOLD &&
+  c.g >= WHITE_THRESHOLD &&
+  c.b >= WHITE_THRESHOLD;
+
 /** Squared RGB distance between two colors */
 const colorDistanceSq = (a: RGB, b: RGB): number => {
   const dr = a.r - b.r;
@@ -185,11 +194,12 @@ export const rgbToColorName = (color: RGB): string => {
 };
 
 /**
- * Get label for palette index (0-9, then A, B, …, M for color-by-number)
+ * Get label for palette index (1-9, then A, B, …, N for color-by-number)
  */
 export const paletteIndexToLabel = (index: number): string => {
-  if (index <= 9) return String(index);
-  return String.fromCharCode(65 + index - 10);
+  const n = index + 1; // 1-based
+  if (n <= 9) return String(n);
+  return String.fromCharCode(65 + n - 10);
 };
 
 /**
@@ -210,8 +220,8 @@ export const resizeImage = (
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
 };
 
-/** Letter size (8.5" x 11") at 150 DPI for print */
-export const LETTER_OUTPUT_DPI = 150;
+/** Letter size (8.5" x 11") at 300 DPI for print */
+export const LETTER_OUTPUT_DPI = 300;
 export const LETTER_WIDTH_IN = 8.5;
 export const LETTER_HEIGHT_IN = 11;
 export const LETTER_OUTPUT_WIDTH = Math.round(
