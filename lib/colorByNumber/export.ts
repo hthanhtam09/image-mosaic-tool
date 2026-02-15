@@ -8,7 +8,7 @@
 import type { ColorByNumberData, FilledMap } from "./types";
 import { getGridDimensions, getCellLayout } from "./layoutCalculator";
 import type { ColorByNumberCell } from "./types";
-import { rgbToColorNameEn } from "@/lib/utils";
+import { getPaletteColorName } from "@/lib/palette";
 
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
@@ -207,10 +207,14 @@ export const exportPaletteToCanvas = (
 
   // Build unique palette rows (exclude white and empty codes)
   const codeToColor = new Map<string, string>();
+  const codeToPaletteIndex = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue; // skip white cells (no code)
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
+      if (cell.fixedPaletteIndex != null) {
+        codeToPaletteIndex.set(cell.code, cell.fixedPaletteIndex);
+      }
     }
   }
   const codes = [...codeToColor.keys()].sort((a, b) => {
@@ -247,12 +251,9 @@ export const exportPaletteToCanvas = (
     const y = startY + i * rowHeight;
     const swatchY = y + (rowHeight - swatchSize) / 2;
 
-    // Parse hex to get color name
-    const hex = color.replace("#", "");
-    const r = parseInt(hex.slice(0, 2), 16) || 0;
-    const g = parseInt(hex.slice(2, 4), 16) || 0;
-    const b = parseInt(hex.slice(4, 6), 16) || 0;
-    const colorName = rgbToColorNameEn({ r, g, b });
+    // Get exact color name from PALETTE_NAMES
+    const palIdx = codeToPaletteIndex.get(code);
+    const colorName = palIdx != null ? getPaletteColorName(palIdx) : code;
 
     // Color name – left of box, right-aligned text near the swatch
     ctx.fillStyle = "#000000";

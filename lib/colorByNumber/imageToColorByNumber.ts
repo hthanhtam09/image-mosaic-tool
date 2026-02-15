@@ -105,19 +105,38 @@ export const imageToColorByNumber = async (
   const rawBlocks = createMosaicBlocks(imageData, FIXED_PALETTE, cellSize);
 
   // 6. Reduce to only used palette colors (remap indices to 0..K-1)
-  const { blocks } = reduceToUsedPalette(rawBlocks, FIXED_PALETTE);
+  const { blocks, fixedIndices } = reduceToUsedPalette(rawBlocks, FIXED_PALETTE);
 
-  // 7. Convert MosaicBlock[] → ColorByNumberCell[]
-  const cells = blocks.map((block) => {
-    const hex = rgbToHex(block.color);
-    const isWhite = block.color.r >= 250 && block.color.g >= 250 && block.color.b >= 250;
-    return {
-      x: Math.round(block.x / cellSize),
-      y: Math.round(block.y / cellSize),
-      code: isWhite ? "" : paletteIndexToLabel(block.paletteIndex),
-      color: hex,
-    };
-  });
+  // 7. Build sequential code mapping (skip white → no gaps: 1, 2, 3, ...)
+  //    First pass: identify which palette indices are non-white
+  const indexIsWhite = new Map<number, boolean>();
+  for (const block of blocks) {
+    if (!indexIsWhite.has(block.paletteIndex)) {
+      const w = block.color.r >= 250 && block.color.g >= 250 && block.color.b >= 250;
+      indexIsWhite.set(block.paletteIndex, w);
+    }
+  }
+  //    Assign sequential labels only to non-white indices
+  let seq = 0;
+  const indexToCode = new Map<number, string>();
+  const sortedIndices = [...indexIsWhite.keys()].sort((a, b) => a - b);
+  for (const idx of sortedIndices) {
+    if (indexIsWhite.get(idx)) {
+      indexToCode.set(idx, ""); // white → no code
+    } else {
+      indexToCode.set(idx, paletteIndexToLabel(seq));
+      seq++;
+    }
+  }
+
+  // 8. Convert MosaicBlock[] → ColorByNumberCell[]
+  const cells = blocks.map((block) => ({
+    x: Math.round(block.x / cellSize),
+    y: Math.round(block.y / cellSize),
+    code: indexToCode.get(block.paletteIndex) ?? "",
+    color: rgbToHex(block.color),
+    fixedPaletteIndex: fixedIndices[block.paletteIndex],
+  }));
 
   return {
     gridType,

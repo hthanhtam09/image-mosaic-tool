@@ -19,14 +19,17 @@ export default function ColorByNumberPalette() {
     const codeToTotal = new Map<string, number>();
 
     for (const cell of data.cells) {
-      codeToColor.set(cell.code, cell.color);
+      if (!cell.code) continue; // skip white cells (no code)
+      if (!codeToColor.has(cell.code)) {
+        codeToColor.set(cell.code, cell.color);
+      }
       codeToTotal.set(cell.code, (codeToTotal.get(cell.code) ?? 0) + 1);
       if (filled[`${cell.x},${cell.y}`]) {
         codeToCount.set(cell.code, (codeToCount.get(cell.code) ?? 0) + 1);
       }
     }
 
-    const codes = [...new Set(data.cells.map((c) => c.code))].sort((a, b) => {
+    const codes = [...codeToColor.keys()].sort((a, b) => {
       const aNum = Number.parseInt(a, 10);
       const bNum = Number.parseInt(b, 10);
       if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;

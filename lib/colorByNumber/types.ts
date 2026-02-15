@@ -9,6 +9,8 @@ export interface ColorByNumberCell {
   y: number;
   code: string;
   color: string;
+  /** Index into FIXED_PALETTE for exact color name lookup */
+  fixedPaletteIndex?: number;
 }
 
 export interface ColorByNumberData {
