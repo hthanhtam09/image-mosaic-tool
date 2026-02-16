@@ -741,7 +741,7 @@ export const exportToCanvas = (
     // gridLayout.offsetX centers grid in gridAvailableW.
     // effective Grid X relative to Page:
     // PageLeft + PaddingX + offsetX.
-    const SHIFT_LEFT = 60; // Keep shift?
+    const SHIFT_LEFT = 140; 
     const paletteX = PAGE_PADDING_X + gridLayout.offsetX - SHIFT_LEFT;
     
     ctx.translate(paletteX, paletteVisualTop);

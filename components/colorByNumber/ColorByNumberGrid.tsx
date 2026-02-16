@@ -724,7 +724,7 @@ const PageGrid = ({
 
       {/* Palette Column (always show if layout exists, per requirement) */}
       {paletteLayout && (
-        <g transform={`translate(${PAGE_PADDING_X + gridLayout.offsetX - 60}, ${paletteVisualTop})`}>
+        <g transform={`translate(${PAGE_PADDING_X + gridLayout.offsetX - 140}, ${paletteVisualTop})`}>
           <PaletteColumnSVG data={data} layout={paletteLayout} />
         </g>
       )}

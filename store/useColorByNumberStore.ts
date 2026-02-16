@@ -54,7 +54,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   panX: 0,
   panY: 0,
   showNumbers: true,
-  cellSize: 25,
+  cellSize: 29,
   useDithering: true,
   importedImageDataUrl: null,
   importedFile: null,

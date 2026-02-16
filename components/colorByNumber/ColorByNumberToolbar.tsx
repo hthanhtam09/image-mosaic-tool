@@ -244,8 +244,8 @@ export default function ColorByNumberToolbar() {
             <input
               type="range"
               min={10}
-              max={60}
-              step={5}
+              max={100}
+              step={1}
               value={cellSize}
               onChange={(e) => handleCellSizeChange(Number(e.target.value))}
               disabled={!importedFile || isImporting}
