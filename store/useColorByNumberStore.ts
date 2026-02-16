@@ -23,6 +23,8 @@ export interface ColorByNumberState {
   showNumbers: boolean;
   /** Cell size for the grid */
   cellSize: number;
+  /** Use dithering for smoother gradients (default: true) */
+  useDithering: boolean;
   /** Data URL of the imported image (for thumbnail & reprocessing) */
   importedImageDataUrl: string | null;
   /** Stored File object for reprocessing with different grid type / cell size */
@@ -37,9 +39,11 @@ export interface ColorByNumberState {
   loadProgress: (filled: FilledMap) => void;
   toggleShowNumbers: () => void;
   setCellSize: (size: number) => void;
+  setUseDithering: (use: boolean) => void;
   setImportedImage: (file: File, dataUrl: string) => void;
   reprocessWithGridType: (gridType: ColorByNumberGridType) => Promise<void>;
   reprocessWithCellSize: (cellSize: number) => Promise<void>;
+  reprocessWithUseDithering: (useDithering: boolean) => Promise<void>;
 }
 
 export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
@@ -50,7 +54,8 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   panX: 0,
   panY: 0,
   showNumbers: true,
-  cellSize: 20,
+  cellSize: 25,
+  useDithering: true,
   importedImageDataUrl: null,
   importedFile: null,
 
@@ -80,16 +85,19 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
 
   setCellSize: (size) => set({ cellSize: size }),
 
+  setUseDithering: (use) => set({ useDithering: use }),
+
   setImportedImage: (file, dataUrl) =>
     set({ importedFile: file, importedImageDataUrl: dataUrl }),
 
   reprocessWithGridType: async (gridType) => {
-    const { importedFile, cellSize } = get();
+    const { importedFile, cellSize, useDithering } = get();
     if (!importedFile) return;
     try {
       const result = await imageToColorByNumber(importedFile, {
         gridType,
         cellSize,
+        useDithering,
       });
       set({ data: result, filled: {} });
     } catch (err) {
@@ -98,17 +106,34 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   },
 
   reprocessWithCellSize: async (newCellSize) => {
-    const { importedFile, data } = get();
+    const { importedFile, data, useDithering } = get();
     if (!importedFile || !data) return;
     set({ cellSize: newCellSize });
     try {
       const result = await imageToColorByNumber(importedFile, {
         gridType: data.gridType,
         cellSize: newCellSize,
+        useDithering,
       });
       set({ data: result, filled: {} });
     } catch (err) {
       console.error("Failed to reprocess with cell size:", err);
+    }
+  },
+
+  reprocessWithUseDithering: async (newUseDithering) => {
+    const { importedFile, data, cellSize } = get();
+    if (!importedFile || !data) return;
+    set({ useDithering: newUseDithering });
+    try {
+      const result = await imageToColorByNumber(importedFile, {
+        gridType: data.gridType,
+        cellSize,
+        useDithering: newUseDithering,
+      });
+      set({ data: result, filled: {} });
+    } catch (err) {
+      console.error("Failed to reprocess with dithering:", err);
     }
   },
 }));

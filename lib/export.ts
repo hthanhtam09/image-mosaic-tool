@@ -12,8 +12,9 @@ import {
 } from "./utils";
 import { getPaletteColorName } from "./palette";
 import { renderNumberedTemplateToCanvas } from "./pixelate";
-import { renderToCanvas, PAGE_WIDTH_PX, PAGE_HEIGHT_PX } from "./grid";
-import type { GridConfig, ExportMode } from "./grid";
+import { renderToCanvas, PAGE_WIDTH_PX, PAGE_HEIGHT_PX, GRID_PADDING_PX } from "./grid";
+import type { GridConfig, ExportMode, PaletteExportInfo } from "./grid";
+import { renderPaletteColumn, getPaletteColumnWidth } from "./grid";
 
 const downloadCanvasAsImage = (
   canvas: HTMLCanvasElement,
@@ -109,20 +110,51 @@ export const exportNumberedTemplate = (
 };
 
 /**
- * Export grid template – 8.5" x 11" at 300 DPI. White paper + grid only.
+ * Export grid template – 8.5" x 11" at 300 DPI.
+ * For lineArt and noNumber modes, adds a palette column on the left.
  */
 export const exportGridTemplate = (
   gridConfig: GridConfig,
   cells: Array<{ row: number; col: number; number: string; colorHex?: string }>,
   options: { exportMode: ExportMode; showNumbers: boolean },
+  paletteInfo?: PaletteExportInfo,
 ): void => {
+  const needsPalette =
+    paletteInfo &&
+    (options.exportMode === "lineArt" || options.exportMode === "noNumber");
+
+  const paletteColW = needsPalette ? getPaletteColumnWidth() : 0;
+  const totalWidth = PAGE_WIDTH_PX + paletteColW;
+  const totalHeight = PAGE_HEIGHT_PX;
+
   const canvas = document.createElement("canvas");
-  canvas.width = PAGE_WIDTH_PX;
-  canvas.height = PAGE_HEIGHT_PX;
-  renderToCanvas(canvas, gridConfig, cells, {
+  canvas.width = totalWidth;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  // White background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+  // ── Palette column (left side) ──
+  if (needsPalette && paletteInfo) {
+    ctx.save();
+    // Palette renders in its own coordinate space
+    renderPaletteColumn(ctx, paletteInfo, totalHeight);
+    ctx.restore();
+  }
+
+  // ── Grid (right side, offset by palette width) ──
+  const gridCanvas = document.createElement("canvas");
+  gridCanvas.width = PAGE_WIDTH_PX;
+  gridCanvas.height = PAGE_HEIGHT_PX;
+  renderToCanvas(gridCanvas, gridConfig, cells, {
     showNumbers: options.showNumbers,
     exportMode: options.exportMode,
   });
+  ctx.drawImage(gridCanvas, paletteColW, 0);
+
   const suffix =
     options.exportMode === "noNumber"
       ? "no-numbers"
@@ -131,3 +163,4 @@ export const exportGridTemplate = (
         : "template";
   downloadCanvasAsImage(canvas, `grid-${suffix}-${Date.now()}.png`);
 };
+

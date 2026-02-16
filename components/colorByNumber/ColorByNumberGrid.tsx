@@ -9,19 +9,22 @@
  *   - Imported image thumbnail in top-right corner
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useMemo } from "react";
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import {
   getCellLayout,
-  getGridDimensions,
   hitTestCell,
 } from "@/lib/colorByNumber/layoutCalculator";
-import { getPageLayout } from "@/lib/colorByNumber/export";
-import type { ColorByNumberData, ColorByNumberCell } from "@/lib/colorByNumber";
 import {
-  LETTER_OUTPUT_WIDTH,
-  LETTER_OUTPUT_HEIGHT,
-} from "@/lib/utils";
+  getPageLayout,
+  calculatePaletteLayout,
+  type PaletteLayout,
+  PAL_DROPLET_COUNT,
+  PALETTE_GAP_TO_GRID,
+  getPalColW,
+} from "@/lib/colorByNumber/export";
+import type { ColorByNumberData, ColorByNumberCell } from "@/lib/colorByNumber";
+import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
 
 const STROKE_COLOR = "#000000";
 const DEFAULT_FILL = "#ffffff";
@@ -57,7 +60,392 @@ const getTextColor = (fillColor: string): string => {
   return brightness < 128 ? TEXT_COLOR_ON_DARK : TEXT_COLOR_ON_LIGHT;
 };
 
+/* ── Palette SVG Renderer ── */
+
+const PaletteColumnSVG = ({
+  data,
+  layout,
+}: {
+  data: ColorByNumberData;
+  layout: PaletteLayout;
+}) => {
+  const {
+    codes,
+    codeToColor,
+    codeToCount,
+    maxCount,
+    sRH,
+    sSW,
+    sGap,
+    sLbl,
+    sTop,
+    sDH,
+    sDW,
+    sDGap,
+    cx: itemCx,
+    sArcCircleR,
+    sArcGap,
+    sArcRadius,
+    sInputGap,
+    sInputH,
+    sInputW,
+    sInputPad,
+    itemsPerRow,
+    itemWidth,
+    itemHeight,
+    horizontalGap,
+    verticalGap,
+  } = layout;
+
+  const shape =
+    data.gridType === "honeycomb"
+      ? "circle"
+      : data.gridType === "diamond"
+        ? "diamond"
+        : data.gridType === "pentagon"
+          ? "pentagon"
+          : "square";
+
+  return (
+    <g>
+      {codes.map((code, i) => {
+        // Calculate row and column index
+        const rowIndex = Math.floor(i / itemsPerRow);
+        const colIndex = i % itemsPerRow;
+
+        // Calculate position
+        const xPos = colIndex * (itemWidth + horizontalGap);
+        const yPos = sTop + rowIndex * (itemHeight + verticalGap);
+
+        const cx = xPos + itemCx;
+        const color = codeToColor.get(code) ?? "#999";
+        const swCY = yPos + sSW / 2;
+
+        // Droplet calculations
+        const dropTop = yPos + sSW + sGap;
+        const fillRatio = Math.min(1, (codeToCount.get(code) ?? 0) / maxCount);
+        const filledCount = Math.round(fillRatio * PAL_DROPLET_COUNT);
+        const totalDropW =
+          PAL_DROPLET_COUNT * sDW + (PAL_DROPLET_COUNT - 1) * sDGap;
+        const dropStartX = cx - totalDropW / 2 + sDW / 2;
+
+        return (
+          <g key={code}>
+            {/* Swatch Shape */}
+            {shape === "circle" && (
+              <circle
+                cx={cx}
+                cy={swCY}
+                r={sSW / 2}
+                fill={color}
+                stroke="#333"
+                strokeWidth={2}
+              />
+            )}
+            {shape === "square" && (
+              <g>
+                {/* Rounded rect approximation */}
+                <rect
+                  x={cx - sSW / 2}
+                  y={swCY - sSW / 2}
+                  width={sSW}
+                  height={sSW}
+                  rx={sSW * 0.12}
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
+              </g>
+            )}
+            {shape === "diamond" && (
+              <polygon
+                points={`${cx},${swCY - sSW / 2} ${cx + sSW / 2},${swCY} ${cx},${
+                  swCY + sSW / 2
+                } ${cx - sSW / 2},${swCY}`}
+                fill={color}
+                stroke="#333"
+                strokeWidth={2}
+              />
+            )}
+            {shape === "pentagon" && (
+              <polygon
+                points={[-90, -30, 30, 90, 150, 210]
+                  .map((deg) => {
+                    const angle = (deg * Math.PI) / 180;
+                    const r = sSW / 2;
+                    return `${cx + r * Math.cos(angle)},${swCY + r * Math.sin(angle)}`;
+                  })
+                  .join(" ")}
+                fill={color}
+                stroke="#333"
+                strokeWidth={2}
+              />
+            )}
+
+            {/* Label inside swatch */}
+            <text
+              x={cx}
+              y={swCY}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={sLbl}
+              fontWeight="bold"
+              fontFamily="sans-serif"
+              stroke="rgba(0,0,0,0.5)"
+              strokeWidth={3}
+              paintOrder="stroke"
+              fill="#ffffff"
+            >
+              {code}
+            </text>
+
+            {/* Droplets */}
+            {Array.from({ length: PAL_DROPLET_COUNT }).map((_, d) => {
+              const dx = dropStartX + d * (sDW + sDGap);
+              const count = codeToCount.get(code) ?? 0;
+              let displayDroplets = 0;
+
+              if (count > 0) {
+                const ratio = count / maxCount;
+                displayDroplets = ratio * PAL_DROPLET_COUNT;
+                // If colored at all, show at least half a drop
+                if (displayDroplets < 0.5) displayDroplets = 0.5;
+              }
+
+              const isFull = d + 1 <= displayDroplets;
+              const isHalf = !isFull && d + 0.5 <= displayDroplets;
+
+              const w = sDW;
+              const h = sDH;
+              
+              const tipY = dropTop;
+              const bottomY = dropTop + h;
+              const halfW = w / 2;
+              const bodyTopY = dropTop + h * 0.35;
+
+              // Path: standard tear drop centered at dx
+              const pathData = `
+                M ${dx} ${tipY}
+                C ${dx - halfW * 0.3} ${bodyTopY},
+                  ${dx - halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.2},
+                  ${dx - halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.55}
+                A ${halfW} ${halfW} 0 1 0 ${dx + halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.55}
+                C ${dx + halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.2},
+                  ${dx + halfW * 0.3} ${bodyTopY},
+                  ${dx} ${tipY}
+                Z
+              `;
+
+              const clipId = `clip-half-${code}-${d}`;
+
+              return (
+                <g key={d}>
+                  {isHalf && (
+                    <defs>
+                      <clipPath id={clipId}>
+                        <rect x={dx - halfW} y={tipY} width={halfW} height={h} />
+                      </clipPath>
+                    </defs>
+                  )}
+
+                  {/* Fill */}
+                  {isFull && <path d={pathData} fill={color} />}
+                  {isHalf && (
+                     <path d={pathData} fill={color} clipPath={`url(#${clipId})`} />
+                  )}
+
+                  {/* Outline */}
+                  <path
+                    d={pathData}
+                    fill="none"
+                    stroke="#555"
+                    strokeWidth={1.5}
+                  />
+                </g>
+              );
+            })}
+
+            {/* 3 shapes in arc to the right of swatch (top → bottom), outline only; shape follows pattern (circle/square/diamond). Square uses inscribed size so they don't overlap. */}
+            {(() => {
+              const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
+              const arcCenterY = swCY;
+              const arcAngles = [-80, 0, 80].map(
+                (deg) => (deg * Math.PI) / 180,
+              );
+              const r = sArcCircleR;
+              const rSquare = r / Math.SQRT2; // half-size for square only, so squares don't overlap
+              return arcAngles.map((angle, i) => {
+                const shapeX = arcCenterX + sArcRadius * Math.cos(angle);
+                const shapeY = arcCenterY + sArcRadius * Math.sin(angle);
+                if (shape === "circle") {
+                  return (
+                    <circle
+                      key={i}
+                      cx={shapeX}
+                      cy={shapeY}
+                      r={r}
+                      fill="none"
+                      stroke="#555"
+                      strokeWidth={1.5}
+                    />
+                  );
+                }
+                if (shape === "square") {
+                  return (
+                    <rect
+                      key={i}
+                      x={shapeX - rSquare}
+                      y={shapeY - rSquare}
+                      width={rSquare * 2}
+                      height={rSquare * 2}
+                      rx={rSquare * 0.12}
+                      fill="none"
+                      stroke="#555"
+                      strokeWidth={1.5}
+                    />
+                  );
+                }
+                if (shape === "diamond") {
+                  return (
+                    <polygon
+                      key={i}
+                      points={`${shapeX},${shapeY - r} ${shapeX + r},${shapeY} ${shapeX},${shapeY + r} ${shapeX - r},${shapeY}`}
+                      fill="none"
+                      stroke="#555"
+                      strokeWidth={1.5}
+                    />
+                  );
+                }
+                // Pentagon (Visual: Hexagon)
+                return (
+                  <polygon
+                    key={i}
+                    points={[-90, -30, 30, 90, 150, 210]
+                      .map((deg) => {
+                        const angle = (deg * Math.PI) / 180;
+                        return `${shapeX + r * Math.cos(angle)},${shapeY + r * Math.sin(angle)}`;
+                      })
+                      .join(" ")}
+                    fill="none"
+                    stroke="#555"
+                    strokeWidth={1.5}
+                  />
+                );
+              });
+            })()}
+
+            {/* Input box below droplets: white, rounded, pencil icon + dotted placeholder */}
+            <foreignObject
+              x={cx - sInputW / 2}
+              y={dropTop + sDH + sInputGap}
+              width={sInputW}
+              height={sInputH}
+              className="overflow-visible"
+            >
+              <div
+                className="flex h-full w-full items-end gap-2 rounded-lg bg-white shadow-sm"
+                style={{
+                  boxSizing: "border-box",
+                  paddingTop: sInputPad * 2,
+                  paddingBottom: sInputPad,
+                  paddingLeft: sInputPad * 1.5,
+                  paddingRight: sInputPad * 1.5,
+                }}
+              >
+                <span className="shrink-0 text-black" aria-hidden>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="rotate-[-20deg]"
+                  >
+                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                    <path d="M2 2l7.586 7.586" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  className="min-w-0 flex-1 border-0 bg-transparent pb-0.5 text-center text-xs text-[#333] outline-none placeholder:text-[#999]"
+                  style={{ boxSizing: "border-box" }}
+                  placeholder="· · · · · · · · · · ·"
+                  aria-label={`Input for color ${code}`}
+                  defaultValue=""
+                />
+              </div>
+            </foreignObject>
+          </g>
+        );
+      })}
+    </g>
+  );
+};
+
 /* ── Cell renderers ── */
+
+const CellPentagon = ({
+  cell,
+  filled,
+  data,
+  showNumbers,
+  colored,
+}: {
+  cell: ColorByNumberCell;
+  filled: boolean;
+  data: ColorByNumberData;
+  showNumbers: boolean;
+  colored: boolean;
+}) => {
+  const layout = getCellLayout(cell.x, cell.y, data);
+  const fillColor = colored
+    ? getCellFillColor(cell.color, filled)
+    : DEFAULT_FILL;
+  const textColor = getTextColor(fillColor);
+  const r = layout.r;
+  const cx = layout.cx;
+  const cy = layout.cy;
+
+  // Hexagon (6 sides) for tight packing "like the image"
+  // Point up: -90, -30, 30, 90, 150, 210
+  const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
+  const points = angles
+    .map((angle) => {
+      const px = cx + r * Math.cos(angle);
+      const py = cy + r * Math.sin(angle);
+      return `${px},${py}`;
+    })
+    .join(" ");
+
+  return (
+    <g>
+      <polygon
+        points={points}
+        fill={fillColor}
+        stroke={STROKE_COLOR}
+        strokeWidth={1.2}
+      />
+      {showNumbers && (
+        <text
+          x={layout.cx}
+          y={layout.cy}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={textColor}
+          fontSize={r * 0.6}
+          fontWeight={600}
+          fontFamily="sans-serif"
+        >
+          {cell.code}
+        </text>
+      )}
+    </g>
+  );
+};
 
 const CellCircle = ({
   cell,
@@ -73,7 +461,9 @@ const CellCircle = ({
   colored: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  const fillColor = colored ? getCellFillColor(cell.color, filled) : DEFAULT_FILL;
+  const fillColor = colored
+    ? getCellFillColor(cell.color, filled)
+    : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
 
   return (
@@ -118,7 +508,9 @@ const CellSquare = ({
   colored: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  const fillColor = colored ? getCellFillColor(cell.color, filled) : DEFAULT_FILL;
+  const fillColor = colored
+    ? getCellFillColor(cell.color, filled)
+    : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
   const s = data.cellSize;
 
@@ -165,7 +557,9 @@ const CellDiamond = ({
   colored: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  const fillColor = colored ? getCellFillColor(cell.color, filled) : DEFAULT_FILL;
+  const fillColor = colored
+    ? getCellFillColor(cell.color, filled)
+    : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
   const half = layout.r;
 
@@ -216,13 +610,62 @@ const PageGrid = ({
   showNumbers: boolean;
   colored: boolean;
 }) => {
-  const layout = getPageLayout(data);
+  // Determine layout based on coloring mode
+  const {
+    gridLayout,
+    paletteLayout,
+    paletteWidth,
+    paletteVisualTop,
+    gridVisualTop,
+  } = useMemo(() => {
+      // Palette width available is full page width - padding
+      const paletteAvailableW = LETTER_OUTPUT_WIDTH - PAGE_PADDING * 2;
+      let pLayout: PaletteLayout | null = null;
+      
+      const needsPalette = true; 
+      
+      if (needsPalette) {
+          pLayout = calculatePaletteLayout(data, paletteAvailableW);
+      }
+      
+      const paletteHeight = pLayout ? pLayout.totalHeight : 0;
+      
+      // Grid available height
+      // 10px @ 300 DPI approx 30 units
+      const PALETTE_GAP = 30; 
+      const maxGridH = LETTER_OUTPUT_HEIGHT - paletteHeight - PALETTE_GAP - PAGE_PADDING * 2;
+      const maxGridW = LETTER_OUTPUT_WIDTH - PAGE_PADDING * 2;
+
+      // Calculate grid layout first
+      const gLayout = getPageLayout(data, maxGridW, maxGridH);
+
+      // Grid visual height
+      const gridVisualH = gLayout.gridDims.height * gLayout.scale;
+      const totalContentH = gridVisualH + PALETTE_GAP + paletteHeight;
+
+      // Center vertically: Group (Grid + Gap + Palette)
+      const startY = (LETTER_OUTPUT_HEIGHT - totalContentH) / 2;
+      
+      const gridVisualTop = startY;
+      const paletteVisualTop = startY + gridVisualH + PALETTE_GAP;
+
+      return {
+        gridLayout: gLayout,
+        paletteLayout: pLayout,
+        paletteWidth: 0, 
+        gridVisualTop, 
+        paletteVisualTop,
+      };
+    }, [data, colored]);
+
   const CellComponent =
     data.gridType === "honeycomb"
       ? CellCircle
       : data.gridType === "diamond"
         ? CellDiamond
-        : CellSquare;
+        : data.gridType === "pentagon"
+          ? CellPentagon
+          : CellSquare;
 
   return (
     <g>
@@ -236,11 +679,19 @@ const PageGrid = ({
         stroke="#d4d4d8"
         strokeWidth={2}
       />
-      {/* Grid centered on page */}
+
+      {/* Palette Column (always show if layout exists, per requirement) */}
+      {paletteLayout && (
+        <g transform={`translate(${PAGE_PADDING + gridLayout.offsetX - 60}, ${paletteVisualTop})`}>
+          <PaletteColumnSVG data={data} layout={paletteLayout} />
+        </g>
+      )}
+
+      {/* Grid centered in its available area */}
       <g
-        transform={`translate(${layout.offsetX}, ${layout.offsetY}) scale(${layout.scale})`}
+        transform={`translate(${PAGE_PADDING + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
       >
-        <g transform={`translate(${PAGE_PADDING}, ${PAGE_PADDING})`}>
+        <g transform={`translate(0, 0)`}>
           {data.cells.map((cell) => (
             <CellComponent
               key={`${cell.x},${cell.y}`}
@@ -340,15 +791,35 @@ export default function ColorByNumberGrid({
       const svgY = (e.clientY - rect.top - ty) / zoom;
 
       // Only respond to clicks on the colored page (left)
-      if (svgX >= 0 && svgX <= LETTER_OUTPUT_WIDTH && svgY >= 0 && svgY <= LETTER_OUTPUT_HEIGHT) {
-        const layout = getPageLayout(data);
+      // Note: The click handling logic assumes full page grid for colored page.
+      // Since colored page layout hasn't changed (no palette), this logic remains correct.
+      if (
+        svgX >= 0 &&
+        svgX <= LETTER_OUTPUT_WIDTH &&
+        svgY >= 0 &&
+        svgY <= LETTER_OUTPUT_HEIGHT
+      ) {
+        const layout = getPageLayout(
+          data,
+          LETTER_OUTPUT_WIDTH,
+          LETTER_OUTPUT_HEIGHT,
+        );
         const gridX = (svgX - layout.offsetX) / layout.scale - PAGE_PADDING;
         const gridY = (svgY - layout.offsetY) / layout.scale - PAGE_PADDING;
         const hit = hitTestCell(gridX, gridY, data);
         if (hit) fillCell(hit.x, hit.y);
       }
     },
-    [data, selectedCode, zoom, panX, panY, viewportWidth, viewportHeight, fillCell],
+    [
+      data,
+      selectedCode,
+      zoom,
+      panX,
+      panY,
+      viewportWidth,
+      viewportHeight,
+      fillCell,
+    ],
   );
 
   if (!data || data.cells.length === 0) {

@@ -13,9 +13,7 @@ export const WHITE_THRESHOLD = 250;
 
 /** True if color is white or near-white; such cells are left without a number everywhere. */
 export const isWhite = (c: RGB): boolean =>
-  c.r >= WHITE_THRESHOLD &&
-  c.g >= WHITE_THRESHOLD &&
-  c.b >= WHITE_THRESHOLD;
+  c.r >= WHITE_THRESHOLD && c.g >= WHITE_THRESHOLD && c.b >= WHITE_THRESHOLD;
 
 /** Squared RGB distance between two colors */
 const colorDistanceSq = (a: RGB, b: RGB): number => {
@@ -32,7 +30,7 @@ const colorDistanceSq = (a: RGB, b: RGB): number => {
  */
 export const deduplicatePalette = (
   palette: RGB[],
-  thresholdSq = 100
+  thresholdSq = 100,
 ): { palette: RGB[]; indexMap: number[] } => {
   const unique: RGB[] = [];
   const indexMap: number[] = [];
@@ -63,7 +61,7 @@ export const deduplicatePalette = (
  * Returns unique palette (one color per name) and indexMap: oldIndex -> newIndex.
  */
 export const deduplicatePaletteByName = (
-  palette: RGB[]
+  palette: RGB[],
 ): { palette: RGB[]; indexMap: number[] } => {
   const unique: RGB[] = [];
   const indexMap: number[] = [];
@@ -96,8 +94,8 @@ export const rgbToHex = (color: RGB): string => {
   return `#${r}${g}${b}`;
 };
 
-/** Basic colors (English) – everyone can recognize. Match by closest RGB. */
-const BASIC_COLORS_EN: { rgb: RGB; name: string }[] = [
+/** Basic colors (English) – palette for color-by-number; everyone can recognize. Match by closest RGB. */
+export const BASIC_COLORS_EN: { rgb: RGB; name: string }[] = [
   { rgb: { r: 255, g: 255, b: 255 }, name: "White" },
   { rgb: { r: 0, g: 0, b: 0 }, name: "Black" },
   { rgb: { r: 128, g: 128, b: 128 }, name: "Gray" },
@@ -143,56 +141,6 @@ export const rgbToColorNameEn = (color: RGB): string => {
   return bestName;
 };
 
-/** Named colors (Vietnamese) – fallback when Vietnamese label is needed (e.g. UI) */
-const NAMED_COLORS: { rgb: RGB; name: string }[] = [
-  { rgb: { r: 255, g: 255, b: 255 }, name: "Trắng" },
-  { rgb: { r: 0, g: 0, b: 0 }, name: "Đen" },
-  { rgb: { r: 128, g: 128, b: 128 }, name: "Xám" },
-  { rgb: { r: 192, g: 192, b: 192 }, name: "Xám nhạt" },
-  { rgb: { r: 255, g: 0, b: 0 }, name: "Đỏ" },
-  { rgb: { r: 255, g: 128, b: 128 }, name: "Đỏ nhạt" },
-  { rgb: { r: 139, g: 0, b: 0 }, name: "Đỏ đậm" },
-  { rgb: { r: 255, g: 165, b: 0 }, name: "Cam" },
-  { rgb: { r: 255, g: 200, b: 124 }, name: "Cam nhạt" },
-  { rgb: { r: 255, g: 255, b: 0 }, name: "Vàng" },
-  { rgb: { r: 255, g: 255, b: 200 }, name: "Vàng nhạt" },
-  { rgb: { r: 128, g: 128, b: 0 }, name: "Vàng olive" },
-  { rgb: { r: 0, g: 128, b: 0 }, name: "Xanh lá" },
-  { rgb: { r: 144, g: 238, b: 144 }, name: "Xanh lá nhạt" },
-  { rgb: { r: 0, g: 255, b: 0 }, name: "Xanh lá cây" },
-  { rgb: { r: 0, g: 0, b: 255 }, name: "Xanh dương" },
-  { rgb: { r: 173, g: 216, b: 230 }, name: "Xanh dương nhạt" },
-  { rgb: { r: 0, g: 0, b: 139 }, name: "Xanh dương đậm" },
-  { rgb: { r: 128, g: 0, b: 128 }, name: "Tím" },
-  { rgb: { r: 218, g: 112, b: 214 }, name: "Tím nhạt" },
-  { rgb: { r: 255, g: 192, b: 203 }, name: "Hồng" },
-  { rgb: { r: 255, g: 105, b: 180 }, name: "Hồng đậm" },
-  { rgb: { r: 139, g: 69, b: 19 }, name: "Nâu" },
-  { rgb: { r: 210, g: 180, b: 140 }, name: "Nâu nhạt" },
-  { rgb: { r: 101, g: 67, b: 33 }, name: "Nâu đậm" },
-  { rgb: { r: 245, g: 245, b: 220 }, name: "Be" },
-  { rgb: { r: 255, g: 228, b: 196 }, name: "Kem" },
-];
-
-/**
- * Get human-readable color name (Vietnamese) for a given RGB by closest match
- */
-export const rgbToColorName = (color: RGB): string => {
-  let minDist = Infinity;
-  let bestName = "Màu khác";
-  for (const { rgb, name } of NAMED_COLORS) {
-    const dr = color.r - rgb.r;
-    const dg = color.g - rgb.g;
-    const db = color.b - rgb.b;
-    const dist = dr * dr + dg * dg + db * db;
-    if (dist < minDist) {
-      minDist = dist;
-      bestName = name;
-    }
-  }
-  return bestName;
-};
-
 /**
  * Get label for palette index (1-9, then A, B, …, N for color-by-number)
  */
@@ -203,8 +151,9 @@ export const paletteIndexToLabel = (index: number): string => {
 };
 
 /**
- * Resize image to max width while preserving aspect ratio
- * Returns ImageData for processing
+ * Resize image to max width while preserving aspect ratio.
+ * Uses high-quality smoothing so the scaled image stays sharp for conversion.
+ * Returns ImageData for processing.
  */
 export const resizeImage = (
   img: HTMLImageElement,
@@ -216,6 +165,8 @@ export const resizeImage = (
   canvas.height = Math.round(img.height * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not get canvas context");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
 };

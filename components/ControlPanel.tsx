@@ -14,7 +14,8 @@ import {
   paletteIndexToLabel,
   rgbToHex,
 } from '@/lib/utils';
-import { exportPalette, exportGridTemplate } from '@/lib/export';
+import { exportGridTemplate } from '@/lib/export';
+import type { PaletteExportInfo } from '@/lib/grid';
 import { renderMosaicWithNumbersToCanvas } from '@/lib/pixelate';
 import { mosaicBlocksToCells, STROKE_GRID_PX } from '@/lib/grid';
 import ImageUploader from './ImageUploader';
@@ -56,11 +57,7 @@ const IconImage = () => (
   </svg>
 );
 
-const IconPaletteExport = () => (
-  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-  </svg>
-);
+
 
 const IconDocument = () => (
   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -120,10 +117,21 @@ export default function ControlPanel() {
     downloadCanvas(canvas, `mosaic-${Date.now()}.png`);
   };
 
-  const handleExportPalette = () => {
-    if (palette.length > 0) {
-      exportPalette(palette, fixedPaletteIndices);
+  /** Build color-count array for palette export (frequency per palette index). */
+  const buildPaletteInfo = (): PaletteExportInfo | undefined => {
+    if (palette.length === 0) return undefined;
+    const colorCounts = new Array(palette.length).fill(0);
+    for (const block of mosaicBlocks) {
+      if (block.paletteIndex >= 0 && block.paletteIndex < palette.length) {
+        colorCounts[block.paletteIndex]++;
+      }
     }
+    return {
+      palette,
+      fixedPaletteIndices,
+      gridType,
+      colorCounts,
+    };
   };
 
   const handleExportTemplate = () => {
@@ -146,7 +154,7 @@ export default function ControlPanel() {
       exportGridTemplate(gridConfig, cells, {
         exportMode: 'lineArt',
         showNumbers: true,
-      });
+      }, buildPaletteInfo());
     }
   };
 
@@ -170,7 +178,7 @@ export default function ControlPanel() {
       exportGridTemplate(gridConfig, cells, {
         exportMode: 'noNumber',
         showNumbers: false,
-      });
+      }, buildPaletteInfo());
     }
   };
 
@@ -367,14 +375,7 @@ export default function ControlPanel() {
                   <IconImage />
                   Mosaic Image
                 </button>
-                <button
-                  onClick={handleExportPalette}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[var(--bg-secondary)]"
-                  aria-label="Export color palette"
-                >
-                  <IconPaletteExport />
-                  Palette
-                </button>
+
                 <button
                   onClick={handleExportTemplate}
                   className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[var(--bg-secondary)]"

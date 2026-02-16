@@ -37,28 +37,94 @@ const rgbToLab = (rgb: RGB): { L: number; a: number; b: number } => {
   return { L, a, b: bLab };
 };
 
-/** Delta E 76 – perceptual color distance in Lab (lower = more similar) */
-const deltaE76 = (
-  lab1: { L: number; a: number; b: number },
-  lab2: { L: number; a: number; b: number },
-): number => {
-  const dL = lab1.L - lab2.L;
-  const da = lab1.a - lab2.a;
-  const db = lab1.b - lab2.b;
-  return Math.hypot(dL, da, db);
+type Lab = { L: number; a: number; b: number };
+
+/**
+ * Delta E 2000 (CIEDE2000) – better perceptual match than Delta E 76,
+ * especially for orange/red and similar hues so palette choice is correct.
+ */
+const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
+  const L1 = lab1.L;
+  const a1 = lab1.a;
+  const b1 = lab1.b;
+  const L2 = lab2.L;
+  const a2 = lab2.a;
+  const b2 = lab2.b;
+
+  const C1 = Math.sqrt(a1 * a1 + b1 * b1);
+  const C2 = Math.sqrt(a2 * a2 + b2 * b2);
+  const Cbar = (C1 + C2) / 2;
+  const G =
+    0.5 *
+    (1 -
+      Math.sqrt(
+        Math.pow(Cbar, 7) / (Math.pow(Cbar, 7) + Math.pow(25, 7)),
+      ));
+  const a1p = a1 * (1 + G);
+  const a2p = a2 * (1 + G);
+  const C1p = Math.sqrt(a1p * a1p + b1 * b1);
+  const C2p = Math.sqrt(a2p * a2p + b2 * b2);
+  const h1p = Math.atan2(b1, a1p);
+  const h2p = Math.atan2(b2, a2p);
+
+  const dLp = L2 - L1;
+  const dCp = C2p - C1p;
+  let dhp = h2p - h1p;
+  if (C1p * C2p !== 0) {
+    if (dhp > Math.PI) dhp -= 2 * Math.PI;
+    else if (dhp < -Math.PI) dhp += 2 * Math.PI;
+  }
+  const dHp =
+    2 * Math.sqrt(C1p * C2p) * Math.sin(dhp / 2);
+
+  const Lpbar = (L1 + L2) / 2;
+  const Cpbar = (C1p + C2p) / 2;
+  let hpbar = h1p + h2p;
+  if (C1p * C2p !== 0) {
+    if (Math.abs(h1p - h2p) > Math.PI) hpbar += 2 * Math.PI;
+    hpbar /= 2;
+  }
+
+  const T =
+    1 -
+    0.17 * Math.cos(hpbar - (30 * Math.PI) / 180) +
+    0.24 * Math.cos(2 * hpbar) +
+    0.32 * Math.cos(3 * hpbar + (6 * Math.PI) / 180) -
+    0.2 * Math.cos(4 * hpbar - (63 * Math.PI) / 180);
+  const dtheta = 30 * Math.exp(-Math.pow(hpbar - (275 * Math.PI) / 180, 2));
+  const Rc =
+    2 *
+    Math.sqrt(
+      Math.pow(Cpbar, 7) / (Math.pow(Cpbar, 7) + Math.pow(25, 7)),
+    );
+  const Sl =
+    1 +
+    (0.015 * Math.pow(Lpbar - 50, 2)) /
+      Math.sqrt(20 + Math.pow(Lpbar - 50, 2));
+  const Sc = 1 + 0.045 * Cpbar;
+  const Sh = 1 + 0.015 * Cpbar * T;
+  const Rt = -Math.sin(2 * dtheta * (Math.PI / 180)) * Rc;
+
+  return Math.sqrt(
+    Math.pow(dLp / Sl, 2) +
+      Math.pow(dCp / Sc, 2) +
+      Math.pow(dHp / Sh, 2) +
+      Rt * (dCp / Sc) * (dHp / Sh),
+  );
 };
 
 /**
- * Find palette index whose color is perceptually closest to the given color.
- * Uses Lab space + Delta E 76 so matching matches human perception.
+ * Find palette index whose color is perceptually closest to the given Lab.
+ * Uses CIEDE2000; paletteLab is pre-computed to avoid repeated rgbToLab.
  */
-const findPaletteIndex = (color: RGB, palette: readonly RGB[]): number => {
-  const colorLab = rgbToLab(color);
+const findPaletteIndexFromLab = (
+  lab: Lab,
+  paletteLab: Lab[],
+): number => {
   let minDeltaE = Infinity;
   let bestIndex = 0;
-  for (let i = 0; i < palette.length; i++) {
-    const paletteLab = rgbToLab(palette[i]);
-    const d = deltaE76(colorLab, paletteLab);
+  for (let i = 0; i < paletteLab.length; i++) {
+    const d = deltaE2000(lab, paletteLab[i]);
     if (d < minDeltaE) {
       minDeltaE = d;
       bestIndex = i;
@@ -68,26 +134,233 @@ const findPaletteIndex = (color: RGB, palette: readonly RGB[]): number => {
 };
 
 /**
- * Create mosaic blocks: each block gets the palette color that appears most
- * often when mapping every pixel in the block to its closest palette color.
- * This preserves distinct hues (green, purple, etc.) in rainbow/striped images
- * instead of blending them into an average.
+ * Find palette index for RGB (used by dithering). Converts to Lab then uses paletteLab.
+ */
+const findPaletteIndex = (
+  color: RGB,
+  palette: readonly RGB[],
+  paletteLab: Lab[],
+): number => {
+  const colorLab = rgbToLab(color);
+  return findPaletteIndexFromLab(colorLab, paletteLab);
+};
+
+/**
+ * Floyd–Steinberg dithering (reserved for optional mode). Uses paletteLab + CIEDE2000.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for optional dither mode
+const ditherToPalette = (
+  imageData: ImageData,
+  palette: readonly RGB[],
+  paletteLab: Lab[],
+): ImageData => {
+  const { width, height, data } = imageData;
+  const out = new ImageData(width, height);
+  const rF = new Float32Array(width * height);
+  const gF = new Float32Array(width * height);
+  const bF = new Float32Array(width * height);
+
+  for (let i = 0; i < width * height; i++) {
+    const j = i * 4;
+    rF[i] = data[j];
+    gF[i] = data[j + 1];
+    bF[i] = data[j + 2];
+  }
+
+  const addError = (x: number, y: number, er: number, eg: number, eb: number, factor: number) => {
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    const idx = y * width + x;
+    rF[idx] += er * factor;
+    gF[idx] += eg * factor;
+    bF[idx] += eb * factor;
+  };
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const r = Math.max(0, Math.min(255, rF[idx]));
+      const g = Math.max(0, Math.min(255, gF[idx]));
+      const b = Math.max(0, Math.min(255, bF[idx]));
+      const pixelColor: RGB = { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+      const palIdx = findPaletteIndex(pixelColor, palette, paletteLab);
+      const pal = palette[palIdx];
+      const j = (y * width + x) * 4;
+      out.data[j] = pal.r;
+      out.data[j + 1] = pal.g;
+      out.data[j + 2] = pal.b;
+      out.data[j + 3] = 255;
+      const er = r - pal.r;
+      const eg = g - pal.g;
+      const eb = b - pal.b;
+      addError(x + 1, y, er, eg, eb, 7 / 16);
+      addError(x - 1, y + 1, er, eg, eb, 3 / 16);
+      addError(x, y + 1, er, eg, eb, 5 / 16);
+      addError(x + 1, y + 1, er, eg, eb, 1 / 16);
+    }
+  }
+
+  return out;
+};
+
+/**
+ * Collect Lab values of all pixels in a block (for optimal color choice).
+ */
+const blockPixelLabs = (
+  imageData: ImageData,
+  blockX: number,
+  blockY: number,
+  blockSize: number,
+): Lab[] => {
+  const { width, height, data } = imageData;
+  const labs: Lab[] = [];
+  for (let dy = 0; dy < blockSize && blockY + dy < height; dy++) {
+    for (let dx = 0; dx < blockSize && blockX + dx < width; dx++) {
+      const i = ((blockY + dy) * width + (blockX + dx)) * 4;
+      const alpha = data[i + 3] ?? 255;
+      if (alpha < 128) continue; // bỏ qua pixel trong suốt, tránh kéo lệch màu
+      labs.push(
+        rgbToLab({
+          r: data[i],
+          g: data[i + 1],
+          b: data[i + 2],
+        }),
+      );
+    }
+  }
+  return labs;
+};
+
+/** Hue angle in degrees from Lab a,b (-180..180). Cùng họ màu khi chênh lệch nhỏ. */
+const labHueDeg = (lab: Lab): number =>
+  (Math.atan2(lab.b, lab.a) * 180) / Math.PI;
+
+/** Khoảng cách hue (độ), 0..180. */
+const hueDistanceDeg = (h1: number, h2: number): number => {
+  let d = Math.abs(h1 - h2);
+  if (d > 180) d = 360 - d;
+  return d;
+};
+
+/**
+ * Pick palette index that minimizes total perceptual error in the block.
+ * Tie-break: khi hai màu có sai số gần nhau (< 5%), ưu tiên màu có hue gần
+ * với trung bình block hơn → vùng đỏ không bị lẫn Dark red/Brown.
+ */
+const bestPaletteIndexByMinTotalError = (
+  pixelLabs: Lab[],
+  paletteLab: Lab[],
+): number => {
+  const n = pixelLabs.length;
+  if (n === 0) return 0;
+  let sumL = 0;
+  let sumA = 0;
+  let sumB = 0;
+  for (let i = 0; i < n; i++) {
+    sumL += pixelLabs[i].L;
+    sumA += pixelLabs[i].a;
+    sumB += pixelLabs[i].b;
+  }
+  const avgLab: Lab = {
+    L: sumL / n,
+    a: sumA / n,
+    b: sumB / n,
+  };
+  const blockHue = labHueDeg(avgLab);
+
+  let bestIndex = 0;
+  let minTotalError = Infinity;
+  let secondIndex = 0;
+  let secondError = Infinity;
+  const errors: number[] = [];
+
+  for (let k = 0; k < paletteLab.length; k++) {
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      total += deltaE2000(pixelLabs[i], paletteLab[k]);
+    }
+    errors[k] = total;
+    if (total < minTotalError) {
+      secondError = minTotalError;
+      secondIndex = bestIndex;
+      minTotalError = total;
+      bestIndex = k;
+    } else if (total < secondError) {
+      secondError = total;
+      secondIndex = k;
+    }
+  }
+
+  const tieThreshold = minTotalError * 1.05;
+  if (secondError <= tieThreshold && secondError < Infinity) {
+    const bestHue = labHueDeg(paletteLab[bestIndex]);
+    const secondHue = labHueDeg(paletteLab[secondIndex]);
+    if (
+      hueDistanceDeg(blockHue, secondHue) < hueDistanceDeg(blockHue, bestHue)
+    ) {
+      return secondIndex;
+    }
+  }
+  return bestIndex;
+};
+
+/**
+ * Create mosaic blocks with optimal color matching.
+ *
+ * When useBlockAverage is true (default): each block gets the palette color
+ * closest to the block’s perceptual average (average in Lab). This gives
+ * the most accurate dominant color per block and stable results (e.g. orange
+ * area → Orange, not Tomato).
+ *
+ * When useBlockAverage is false (default): raw image, mỗi pixel → palette gần nhất
+ * (CIEDE2000), block = màu đa số. Không smooth — màu đúng ảnh import, tránh lệch.
  */
 export const createMosaicBlocks = (
   imageData: ImageData,
   palette: readonly RGB[],
   blockSize: number,
+  useDithering = true,
+  useBlockAverage = false,
 ): MosaicBlock[] => {
-  const { width, height, data } = imageData;
+  void useDithering; // reserved for optional dither path
+  const { width, height } = imageData;
+  const paletteLab = palette.map((c) => rgbToLab(c));
   const blocks: MosaicBlock[] = [];
   const cols = Math.ceil(width / blockSize);
   const rows = Math.ceil(height / blockSize);
+
+  if (useBlockAverage) {
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const blockX = col * blockSize;
+        const blockY = row * blockSize;
+        const pixelLabs = blockPixelLabs(
+          imageData,
+          blockX,
+          blockY,
+          blockSize,
+        );
+        const bestIndex =
+          pixelLabs.length > 0
+            ? bestPaletteIndexByMinTotalError(pixelLabs, paletteLab)
+            : 0;
+        blocks.push({
+          x: blockX,
+          y: blockY,
+          paletteIndex: bestIndex,
+          color: palette[bestIndex],
+        });
+      }
+    }
+    return blocks;
+  }
+
+  // Ảnh gốc: mỗi pixel → palette gần nhất (CIEDE2000), block = màu đa số. Không smooth.
+  const data = imageData.data;
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const blockX = col * blockSize;
       const blockY = row * blockSize;
-
       const votes = new Array<number>(palette.length).fill(0);
 
       for (let dy = 0; dy < blockSize && blockY + dy < height; dy++) {
@@ -95,12 +368,14 @@ export const createMosaicBlocks = (
           const px = blockX + dx;
           const py = blockY + dy;
           const i = (py * width + px) * 4;
+          const alpha = data[i + 3] ?? 255;
+          if (alpha < 128) continue;
           const pixelColor: RGB = {
             r: data[i],
             g: data[i + 1],
             b: data[i + 2],
           };
-          const index = findPaletteIndex(pixelColor, palette);
+          const index = findPaletteIndex(pixelColor, palette, paletteLab);
           votes[index]++;
         }
       }
@@ -156,6 +431,44 @@ export const reduceToUsedPalette = (
     };
   });
   return { palette, blocks: newBlocks, fixedIndices };
+};
+
+/**
+ * Deduplicate a dynamic palette by merging similar colors using Delta E 2000.
+ *
+ * Checks every color against every other color. If dist(A, B) < threshold,
+ * they are considered the same. We keep the first one and map the second to it.
+ *
+ * threshold default ~5.0 is a good starting point for "visually almost identical".
+ */
+export const deduplicatePaletteDynamic = (
+  palette: RGB[],
+  threshold = 6.0,
+): { palette: RGB[]; indexMap: number[] } => {
+  const paletteLab = palette.map((c) => rgbToLab(c));
+  const uniqueIndices: number[] = [];
+  const indexMap = new Array<number>(palette.length).fill(-1);
+
+  for (let i = 0; i < palette.length; i++) {
+    if (indexMap[i] !== -1) continue; // already merged
+
+    // This color is new/unique so far
+    const newIdx = uniqueIndices.length;
+    uniqueIndices.push(i);
+    indexMap[i] = newIdx;
+
+    // Look for other similar colors to merge into this one
+    for (let j = i + 1; j < palette.length; j++) {
+      if (indexMap[j] !== -1) continue; // already merged
+      const d = deltaE2000(paletteLab[i], paletteLab[j]);
+      if (d < threshold) {
+        indexMap[j] = newIdx;
+      }
+    }
+  }
+
+  const newPalette = uniqueIndices.map((i) => palette[i]);
+  return { palette: newPalette, indexMap };
 };
 
 /** Border and padding as fraction of min canvas dimension (for numbered template) */

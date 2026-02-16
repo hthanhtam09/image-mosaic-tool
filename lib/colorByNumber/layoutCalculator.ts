@@ -13,7 +13,7 @@ export interface CellLayout {
   /** Radius for circle (honeycomb), half-edge for diamond/square */
   r: number;
   /** Shape type per cell */
-  shape: "circle" | "square" | "diamond";
+  shape: "circle" | "square" | "diamond" | "pentagon";
 }
 
 const CELL_GAP_DEFAULT = 2;
@@ -74,6 +74,56 @@ const getDiamondCellLayout = (
   return { cx, cy, r, shape: "diamond" };
 };
 
+/**
+ * Pentagon Grid – regular pentagons, staggered.
+ * We'll use a similar staggering to honeycomb/diamond.
+ * A pentagon fits in a circle of radius r.
+ * Orientation: Point up? Or flat top?
+ * Let's assume point up (regular pentagon).
+ *
+ * For tiling: Regular pentagons do NOT tile the plane perfectly without gaps.
+ * However, for "color by number", maybe we just want them packed closely?
+ * Or is there a specific "Gemstone" style tiling?
+ *
+ * Re-reading user request: "ngũ giác" -> Pentagon.
+ * If strictly regular pentagons, there will be gaps.
+ * Staggered rows (like honeycomb) is the best approximation for a dense packing.
+ * We will use the same logic as Honeycomb but with pentagon shape.
+ *
+ * r = (cellSize - gap) / 2
+ * Vertical step: needs to be calculated based on pentagon geometry to minimize gaps.
+ * Height of pentagon = r * (1 + cos(36°)) ≈ r * 1.809
+ * Width = r * 2 * sin(72°) ≈ r * 1.902 (approx 2*r)
+ *
+ * In honeycomb, rowStep = sqrt(3)*r ≈ 1.732*r
+ * Let's use a similar spacing for visual consistency.
+ */
+const getPentagonCellLayout = (
+  x: number,
+  y: number,
+  cellSize: number,
+  _gap: number,
+): CellLayout => {
+  // Solid tiling (Hexagon specific):
+  // Width (flat-to-flat) = sqrt(3) * r
+  // We want Width = cellSize for consistent column spacing.
+  // => r = cellSize / sqrt(3)
+  const r = cellSize / Math.sqrt(3);
+
+  // Vertical step for interlocking hexagons (point-up):
+  // step = 1.5 * r
+  const rowStep = 1.5 * r;
+
+  // Horizontal offset for odd rows
+  const rowOffset = y % 2 === 1 ? cellSize * 0.5 : 0;
+
+  const cx = x * cellSize + cellSize / 2 + rowOffset;
+  const cy = (y + 0.5) * rowStep;
+
+  // NOTE: shape "pentagon" in renderer draws a Hexagon.
+  return { cx, cy, r, shape: "pentagon" };
+};
+
 export const getCellLayout = (
   x: number,
   y: number,
@@ -87,6 +137,8 @@ export const getCellLayout = (
       return getHoneycombCellLayout(x, y, cellSize, gap);
     case "diamond":
       return getDiamondCellLayout(x, y, cellSize, gap);
+    case "pentagon":
+      return getPentagonCellLayout(x, y, cellSize, gap);
     case "standard":
     default:
       return getStandardCellLayout(x, y, cellSize, gap);
@@ -113,6 +165,17 @@ export const getGridDimensions = (
   if (gridType === "diamond") {
     const r = cellSize / 2;
     const rowStep = DIAMOND_ROW_STEP_FACTOR * r;
+    const gridW = width * cellSize + (height > 1 ? cellSize * 0.5 : 0);
+    const gridH = height * rowStep;
+    return { width: gridW, height: gridH };
+  }
+
+  if (gridType === "pentagon") {
+    // Matches getPentagonCellLayout logic
+    // r = cellSize / sqrt(3)
+    // rowStep = 1.5 * r
+    const r = cellSize / Math.sqrt(3);
+    const rowStep = 1.5 * r;
     const gridW = width * cellSize + (height > 1 ? cellSize * 0.5 : 0);
     const gridH = height * rowStep;
     return { width: gridW, height: gridH };
@@ -173,6 +236,102 @@ export const hitTestCell = (
       }
     }
     return null;
+  }
+
+  if (gridType === "pentagon") {
+    const r = cellSize / Math.sqrt(3);
+    const rowStep = 1.5 * r;
+    
+    // Simple hit test similar to diamond/honeycomb
+    // Note: This is an approximation since rows overlap in value.
+    // Ideally we should check the closest 2 rows.
+    // But for "click to fill", checking the primary mapped row is usually sufficient 
+    // unless clicking exactly on the jagged edge.
+    const row = Math.floor(py / rowStep);
+    
+    // Check row and row-1 because of overlap? 
+    // Let's stick to the basic logic and improve if edge-cases are reported.
+    // Actually, due to the overlap (2r vs 1.5r), a point can belong to row K or K-1/K+1.
+    // We can iterate candidate rows [row-1, row, row+1].
+    
+    const candidates = [row - 1, row, row + 1];
+    
+    for (const rCandidate of candidates) {
+        if (rCandidate < 0 || rCandidate >= height) continue;
+        
+        const rowOffset = rCandidate % 2 === 1 ? cellSize * 0.5 : 0;
+        const colCandidate = Math.floor((px - rowOffset) / cellSize);
+        
+        // Also check col+1 if near edge? 
+        // Let's just check the calculated col.
+        if (colCandidate >= 0 && colCandidate < width) {
+             const layout = getPentagonCellLayout(colCandidate, rCandidate, cellSize, gap);
+             // Hexagon hit test
+             // Point in hexagon check.
+             // Hexagon is intersection of 3 strips or just check distance in 6 directions?
+             // Or simplier: max(|dx|, |dy_rotated|) check?
+             // Since it's regular hexagon:
+             // distance from center <= inner_radius (sqrt(3)/2 * r)? No that's inscribed circle.
+             
+             // Simple hexagon distance function:
+             // dx = abs(px - cx)
+             // dy = abs(py - cy)
+             // return dy <= r * sqrt(3)/2 ??? No.
+             
+             // Point-up hexagon:
+             // max( |y|, |x|*sqrt(3) + |y| ) <= sqrt(3) * r ??? 
+             // Let's look up standard Hexagon equations.
+             // max(|dx|*sin(30) + |dy|*cos(30), |dx|) ??? 
+             // For point-TOP hexagon (flat sides left/right?? No, point top means flat sides are angled).
+             // Point UP: tips at (0, -r), (0, r). Flat vertical sides? No.
+             // Point UP: vertices at 90 deg, etc. Left/Right vertices are at 0 deg??
+             // Wait, CellPentagon uses -90 (top), -30, 30, 90 (bottom), 150, 210.
+             // So vertices are at Top, Bottom, and 4 corners.
+             // Flat sides are LEFT and RIGHT? 
+             // cos(-30) = sqrt(3)/2. 
+             // Vertices: (0,-r), (w/2, -r/2), (w/2, r/2), (0, r), (-w/2, r/2), (-w/2, -r/2).
+             // Yes, flat sides are vertical lines at x = +/- w/2.
+             // NO. The vertices are at x= w/2, y = +/- r/2.
+             // The side connects (w/2, -r/2) to (w/2, r/2). This is a vertical line.
+             // So it is a "Flat-topped" hexagon? NO. It is "Point-topped" if top is a point.
+             // Vertices include (0, -r). So top is a point.
+             // Layout: 
+             // (0, -r) -> Top Point.
+             // (w/2, -r/2) -> Top Right.
+             // (w/2, r/2) -> Bottom Right.
+             // (0, r) -> Bottom Point.
+             // (-w/2, r/2) -> Bottom Left.
+             // (-w/2, -r/2) -> Top Left.
+             // So it is POINT-TOPPED.
+             
+             // Check: 
+             // |dy| <= r 
+             // |dx|*sqrt(3) + |dy| <= sqrt(3)*r ?
+             //
+             // Let's use `isPointInPolygon` logic for robustness or a dedicated check.
+             // Since we have the layout center and r, let's use the explicit polygon check.
+             
+             const polyPoints = [-90, -30, 30, 90, 150, 210].map(deg => {
+                 const rad = deg * Math.PI / 180;
+                 return {
+                     x: layout.cx + layout.r * Math.cos(rad),
+                     y: layout.cy + layout.r * Math.sin(rad)
+                 };
+             });
+             
+             // Ray casting algorithm for point in polygon
+             let inside = false;
+             for (let i = 0, j = polyPoints.length - 1; i < polyPoints.length; j = i++) {
+                 const xi = polyPoints[i].x, yi = polyPoints[i].y;
+                 const xj = polyPoints[j].x, yj = polyPoints[j].y;
+                 const intersect = ((yi > py) !== (yj > py))
+                     && (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+                 if (intersect) inside = !inside;
+             }
+             
+             if (inside) return { x: colCandidate, y: rCandidate };
+        }
+    }
   }
 
   return null;

@@ -8,7 +8,6 @@ import { useCallback, useRef, useState } from "react";
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import {
   exportToCanvas,
-  exportPaletteToCanvas,
   imageToColorByNumber,
 } from "@/lib/colorByNumber";
 import type { ColorByNumberGridType } from "@/lib/colorByNumber";
@@ -27,15 +26,18 @@ export default function ColorByNumberToolbar() {
     zoom,
     showNumbers,
     cellSize,
+    useDithering,
     importedFile,
     setData,
     setZoom,
     setPan,
     resetFill,
     toggleShowNumbers,
+    setUseDithering,
     setImportedImage,
     reprocessWithGridType,
     reprocessWithCellSize,
+    reprocessWithUseDithering,
   } = useColorByNumberStore();
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +68,7 @@ export default function ColorByNumberToolbar() {
         const result = await imageToColorByNumber(file, {
           gridType: importGridType,
           cellSize,
+          useDithering,
         });
         setData(result);
         setPan(0, 0);
@@ -78,7 +81,7 @@ export default function ColorByNumberToolbar() {
         e.target.value = "";
       }
     },
-    [importGridType, cellSize, setData, setPan, setZoom, resetFill, setImportedImage],
+    [importGridType, cellSize, useDithering, setData, setPan, setZoom, resetFill, setImportedImage],
   );
 
   /* ── Grid type change (no re-import) ── */
@@ -97,6 +100,22 @@ export default function ColorByNumberToolbar() {
       }
     },
     [importedFile, reprocessWithGridType, setPan, setZoom],
+  );
+
+  /* ── Dithering (quality) change ── */
+  const handleUseDitheringChange = useCallback(
+    async (checked: boolean) => {
+      setUseDithering(checked);
+      if (importedFile && data) {
+        setIsImporting(true);
+        try {
+          await reprocessWithUseDithering(checked);
+        } finally {
+          setIsImporting(false);
+        }
+      }
+    },
+    [importedFile, data, setUseDithering, reprocessWithUseDithering],
   );
 
   /* ── Cell size change ── */
@@ -138,14 +157,7 @@ export default function ColorByNumberToolbar() {
     );
   }, [data, filled, showNumbers]);
 
-  const handleExportPalette = useCallback(() => {
-    if (!data) return;
-    const canvas = exportPaletteToCanvas(data);
-    downloadCanvas(
-      canvas,
-      `color-by-number-palette-${Date.now()}.png`,
-    );
-  }, [data]);
+
 
 
 
@@ -168,6 +180,7 @@ export default function ColorByNumberToolbar() {
     { value: "standard", label: "Standard" },
     { value: "honeycomb", label: "Honeycomb" },
     { value: "diamond", label: "Diamond" },
+    { value: "pentagon", label: "Ngũ giác" },
   ];
 
   return (
@@ -245,6 +258,26 @@ export default function ColorByNumberToolbar() {
               {cellSize}px
             </span>
           </div>
+          <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+            Nhỏ hơn = nhiều ô hơn, hình giống ảnh gốc hơn
+          </p>
+        </section>
+
+        {/* ── Quality (dithering) ── */}
+        <section>
+          <label className="flex cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={useDithering}
+              onChange={(e) => handleUseDitheringChange(e.target.checked)}
+              disabled={!importedFile || isImporting}
+              className="h-4 w-4 rounded"
+              aria-label="Chất lượng tốt hơn (dithering)"
+            />
+            <span className="text-sm font-medium text-[var(--text-primary)]">
+              Chất lượng tốt hơn (gradient mượt, giống ảnh hơn)
+            </span>
+          </label>
         </section>
 
         {/* ── Show Numbers ── */}
@@ -324,15 +357,7 @@ export default function ColorByNumberToolbar() {
             >
               📄 Download Uncolored
             </button>
-            <button
-              type="button"
-              onClick={handleExportPalette}
-              disabled={!data}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-white/5 disabled:opacity-50"
-              aria-label="Download color palette"
-            >
-              🎯 Download Palette
-            </button>
+
           </div>
         </section>
 

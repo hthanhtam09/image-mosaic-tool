@@ -36,3 +36,9 @@ export {
   STROKE_PAPER_PX,
   STROKE_ZOOM_CIRCLE_PX,
 } from "./constants";
+
+export {
+  renderPaletteColumn,
+  getPaletteColumnWidth,
+} from "./paletteRenderer";
+export type { PaletteExportInfo } from "./paletteRenderer";
