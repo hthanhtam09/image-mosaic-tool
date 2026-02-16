@@ -33,11 +33,9 @@ export default function ColorByNumberToolbar() {
     setPan,
     resetFill,
     toggleShowNumbers,
-    setUseDithering,
     setImportedImage,
     reprocessWithGridType,
     reprocessWithCellSize,
-    reprocessWithUseDithering,
   } = useColorByNumberStore();
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -100,22 +98,6 @@ export default function ColorByNumberToolbar() {
       }
     },
     [importedFile, reprocessWithGridType, setPan, setZoom],
-  );
-
-  /* ── Dithering (quality) change ── */
-  const handleUseDitheringChange = useCallback(
-    async (checked: boolean) => {
-      setUseDithering(checked);
-      if (importedFile && data) {
-        setIsImporting(true);
-        try {
-          await reprocessWithUseDithering(checked);
-        } finally {
-          setIsImporting(false);
-        }
-      }
-    },
-    [importedFile, data, setUseDithering, reprocessWithUseDithering],
   );
 
   /* ── Cell size change ── */
@@ -261,23 +243,6 @@ export default function ColorByNumberToolbar() {
           <p className="mt-1.5 text-xs text-[var(--text-muted)]">
             Nhỏ hơn = nhiều ô hơn, hình giống ảnh gốc hơn
           </p>
-        </section>
-
-        {/* ── Quality (dithering) ── */}
-        <section>
-          <label className="flex cursor-pointer items-center gap-3">
-            <input
-              type="checkbox"
-              checked={useDithering}
-              onChange={(e) => handleUseDitheringChange(e.target.checked)}
-              disabled={!importedFile || isImporting}
-              className="h-4 w-4 rounded"
-              aria-label="Chất lượng tốt hơn (dithering)"
-            />
-            <span className="text-sm font-medium text-[var(--text-primary)]">
-              Chất lượng tốt hơn (gradient mượt, giống ảnh hơn)
-            </span>
-          </label>
         </section>
 
         {/* ── Show Numbers ── */}
