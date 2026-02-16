@@ -60,6 +60,56 @@ const getTextColor = (fillColor: string): string => {
   return brightness < 128 ? TEXT_COLOR_ON_DARK : TEXT_COLOR_ON_LIGHT;
 };
 
+const getRoundedPolygonPath = (
+  points: { x: number; y: number }[],
+  radius: number,
+): string => {
+  if (points.length < 3) return "";
+
+  let d = "";
+  for (let i = 0; i < points.length; i++) {
+    const curr = points[i];
+    const prev = points[(i - 1 + points.length) % points.length];
+    const next = points[(i + 1) % points.length];
+
+    // Vector from curr to prev
+    const vcp_x = prev.x - curr.x;
+    const vcp_y = prev.y - curr.y;
+    const len_cp = Math.sqrt(vcp_x * vcp_x + vcp_y * vcp_y);
+    const ucp_x = vcp_x / len_cp;
+    const ucp_y = vcp_y / len_cp;
+
+    // Vector from curr to next
+    const vcn_x = next.x - curr.x;
+    const vcn_y = next.y - curr.y;
+    const len_cn = Math.sqrt(vcn_x * vcn_x + vcn_y * vcn_y);
+    const ucn_x = vcn_x / len_cn;
+    const ucn_y = vcn_y / len_cn;
+
+    // Actual radius can't be larger than half the segment
+    const r = Math.min(radius, len_cp / 2, len_cn / 2);
+
+    // Start point of the curve (on the curr-prev edge)
+    const sx = curr.x + ucp_x * r;
+    const sy = curr.y + ucp_y * r;
+
+    // End point of the curve (on the curr-next edge)
+    const ex = curr.x + ucn_x * r;
+    const ey = curr.y + ucn_y * r;
+
+    if (i === 0) {
+      d += `M ${sx},${sy}`;
+    } else {
+      d += ` L ${sx},${sy}`;
+    }
+
+    // Quadratic bezier curve to ex,ey with control point curr
+    d += ` Q ${curr.x},${curr.y} ${ex},${ey}`;
+  }
+  d += " Z";
+  return d;
+};
+
 /* ── Palette SVG Renderer ── */
 
 const PaletteColumnSVG = ({
@@ -144,13 +194,12 @@ const PaletteColumnSVG = ({
             )}
             {shape === "square" && (
               <g>
-                {/* Rounded rect approximation */}
                 <rect
                   x={cx - sSW / 2}
                   y={swCY - sSW / 2}
                   width={sSW}
                   height={sSW}
-                  rx={sSW * 0.12}
+                  rx={sSW * 0.15}
                   fill={color}
                   stroke="#333"
                   strokeWidth={2}
@@ -158,24 +207,39 @@ const PaletteColumnSVG = ({
               </g>
             )}
             {shape === "diamond" && (
-              <polygon
-                points={`${cx},${swCY - sSW / 2} ${cx + sSW / 2},${swCY} ${cx},${
-                  swCY + sSW / 2
-                } ${cx - sSW / 2},${swCY}`}
-                fill={color}
-                stroke="#333"
-                strokeWidth={2}
-              />
+              <g transform={`rotate(45, ${cx}, ${swCY})`}>
+                <rect
+                  x={cx - (sSW / 2) * 0.707 * 1.1} 
+                  y={swCY - (sSW / 2) * 0.707 * 1.1}
+                  width={sSW * 0.707 * 1.1 * 0.95 * 2} // Fit roughly same visual area
+                  height={sSW * 0.707 * 1.1 * 0.95 * 2}
+                  rx={sSW * 0.1} // Slight rounding
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
+                {/* 
+                   Note on diamond sizing in swatch: 
+                   sSW is the bounding box of the circle.
+                   If we rotate a square, its bounding box is side * sqrt(2).
+                   If we want bounding box = sSW, then side = sSW / sqrt(2).
+                   rx should be relative to side.
+                */}
+              </g>
             )}
             {shape === "pentagon" && (
-              <polygon
-                points={[-90, -30, 30, 90, 150, 210]
-                  .map((deg) => {
-                    const angle = (deg * Math.PI) / 180;
-                    const r = sSW / 2;
-                    return `${cx + r * Math.cos(angle)},${swCY + r * Math.sin(angle)}`;
-                  })
-                  .join(" ")}
+              <path
+                d={(() => {
+                  const angles = [-90, -30, 30, 90, 150, 210].map(
+                    (deg) => (deg * Math.PI) / 180,
+                  );
+                  const r = sSW / 2;
+                  const points = angles.map((angle) => ({
+                    x: cx + r * Math.cos(angle),
+                    y: swCY + r * Math.sin(angle),
+                  }));
+                  return getRoundedPolygonPath(points, r * 0.15);
+                })()}
                 fill={color}
                 stroke="#333"
                 strokeWidth={2}
@@ -231,8 +295,8 @@ const PaletteColumnSVG = ({
                   ${dx - halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.55}
                 A ${halfW} ${halfW} 0 1 0 ${dx + halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.55}
                 C ${dx + halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.2},
-                  ${dx + halfW * 0.3} ${bodyTopY},
-                  ${dx} ${tipY}
+                ${dx + halfW * 0.3} ${bodyTopY},
+                ${dx} ${tipY}
                 Z
               `;
 
@@ -298,7 +362,7 @@ const PaletteColumnSVG = ({
                       y={shapeY - rSquare}
                       width={rSquare * 2}
                       height={rSquare * 2}
-                      rx={rSquare * 0.12}
+                      rx={rSquare * 2 * 0.15}
                       fill="none"
                       stroke="#555"
                       strokeWidth={1.5}
@@ -306,26 +370,36 @@ const PaletteColumnSVG = ({
                   );
                 }
                 if (shape === "diamond") {
-                  return (
-                    <polygon
-                      key={i}
-                      points={`${shapeX},${shapeY - r} ${shapeX + r},${shapeY} ${shapeX},${shapeY + r} ${shapeX - r},${shapeY}`}
-                      fill="none"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
+                  // Approximating diamond with rotated rect
+                  const side = r * 2 * 0.707 * 0.9;
+                   return (
+                    <g key={i} transform={`rotate(45, ${shapeX}, ${shapeY})`}>
+                      <rect
+                        x={shapeX - side / 2}
+                        y={shapeY - side / 2}
+                        width={side}
+                        height={side}
+                        rx={side * 0.15}
+                        fill="none"
+                        stroke="#555"
+                        strokeWidth={1.5}
+                      />
+                    </g>
                   );
                 }
-                // Pentagon (Visual: Hexagon)
+                // Pentagon (Visual: Hexagon) - rounded
+                const angles = [-90, -30, 30, 90, 150, 210].map(
+                  (deg) => (deg * Math.PI) / 180,
+                );
+                const points = angles.map((a) => ({
+                  x: shapeX + r * Math.cos(a),
+                  y: shapeY + r * Math.sin(a),
+                }));
+                const pathId = `pentagon-arc-${i}`;
                 return (
-                  <polygon
+                  <path
                     key={i}
-                    points={[-90, -30, 30, 90, 150, 210]
-                      .map((deg) => {
-                        const angle = (deg * Math.PI) / 180;
-                        return `${shapeX + r * Math.cos(angle)},${shapeY + r * Math.sin(angle)}`;
-                      })
-                      .join(" ")}
+                    d={getRoundedPolygonPath(points, r * 0.15)}
                     fill="none"
                     stroke="#555"
                     strokeWidth={1.5}
@@ -413,18 +487,15 @@ const CellPentagon = ({
   // Hexagon (6 sides) for tight packing "like the image"
   // Point up: -90, -30, 30, 90, 150, 210
   const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
-  const points = angles
-    .map((angle) => {
-      const px = cx + r * Math.cos(angle);
-      const py = cy + r * Math.sin(angle);
-      return `${px},${py}`;
-    })
-    .join(" ");
+  const points = angles.map((angle) => ({
+    x: cx + r * Math.cos(angle),
+    y: cy + r * Math.sin(angle),
+  }));
 
   return (
     <g>
-      <polygon
-        points={points}
+      <path
+        d={getRoundedPolygonPath(points, r * 0.15)}
         fill={fillColor}
         stroke={STROKE_COLOR}
         strokeWidth={1.2}
@@ -513,7 +584,9 @@ const CellSquare = ({
     : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
   const s = data.cellSize;
-
+  // Use s for rx? The layout.r is not available here, but s is the full side length.
+  // We want corners to be rounded.
+  
   return (
     <g>
       <rect
@@ -521,6 +594,7 @@ const CellSquare = ({
         y={cell.y * s}
         width={s}
         height={s}
+        rx={s * 0.15}
         fill={fillColor}
         stroke={STROKE_COLOR}
         strokeWidth={1.2}
@@ -561,25 +635,30 @@ const CellDiamond = ({
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
-  const half = layout.r;
-
-  const points = [
-    [layout.cx, layout.cy - half],
-    [layout.cx + half, layout.cy],
-    [layout.cx, layout.cy + half],
-    [layout.cx - half, layout.cy],
-  ]
-    .map(([x, y]) => `${x},${y}`)
-    .join(" ");
+  const half = layout.r; 
+  // half is distance from center to vertex.
+  // Bounding square side for a diamond with "radius" half:
+  // We want the diamond vertices to match (cx, cy-half), etc.
+  // A square centered at cy,cy rotated 45deg has vertices at distance "d" from center.
+  // For a square of side L, d = L * sqrt(2) / 2.
+  // We want d = half.
+  // So L * sqrt(2) / 2 = half => L = 2 * half / sqrt(2) = half * sqrt(2).
+  const side = half * Math.sqrt(2);
 
   return (
     <g>
-      <polygon
-        points={points}
-        fill={fillColor}
-        stroke={STROKE_COLOR}
-        strokeWidth={1.2}
-      />
+      <g transform={`rotate(45, ${layout.cx}, ${layout.cy})`}>
+        <rect
+          x={layout.cx - side / 2}
+          y={layout.cy - side / 2}
+          width={side}
+          height={side}
+          rx={side * 0.15}
+          fill={fillColor}
+          stroke={STROKE_COLOR}
+          strokeWidth={1.2}
+        />
+      </g>
       {showNumbers && (
         <text
           x={layout.cx}
