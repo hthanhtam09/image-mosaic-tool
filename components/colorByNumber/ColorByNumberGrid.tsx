@@ -22,6 +22,8 @@ import {
   PAL_DROPLET_COUNT,
   PALETTE_GAP_TO_GRID,
   getPalColW,
+  PAGE_PADDING_X,
+  PAGE_PADDING_Y,
 } from "@/lib/colorByNumber/export";
 import type { ColorByNumberData, ColorByNumberCell } from "@/lib/colorByNumber";
 import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
@@ -30,7 +32,7 @@ const STROKE_COLOR = "#000000";
 const DEFAULT_FILL = "#ffffff";
 const TEXT_COLOR_ON_LIGHT = "#333333";
 const TEXT_COLOR_ON_DARK = "#ffffff";
-const PAGE_PADDING = 20;
+// const PAGE_PADDING = 20; // Removed in favor of imports
 const PAGE_GAP = 30; // gap between the two pages in the viewport
 const THUMB_WIDTH = 80;
 
@@ -209,22 +211,15 @@ const PaletteColumnSVG = ({
             {shape === "diamond" && (
               <g transform={`rotate(45, ${cx}, ${swCY})`}>
                 <rect
-                  x={cx - (sSW / 2) * 0.707 * 1.1} 
-                  y={swCY - (sSW / 2) * 0.707 * 1.1}
-                  width={sSW * 0.707 * 1.1 * 0.95 * 2} // Fit roughly same visual area
-                  height={sSW * 0.707 * 1.1 * 0.95 * 2}
-                  rx={sSW * 0.1} // Slight rounding
+                  x={cx - (sSW * 0.6) / 2}
+                  y={swCY - (sSW * 0.6) / 2}
+                  width={sSW * 0.6}
+                  height={sSW * 0.6}
+                  rx={(sSW * 0.6) * 0.15}
                   fill={color}
                   stroke="#333"
                   strokeWidth={2}
                 />
-                {/* 
-                   Note on diamond sizing in swatch: 
-                   sSW is the bounding box of the circle.
-                   If we rotate a square, its bounding box is side * sqrt(2).
-                   If we want bounding box = sSW, then side = sSW / sqrt(2).
-                   rx should be relative to side.
-                */}
               </g>
             )}
             {shape === "pentagon" && (
@@ -678,64 +673,32 @@ const CellDiamond = ({
 };
 
 /* ── Grid rendered onto an 8.5×11 page ── */
+interface PageGridLayout {
+  gridLayout: any;
+  paletteLayout: PaletteLayout | null;
+  gridVisualTop: number;
+  paletteVisualTop: number;
+}
+
 const PageGrid = ({
   data,
   filled,
   showNumbers,
   colored,
+  layout,
 }: {
   data: ColorByNumberData;
   filled: Record<string, boolean>;
   showNumbers: boolean;
   colored: boolean;
+  layout: PageGridLayout;
 }) => {
-  // Determine layout based on coloring mode
   const {
     gridLayout,
     paletteLayout,
-    paletteWidth,
     paletteVisualTop,
     gridVisualTop,
-  } = useMemo(() => {
-      // Palette width available is full page width - padding
-      const paletteAvailableW = LETTER_OUTPUT_WIDTH - PAGE_PADDING * 2;
-      let pLayout: PaletteLayout | null = null;
-      
-      const needsPalette = true; 
-      
-      if (needsPalette) {
-          pLayout = calculatePaletteLayout(data, paletteAvailableW);
-      }
-      
-      const paletteHeight = pLayout ? pLayout.totalHeight : 0;
-      
-      // Grid available height
-      // 10px @ 300 DPI approx 30 units
-      const PALETTE_GAP = 30; 
-      const maxGridH = LETTER_OUTPUT_HEIGHT - paletteHeight - PALETTE_GAP - PAGE_PADDING * 2;
-      const maxGridW = LETTER_OUTPUT_WIDTH - PAGE_PADDING * 2;
-
-      // Calculate grid layout first
-      const gLayout = getPageLayout(data, maxGridW, maxGridH);
-
-      // Grid visual height
-      const gridVisualH = gLayout.gridDims.height * gLayout.scale;
-      const totalContentH = gridVisualH + PALETTE_GAP + paletteHeight;
-
-      // Center vertically: Group (Grid + Gap + Palette)
-      const startY = (LETTER_OUTPUT_HEIGHT - totalContentH) / 2;
-      
-      const gridVisualTop = startY;
-      const paletteVisualTop = startY + gridVisualH + PALETTE_GAP;
-
-      return {
-        gridLayout: gLayout,
-        paletteLayout: pLayout,
-        paletteWidth: 0, 
-        gridVisualTop, 
-        paletteVisualTop,
-      };
-    }, [data, colored]);
+  } = layout;
 
   const CellComponent =
     data.gridType === "honeycomb"
@@ -761,14 +724,14 @@ const PageGrid = ({
 
       {/* Palette Column (always show if layout exists, per requirement) */}
       {paletteLayout && (
-        <g transform={`translate(${PAGE_PADDING + gridLayout.offsetX - 60}, ${paletteVisualTop})`}>
+        <g transform={`translate(${PAGE_PADDING_X + gridLayout.offsetX - 60}, ${paletteVisualTop})`}>
           <PaletteColumnSVG data={data} layout={paletteLayout} />
         </g>
       )}
 
       {/* Grid centered in its available area */}
       <g
-        transform={`translate(${PAGE_PADDING + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
+        transform={`translate(${PAGE_PADDING_X + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
           {data.cells.map((cell) => (
@@ -817,6 +780,46 @@ export default function ColorByNumberGrid({
     y: number;
   } | null>(null);
 
+  // Determine layout based on data (shared for both pages and hit testing)
+  const pageLayout = useMemo<PageGridLayout | null>(() => {
+    if (!data) return null;
+
+    // Palette width available is full page width - padding
+    const paletteAvailableW = LETTER_OUTPUT_WIDTH - PAGE_PADDING_X * 2;
+    let pLayout: PaletteLayout | null = null;
+    
+    // Always show palette
+    pLayout = calculatePaletteLayout(data, paletteAvailableW);
+    
+    const paletteHeight = pLayout ? pLayout.totalHeight : 0;
+    
+    // Grid available height
+    // 10px @ 300 DPI approx 30 units
+    const PALETTE_GAP = 30; 
+    const maxGridH = LETTER_OUTPUT_HEIGHT - paletteHeight - (paletteHeight > 0 ? PALETTE_GAP : 0) - PAGE_PADDING_Y * 2;
+    const maxGridW = LETTER_OUTPUT_WIDTH - PAGE_PADDING_X * 2;
+
+    // Calculate grid layout first
+    const gLayout = getPageLayout(data, maxGridW, maxGridH);
+
+    // Grid visual height
+    const gridVisualH = gLayout.gridDims.height * gLayout.scale;
+    const totalContentH = gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0) + paletteHeight;
+
+    // Center vertically: Group (Grid + Gap + Palette)
+    const startY = (LETTER_OUTPUT_HEIGHT - totalContentH) / 2;
+    
+    const gridVisualTop = startY;
+    const paletteVisualTop = startY + gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0);
+
+    return {
+      gridLayout: gLayout,
+      paletteLayout: pLayout,
+      gridVisualTop,
+      paletteVisualTop,
+    };
+  }, [data]);
+
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       e.preventDefault();
@@ -856,7 +859,7 @@ export default function ColorByNumberGrid({
 
   const handleClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!data || !selectedCode || didPanRef.current) return;
+      if (!data || !selectedCode || didPanRef.current || !pageLayout) return;
       const svg = e.currentTarget;
       const rect = svg.getBoundingClientRect();
 
@@ -870,21 +873,26 @@ export default function ColorByNumberGrid({
       const svgY = (e.clientY - rect.top - ty) / zoom;
 
       // Only respond to clicks on the colored page (left)
-      // Note: The click handling logic assumes full page grid for colored page.
-      // Since colored page layout hasn't changed (no palette), this logic remains correct.
       if (
         svgX >= 0 &&
         svgX <= LETTER_OUTPUT_WIDTH &&
         svgY >= 0 &&
         svgY <= LETTER_OUTPUT_HEIGHT
       ) {
-        const layout = getPageLayout(
-          data,
-          LETTER_OUTPUT_WIDTH,
-          LETTER_OUTPUT_HEIGHT,
-        );
-        const gridX = (svgX - layout.offsetX) / layout.scale - PAGE_PADDING;
-        const gridY = (svgY - layout.offsetY) / layout.scale - PAGE_PADDING;
+        const gLayout = pageLayout.gridLayout;
+        // The grid is drawn at: transform={`translate(${PAGE_PADDING_X + gLayout.offsetX}, ${pageLayout.gridVisualTop}) scale(${gLayout.scale})`}
+        // Inverse transform:
+        // P_visual = Translate(...) * Scale(...) * P_grid
+        // P_grid = Scale_inv * Translate_inv * P_visual
+        
+        // svgX, svgY are P_visual relative to page top-left (0,0)
+        
+        const originX = PAGE_PADDING_X + gLayout.offsetX;
+        const originY = pageLayout.gridVisualTop;
+        
+        const gridX = (svgX - originX) / gLayout.scale;
+        const gridY = (svgY - originY) / gLayout.scale;
+        
         const hit = hitTestCell(gridX, gridY, data);
         if (hit) fillCell(hit.x, hit.y);
       }
@@ -898,10 +906,11 @@ export default function ColorByNumberGrid({
       viewportWidth,
       viewportHeight,
       fillCell,
+      pageLayout, // Depend on computed layout
     ],
   );
 
-  if (!data || data.cells.length === 0) {
+  if (!data || data.cells.length === 0 || !pageLayout) {
     return (
       <div className="flex h-full w-full items-center justify-center text-[var(--text-muted)]">
         Import ảnh để bắt đầu
@@ -939,6 +948,7 @@ export default function ColorByNumberGrid({
               filled={filled}
               showNumbers={showNumbers}
               colored={true}
+              layout={pageLayout}
             />
           </g>
 
@@ -949,6 +959,7 @@ export default function ColorByNumberGrid({
               filled={filled}
               showNumbers={showNumbers}
               colored={false}
+              layout={pageLayout}
             />
           </g>
         </g>

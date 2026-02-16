@@ -126,6 +126,12 @@ export const imageToColorByNumber = async (
     const r = cellSize / 2;
     const rowStep = 1.5 * r;
     rows = Math.ceil(rows * (cellSize / rowStep));
+  } else if (gridType === "pentagon") {
+    // Pentagon/Hexagon: r = cellSize/2, step = 1.5*r = 0.75*cellSize
+    // We need more rows to cover the same height because rows overlap.
+    const r = cellSize / 2;
+    const rowStep = 1.5 * r;
+    rows = Math.ceil(rows * (cellSize / rowStep));
   }
 
   // 4. Compute target pixel dimensions and resize image to fill

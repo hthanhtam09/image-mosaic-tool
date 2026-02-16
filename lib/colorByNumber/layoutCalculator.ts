@@ -105,10 +105,10 @@ const getPentagonCellLayout = (
   _gap: number,
 ): CellLayout => {
   // Solid tiling (Hexagon specific):
-  // Width (flat-to-flat) = sqrt(3) * r
   // We want Width = cellSize for consistent column spacing.
-  // => r = cellSize / sqrt(3)
-  const r = cellSize / Math.sqrt(3);
+  // Previous logic used cellSize / sqrt(3) which made it larger.
+  // Now using cellSize / 2 to match other shapes height/width constraints better.
+  const r = cellSize / 2;
 
   // Vertical step for interlocking hexagons (point-up):
   // step = 1.5 * r
@@ -172,9 +172,9 @@ export const getGridDimensions = (
 
   if (gridType === "pentagon") {
     // Matches getPentagonCellLayout logic
-    // r = cellSize / sqrt(3)
+    // r = cellSize / 2
     // rowStep = 1.5 * r
-    const r = cellSize / Math.sqrt(3);
+    const r = cellSize / 2;
     const rowStep = 1.5 * r;
     const gridW = width * cellSize + (height > 1 ? cellSize * 0.5 : 0);
     const gridH = height * rowStep;
@@ -239,7 +239,7 @@ export const hitTestCell = (
   }
 
   if (gridType === "pentagon") {
-    const r = cellSize / Math.sqrt(3);
+    const r = cellSize / 2;
     const rowStep = 1.5 * r;
     
     // Simple hit test similar to diamond/honeycomb

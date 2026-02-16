@@ -18,7 +18,8 @@ const EXPORT_PAGE_H = Math.round(11 * EXPORT_DPI); // 3300
 const STORAGE_KEY = "color-by-number-progress";
 
 /** Page padding in layout units (applied before fitting to letter) */
-export const PAGE_PADDING = 20;
+export const PAGE_PADDING_X = 20;
+export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
 
 export const saveProgressToStorage = (
   dataId: string,
@@ -84,27 +85,25 @@ const getBrightness = (hex: string): number => {
 };
 
 /**
- * Compute the transform needed to center the grid on an 8.5×11 page.
- * Returns { scale, offsetX, offsetY } where scale fits grid+padding into the page.
+ * Compute the transform needed to fit the grid into the given box (center aligned).
  */
 export const getPageLayout = (
   data: ColorByNumberData,
-  pageW = EXPORT_PAGE_W,
-  pageH = EXPORT_PAGE_H,
+  boxW: number,
+  boxH: number,
 ) => {
   const dims = getGridDimensions(data);
-  const contentW = dims.width + PAGE_PADDING * 2;
-  const contentH = dims.height + PAGE_PADDING * 2;
-  const scale = Math.min(pageW / contentW, pageH / contentH);
-  const scaledW = contentW * scale;
-  const scaledH = contentH * scale;
+  const scale = Math.min(boxW / dims.width, boxH / dims.height);
+  const scaledW = dims.width * scale;
+  const scaledH = dims.height * scale;
   return {
     scale,
-    offsetX: (pageW - scaledW) / 2,
-    offsetY: (pageH - scaledH) / 2,
+    // Offsets to center the grid in the box
+    offsetX: (boxW - scaledW) / 2,
+    offsetY: (boxH - scaledH) / 2,
     gridDims: dims,
-    pageW,
-    pageH,
+    boxW,
+    boxH,
   };
 };
 
@@ -612,16 +611,50 @@ const renderPaletteColumnCBN = (
     const penX = inputLeft + sInputPad + sInputH * 0.3;
     const penY = inputTop + sInputH * 0.62;
     const penS = sInputH * 0.32;
+    
+    // Draw SVG-like pencil icon
+    // ViewBox 24x24 -> scale to penS
+    const scale =  penS / 24;
+    
+    ctx.save();
+    ctx.translate(penX, penY);
+    ctx.rotate(-20 * Math.PI / 180); // rotate -20deg
+    ctx.scale(scale, scale);
+    ctx.translate(-12, -12); // center on 24x24 box
+    
+    ctx.lineWidth = 1.5 / scale; // constant line width visually? Or scale with it? SVG uses strokeWidth="2" on 24x24. So 2 is good.
     ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 1.2;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    
+    // Path 1: M12 19l7-7 3 3-7 7-3-3z
     ctx.beginPath();
-    ctx.moveTo(penX - penS * 0.5, penY + penS);
-    ctx.lineTo(penX + penS * 0.8, penY - penS * 0.8);
-    ctx.lineTo(penX + penS, penY - penS);
-    ctx.moveTo(penX + penS * 0.8, penY - penS * 0.8);
-    ctx.lineTo(penX + penS * 0.4, penY + penS * 0.5);
+    ctx.moveTo(12, 19);
+    ctx.lineTo(19, 12);
+    ctx.lineTo(22, 15);
+    ctx.lineTo(15, 22);
+    ctx.lineTo(12, 19);
+    ctx.closePath();
     ctx.stroke();
+    
+    // Path 2: M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z
+    ctx.beginPath();
+    ctx.moveTo(18, 13);
+    ctx.lineTo(16.5, 5.5);
+    ctx.lineTo(2, 2);
+    ctx.lineTo(5.5, 16.5);
+    ctx.lineTo(13, 18);
+    ctx.lineTo(18, 13);
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Path 3: M2 2l7.586 7.586
+    ctx.beginPath();
+    ctx.moveTo(2, 2);
+    ctx.lineTo(9.586, 9.586);
+    ctx.stroke();
+    
+    ctx.restore();
 
     // Dotted placeholder line (longer, positioned lower for more space above)
     const dotCount = 13;
@@ -656,45 +689,40 @@ export const exportToCanvas = (
   const pageH = EXPORT_PAGE_H;
 
   // For uncolored mode (OR colored mode now per request), add palette at the BOTTOM
-  // The user said: "cho bảng màu xuống dưới cuối cùng, không nằm bên trái nữa, và thành hàng ngang, nếu dài quá thì xuống hàng"
-  // This implies palette is always at the bottom.
-  const needsPalette = true; // Always show palette at bottom if requested, or based on options? 
-  // "ảnh preview đã tô màu thì thêm bảng màu y hệt như bên chưa tô màu" -> implies it's always there for consistency?
-  // Let's assume yes.
+  const needsPalette = true;
   
-  // Calculate palette layout first to know its height
-  // Palette width available is full page width - padding
-  const paletteAvailableW = pageW - PAGE_PADDING * 2;
+  // 1. Determine "Safe Area" based on fixed margins
+  const safeW = pageW - PAGE_PADDING_X * 2;
+  const safeH = pageH - PAGE_PADDING_Y * 2;
+
+  // 2. Calculate palette height in full scale (it doesn't scale with grid)
+  // Palette uses full safe width if needed.
   let layout: PaletteLayout | null = null;
-  
   if (needsPalette) {
-      layout = calculatePaletteLayout(data, paletteAvailableW);
+      layout = calculatePaletteLayout(data, safeW);
   }
-  
   const paletteHeight = layout ? layout.totalHeight : 0;
   
-  
-  // Grid available height = Page Height - Palette Height - Padding
-  // We should also add some gap between grid and palette?
-  // User request: "bảng màu chỉ cách nơi tô màu khoảng 10px"
-  // 10px @ 300 DPI approx 30 units (since 300 dpi / 96 dpi * 10 ~ 31)
+  // 3. Subtract palette height and gap from Safe Height to get Grid Safe Height
   const PALETTE_GAP = 30; // ~10px visual
-  const maxGridH = pageH - paletteHeight - PALETTE_GAP - PAGE_PADDING * 2;
-  const maxGridW = pageW - PAGE_PADDING * 2;
+  // If palette exists, we lose height. If not, we have full safeH.
+  const gridAvailableH = Math.max(0, safeH - paletteHeight - (paletteHeight > 0 ? PALETTE_GAP : 0));
+  const gridAvailableW = safeW;
 
-  // Get grid layout fitted into the remaining space
-  const gridLayout = getPageLayout(data, maxGridW, maxGridH);
+  // 4. Fit grid into gridAvailableH/W
+  const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
 
-  // Calculate actual total height of content to center it vertically
+  // 5. Calculate visual total height (Grid Visual + Gap + Palette)
   const gridVisualH = gridLayout.gridDims.height * gridLayout.scale;
-  const totalContentH = gridVisualH + PALETTE_GAP + paletteHeight;
+  const totalContentH = gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0) + paletteHeight;
   
-  // Center vertically
-  // "cho center nơi tô màu và bảng màu"
+  // 6. Center content vertically in the Page (ignoring padding Y, just center in PageH)
+  // We ensure totalContentH <= safeH (since we derived gridAvailableH from safeH).
+  // So centering in pageH guarantees margins >= PAGE_PADDING_Y.
   const startY = (pageH - totalContentH) / 2;
   
   const gridVisualTop = startY;
-  const paletteVisualTop = startY + gridVisualH + PALETTE_GAP;
+  const paletteVisualTop = startY + gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0);
 
   const canvas = document.createElement("canvas");
   canvas.width = pageW;
@@ -709,11 +737,12 @@ export const exportToCanvas = (
   // ── Palette column (Bottom) ──
   if (needsPalette && layout) {
     ctx.save();
-    // Align with the grid's left edge
-    // "màu đầu tiên nằm thằng hàng với cạnh ở trên"
-    // "qua bên trái khoảng 20px nữa" -> Shift left by ~20px (approx 60 units at 300 DPI)
-    const SHIFT_LEFT = 60;
-    const paletteX = PAGE_PADDING + gridLayout.offsetX - SHIFT_LEFT;
+    // Align with the grid's left edge (visual left)
+    // gridLayout.offsetX centers grid in gridAvailableW.
+    // effective Grid X relative to Page:
+    // PageLeft + PaddingX + offsetX.
+    const SHIFT_LEFT = 60; // Keep shift?
+    const paletteX = PAGE_PADDING_X + gridLayout.offsetX - SHIFT_LEFT;
     
     ctx.translate(paletteX, paletteVisualTop);
     renderPaletteColumnCBN(ctx, data, layout);
@@ -722,24 +751,7 @@ export const exportToCanvas = (
 
   // ── Grid (Top) ──
   ctx.save();
-  // We need to adhere to the gridVisualTop we calculated.
-  // getPageLayout returns offsetX/Y relative to the bounds passed to it.
-  // But since we want to position the grid explicitly at gridVisualTop,
-  // we rely on gridLayout.scale but manage translation ourselves?
-  // Actually getPageLayout's offsetY centers it within `maxGridH`.
-  // If `maxGridH` is much larger than `gridVisualH`, it has extra space.
-  // But we want to tightly pack Grid + Palette, and center the GROUP.
-  // So we ignore gridLayout.offsetY (which centers in available space) 
-  // and use the offset needed to start at gridVisualTop?
-  // 
-  // Wait, gridLayout.gridDims is unscaled.
-  // We want to scale: gridLayout.scale
-  // We want to translate: 
-  // X: Centered in page. gridLayout.offsetX returns centering for `maxGridW`.
-  //    Since `maxGridW` is centered in `pageW` (via padding), `PAGE_PADDING + gridLayout.offsetX` is correct x.
-  // Y: We want it at `gridVisualTop`.
-  
-  ctx.translate(PAGE_PADDING + gridLayout.offsetX, gridVisualTop);
+  ctx.translate(PAGE_PADDING_X + gridLayout.offsetX, gridVisualTop);
   ctx.scale(gridLayout.scale, gridLayout.scale);
 
 
@@ -853,7 +865,7 @@ export const exportPaletteToCanvas = (
   ctx.fillRect(0, 0, pageW, pageH);
 
   // Layout constants (scaled for 300 DPI)
-  const padding = PAGE_PADDING * 6;
+  const padding = PAGE_PADDING_Y; // Use new vertical padding
   const swatchSize = 64;
   const rowHeight = 84;
   const totalContentH = codes.length * rowHeight;

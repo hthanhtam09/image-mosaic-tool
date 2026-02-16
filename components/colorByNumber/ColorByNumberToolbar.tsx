@@ -159,9 +159,9 @@ export default function ColorByNumberToolbar() {
 
 
   const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [
-    { value: "standard", label: "Standard" },
-    { value: "honeycomb", label: "Honeycomb" },
-    { value: "diamond", label: "Diamond" },
+    { value: "standard", label: "Hình vuông" },
+    { value: "honeycomb", label: "Hình tròn" },
+    { value: "diamond", label: "Hình thoi" },
     { value: "pentagon", label: "Ngũ giác" },
   ];
 
@@ -199,23 +199,39 @@ export default function ColorByNumberToolbar() {
           <h2 className="!mb-6 text-sm font-semibold text-[var(--text-primary)]">
             Grid Type
           </h2>
-          <div className="flex gap-1">
-            {GRID_TYPES.map((gt) => (
-              <button
-                key={gt.value}
-                type="button"
-                onClick={() => handleGridTypeChange(gt.value)}
-                disabled={isImporting}
-                className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                  importGridType === gt.value
-                    ? "bg-[var(--accent)] text-[var(--bg-primary)]"
-                    : "border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-white/5"
-                }`}
-                aria-label={`Grid type: ${gt.label}`}
+          <div className="relative">
+            <select
+              value={importGridType}
+              onChange={(e) =>
+                handleGridTypeChange(e.target.value as ColorByNumberGridType)
+              }
+              disabled={isImporting}
+              className="w-full appearance-none rounded-lg border border-[var(--border-default)] bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
+            >
+              {GRID_TYPES.map((gt) => (
+                <option
+                  key={gt.value}
+                  value={gt.value}
+                  className="bg-[var(--bg-secondary)]"
+                >
+                  {gt.label}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--text-secondary)]">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                {gt.label}
-              </button>
-            ))}
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </div>
           </div>
         </section>
 
