@@ -724,14 +724,15 @@ const PageGrid = ({
 
       {/* Palette Column (always show if layout exists, per requirement) */}
       {paletteLayout && (
-        <g transform={`translate(${PAGE_PADDING_X + gridLayout.offsetX - 140}, ${paletteVisualTop})`}>
+        <g transform={`translate(${PAGE_PADDING_X - 50}, ${paletteVisualTop})`}>
           <PaletteColumnSVG data={data} layout={paletteLayout} />
         </g>
       )}
 
       {/* Grid centered in its available area */}
+      {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 50 offset */}
       <g
-        transform={`translate(${PAGE_PADDING_X + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
+        transform={`translate(${PAGE_PADDING_X - 50 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
           {data.cells.map((cell) => (
@@ -789,34 +790,32 @@ export default function ColorByNumberGrid({
     let pLayout: PaletteLayout | null = null;
     
     // Always show palette
-    pLayout = calculatePaletteLayout(data, paletteAvailableW);
+    pLayout = calculatePaletteLayout(data, paletteAvailableW, { vertical: true });
     
-    const paletteHeight = pLayout ? pLayout.totalHeight : 0;
-    
-    // Grid available height
-    // 10px @ 300 DPI approx 30 units
     const PALETTE_GAP = 30; 
-    const maxGridH = LETTER_OUTPUT_HEIGHT - paletteHeight - (paletteHeight > 0 ? PALETTE_GAP : 0) - PAGE_PADDING_Y * 2;
-    const maxGridW = LETTER_OUTPUT_WIDTH - PAGE_PADDING_X * 2;
+    const paletteWidth = pLayout ? pLayout.palColW : 0;
+    
+    // Add 50px to available width (Palette moved left into margin)
+    const PALETTE_X_OFFSET = -50;
+    const maxGridW = Math.max(0, paletteAvailableW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - PALETTE_X_OFFSET);
+    const maxGridH = LETTER_OUTPUT_HEIGHT - PAGE_PADDING_Y * 2;
 
     // Calculate grid layout first
     const gLayout = getPageLayout(data, maxGridW, maxGridH);
 
-    // Grid visual height
+    // Vertical centering
+    const paletteVisualH = pLayout ? pLayout.totalHeight : 0;
     const gridVisualH = gLayout.gridDims.height * gLayout.scale;
-    const totalContentH = gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0) + paletteHeight;
-
-    // Center vertically: Group (Grid + Gap + Palette)
-    const startY = (LETTER_OUTPUT_HEIGHT - totalContentH) / 2;
     
-    const gridVisualTop = startY;
-    const paletteVisualTop = startY + gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0);
+    // Anchor to TOP padding
+    const paletteVisualTop = PAGE_PADDING_Y;
+    const gridVisualTop = PAGE_PADDING_Y;
 
     return {
       gridLayout: gLayout,
       paletteLayout: pLayout,
-      gridVisualTop,
-      paletteVisualTop,
+      gridVisualTop, // gridVisualTop matches gridY in export
+      paletteVisualTop, // paletteVisualTop matches paletteY in export
     };
   }, [data]);
 
@@ -880,14 +879,16 @@ export default function ColorByNumberGrid({
         svgY <= LETTER_OUTPUT_HEIGHT
       ) {
         const gLayout = pageLayout.gridLayout;
-        // The grid is drawn at: transform={`translate(${PAGE_PADDING_X + gLayout.offsetX}, ${pageLayout.gridVisualTop}) scale(${gLayout.scale})`}
-        // Inverse transform:
-        // P_visual = Translate(...) * Scale(...) * P_grid
-        // P_grid = Scale_inv * Translate_inv * P_visual
+        const pLayout = pageLayout.paletteLayout;
+        const PALETTE_GAP = 30;
+        const paletteWidth = pLayout ? pLayout.palColW : 0;
         
-        // svgX, svgY are P_visual relative to page top-left (0,0)
+        // Grid starts at: Padding + Palette + Gap + OffsetX + OffsetShift
+        // Visual X of Palette = Padding - 50
+        // Visual X of Grid = (Padding - 50) + Palette + Gap + OffsetX
+        const gridStartX = PAGE_PADDING_X - 50 + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gLayout.offsetX;
         
-        const originX = PAGE_PADDING_X + gLayout.offsetX;
+        const originX = gridStartX;
         const originY = pageLayout.gridVisualTop;
         
         const gridX = (svgX - originX) / gLayout.scale;

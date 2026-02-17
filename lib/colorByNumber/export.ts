@@ -18,7 +18,7 @@ const EXPORT_PAGE_H = Math.round(11 * EXPORT_DPI); // 3300
 const STORAGE_KEY = "color-by-number-progress";
 
 /** Page padding in layout units (applied before fitting to letter) */
-export const PAGE_PADDING_X = 20;
+export const PAGE_PADDING_X = 120; // 0.4 inch * 300 DPI = 120px
 export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
 
 export const saveProgressToStorage = (
@@ -204,7 +204,8 @@ export interface PaletteLayout {
 
 export const calculatePaletteLayout = (
   data: ColorByNumberData,
-  availableWidth: number, // Changed from availableHeight to availableWidth for horizontal layout constraint
+  availableWidth: number,
+  options?: { vertical?: boolean }
 ): PaletteLayout | null => {
   // Build unique palette entries (skip white / empty codes)
   const codeToColor = new Map<string, string>();
@@ -232,39 +233,45 @@ export const calculatePaletteLayout = (
   // We want to fit as many items as possible in availableWidth
   // Item width = getPalColW()
   
+  // Layout calculations
   const itemWidth = getPalColW();
   const itemHeight = palRowH();
-  
-  // Calculate how many items fit per row
-  // availableWidth = n * itemWidth + (n-1) * horizontalGap
-  // availableWidth + horizontalGap = n * (itemWidth + horizontalGap)
-  // n = (availableWidth + horizontalGap) / (itemWidth + horizontalGap)
   
   const hGap = PAL_HORIZONTAL_GAP;
   const vGap = PAL_VERTICAL_GAP;
   
-  // User request: "7 màu" -> Fixed 7 items per row
-  const itemsPerRow = 7;
+  let itemsPerRow = 7;
+  let scale = 1;
+  
+  if (options?.vertical) {
+      // Logic for vertical column on the left
+      itemsPerRow = 1;
+      scale = 0.8; // Scale up for left column visibility (was 0.6)
+  } else {
+       // Logic for horizontal bottom (optional/legacy now?)
+       itemsPerRow = 7;
+  }
+  
+  const sc = scale;
+
+  const sItemWidth = itemWidth * sc;
+  const sItemHeight = itemHeight * sc;
+  const sHGap = hGap * sc;
+  const sVGap = vGap * sc;
+  
   const rowCount = Math.ceil(codes.length / itemsPerRow);
   
-  // Check if it fits in width, if not we might need to scale?
-  // For now assuming it fits or we just center what we have.
-  
-  const totalHeight = rowCount * itemHeight + (rowCount - 1) * vGap + PAL_TOP_PAD;
-
+  const totalHeight = rowCount * sItemHeight + (rowCount - 1) * sVGap + PAL_TOP_PAD * sc;
 
   // We do NOT scale down the palette itself based on height here. 
-  // The palette takes what it needs at the bottom. The grid will take the REST of the page.
-  // Unless the palette is larger than the page itself? 
-  // Let's assume standard scale 1 for palette items.
-  const sc = 1;
-
+  // The palette takes what it needs.
+  
   const sInputW = PAL_INPUT_W * sc;
   const sInputPad = PAL_INPUT_PAD * sc;
 
   return {
-    palColW: itemWidth,
-    palRowH: itemHeight,
+    palColW: sItemWidth,
+    palRowH: sItemHeight,
     scale: sc,
     codes,
     codeToColor,
@@ -289,10 +296,10 @@ export const calculatePaletteLayout = (
     itemsPerRow,
     rowCount,
     totalHeight,
-    itemWidth,
-    itemHeight,
-    horizontalGap: hGap,
-    verticalGap: vGap,
+    itemWidth: sItemWidth,
+    itemHeight: sItemHeight,
+    horizontalGap: sHGap,
+    verticalGap: sVGap,
   };
 };
 
@@ -688,41 +695,42 @@ export const exportToCanvas = (
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
 
-  // For uncolored mode (OR colored mode now per request), add palette at the BOTTOM
+  // For uncolored mode (OR colored mode now per request), add palette on the LEFT
   const needsPalette = true;
   
   // 1. Determine "Safe Area" based on fixed margins
   const safeW = pageW - PAGE_PADDING_X * 2;
   const safeH = pageH - PAGE_PADDING_Y * 2;
 
-  // 2. Calculate palette height in full scale (it doesn't scale with grid)
-  // Palette uses full safe width if needed.
+  // 2. Calculate palette layout (vertical)
   let layout: PaletteLayout | null = null;
   if (needsPalette) {
-      layout = calculatePaletteLayout(data, safeW);
+      layout = calculatePaletteLayout(data, safeW, { vertical: true });
   }
-  const paletteHeight = layout ? layout.totalHeight : 0;
   
-  // 3. Subtract palette height and gap from Safe Height to get Grid Safe Height
   const PALETTE_GAP = 30; // ~10px visual
-  // If palette exists, we lose height. If not, we have full safeH.
-  const gridAvailableH = Math.max(0, safeH - paletteHeight - (paletteHeight > 0 ? PALETTE_GAP : 0));
-  const gridAvailableW = safeW;
+  const paletteWidth = layout ? layout.palColW : 0;
+  
+  // 3. Grid available width = SafeW - PaletteW - Gap
+  // Gain 50px from palette shift!
+  const PALETTE_X_OFFSET = -50;
+  const gridAvailableW = Math.max(0, safeW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - PALETTE_X_OFFSET);
+  const gridAvailableH = safeH;
 
   // 4. Fit grid into gridAvailableH/W
   const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
 
-  // 5. Calculate visual total height (Grid Visual + Gap + Palette)
+  // 5. Calculate vertical centering
+  const paletteVisualH = layout ? layout.totalHeight : 0;
   const gridVisualH = gridLayout.gridDims.height * gridLayout.scale;
-  const totalContentH = gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0) + paletteHeight;
   
-  // 6. Center content vertically in the Page (ignoring padding Y, just center in PageH)
-  // We ensure totalContentH <= safeH (since we derived gridAvailableH from safeH).
-  // So centering in pageH guarantees margins >= PAGE_PADDING_Y.
-  const startY = (pageH - totalContentH) / 2;
+  // Anchor to TOP padding (0.4 inch) instead of centering vertically
+  const paletteY = PAGE_PADDING_Y;
+  const gridY = PAGE_PADDING_Y;
   
-  const gridVisualTop = startY;
-  const paletteVisualTop = startY + gridVisualH + (paletteHeight > 0 ? PALETTE_GAP : 0);
+  // Grid Top is just gridY
+  const gridVisualTop = gridY;
+  const paletteVisualTop = paletteY;
 
   const canvas = document.createElement("canvas");
   canvas.width = pageW;
@@ -734,24 +742,37 @@ export const exportToCanvas = (
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, pageW, pageH);
 
-  // ── Palette column (Bottom) ──
+  // ── Palette column (Left) ──
   if (needsPalette && layout) {
     ctx.save();
-    // Align with the grid's left edge (visual left)
-    // gridLayout.offsetX centers grid in gridAvailableW.
-    // effective Grid X relative to Page:
-    // PageLeft + PaddingX + offsetX.
-    const SHIFT_LEFT = 140; 
-    const paletteX = PAGE_PADDING_X + gridLayout.offsetX - SHIFT_LEFT;
+    // Palette is positioned at Left Padding - 50px offset per user request
+    const PALETTE_X_OFFSET = -50;
+    const paletteX = PAGE_PADDING_X + PALETTE_X_OFFSET;
     
-    ctx.translate(paletteX, paletteVisualTop);
+    ctx.translate(paletteX, paletteY);
     renderPaletteColumnCBN(ctx, data, layout);
     ctx.restore();
   }
 
-  // ── Grid (Top) ──
+  // ── Grid (Right) ──
   ctx.save();
-  ctx.translate(PAGE_PADDING_X + gridLayout.offsetX, gridVisualTop);
+  // Grid starts after Palette + Gap
+  // AND gridLayout.offsetX centers it within gridAvailableW
+  // So: PaddingX + PaletteW + Gap + offsetX
+  // BUT we need to account for the -50 offset we gave the palette! 
+  // Wait, if palette moves left, grid can move left too? Or grid just gets wider?
+  // We want grid to get wider.
+  // Start X should be relative to the *visual* end of the palette.
+  // Visual Palette End = (PaddingX - 50) + PaletteWidth.
+  // So Grid Start X = (PaddingX - 50) + PaletteWidth + Gap + offsetX
+  // Re-calculate gridAvailableW with the offset in mind (giving more space)
+  // safeW is (PageW - 2*PadX).
+  // Used Space = (PaletteW + Gap) - 50.
+  // Available = safeW - UsedSpace = safeW - PaletteW - Gap + 50.
+  
+  const gridStartX = PAGE_PADDING_X + PALETTE_X_OFFSET + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gridLayout.offsetX;
+  
+  ctx.translate(gridStartX, gridVisualTop);
   ctx.scale(gridLayout.scale, gridLayout.scale);
 
 
