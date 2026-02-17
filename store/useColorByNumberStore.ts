@@ -44,6 +44,10 @@ export interface ColorByNumberState {
   reprocessWithGridType: (gridType: ColorByNumberGridType) => Promise<void>;
   reprocessWithCellSize: (cellSize: number) => Promise<void>;
   reprocessWithUseDithering: (useDithering: boolean) => Promise<void>;
+
+  /** Whether the palette panel is visible (expanded) */
+  isPaletteVisible: boolean;
+  togglePalette: () => void;
 }
 
 export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
@@ -58,6 +62,9 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   useDithering: true,
   importedImageDataUrl: null,
   importedFile: null,
+  isPaletteVisible: true,
+
+  togglePalette: () => set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),
 
   setData: (data) => set({ data, filled: {} }),
 

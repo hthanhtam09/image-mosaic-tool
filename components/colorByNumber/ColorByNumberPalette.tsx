@@ -8,7 +8,7 @@ import { useMemo } from "react";
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 
 export default function ColorByNumberPalette() {
-  const { data, filled, selectedCode, setSelectedCode } =
+  const { data, filled, selectedCode, setSelectedCode, isPaletteVisible, togglePalette } =
     useColorByNumberStore();
 
   const paletteRows = useMemo(() => {
@@ -48,7 +48,7 @@ export default function ColorByNumberPalette() {
 
   if (!data || paletteRows.length === 0) {
     return (
-      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-6 py-5">
+      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-6 py-5 relative">
         <p className="text-center text-sm text-[var(--text-muted)]">
           Tải grid để xem bảng màu
         </p>
@@ -56,8 +56,34 @@ export default function ColorByNumberPalette() {
     );
   }
 
+  // Collapsed state
+  if (!isPaletteVisible) {
+    return (
+       <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-2 flex justify-end">
+          <button
+            onClick={togglePalette}
+             className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)] transition-colors"
+          >
+            Show Palette ↑
+          </button>
+       </div>
+    );
+  }
+
   return (
-    <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-6 py-5">
+    <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-6 py-5 relative">
+      <div className="absolute top-2 right-4">
+          <button
+            onClick={togglePalette}
+            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors bg-black/5 rounded-md hover:bg-black/10"
+            title="Hide palette"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+      </div>
+
       <div className="mx-auto max-w-6xl">
         <h2 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
           Bảng màu

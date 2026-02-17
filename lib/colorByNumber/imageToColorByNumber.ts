@@ -22,6 +22,7 @@ import {
   createMosaicBlocks,
   reduceToUsedPalette,
   deduplicatePaletteDynamic,
+  mergeMinorColors,
 } from "@/lib/pixelate";
 import { quantizeImage } from "@/lib/quantize";
 
@@ -144,26 +145,32 @@ export const imageToColorByNumber = async (
 
   // 5. EXTRACT DYNAMIC PALETTE
   // Instead of FIXED_PALETTE, we generate a palette from the image itself.
-  // 32 colors is a good balance: enough for detail, small enough for labeling.
-  const { palette: initialPalette } = quantizeImage(imageData, 32);
+  // 24 colors is a good balance: enough for detail, small enough for labeling.
+  const { palette: initialPalette } = quantizeImage(imageData, 24);
 
   // 5b. DEDUPLICATE Dynamic Palette
   // Merge colors that are perceptually very close (e.g. 2 shades of orange).
-  // Threshold 8.0 is generous enough to merge subtle variations.
+  // Threshold 12.0 is generous enough to merge subtle variations.
   const { palette: dynamicPalette } = deduplicatePaletteDynamic(
     initialPalette,
-    8.0,
+    12.0,
   );
 
   // 6. Create mosaic blocks using the DYNAMIC palette
   // This ensures "Orange" in image stays "Orange" even if it's not in the 24 basic colors.
-  const rawBlocks = createMosaicBlocks(
+  let rawBlocks = createMosaicBlocks(
     imageData,
     dynamicPalette,
     cellSize,
     false, // dithering off for block creation usually looks cleaner for paint-by-number
     true, // useBlockAverage = true gives better perceptual matches for blocks
   );
+
+  // 6b. FILTER MINOR COLORS
+  // Merge colors that appear in fewer than 10 blocks into their nearest neighbor.
+  // This removes 1-2 pixel "dust" that is annoying to paint.
+  rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
+
 
   // 7. Reduce to only used palette colors (remap indices to 0..K-1)
   const { blocks, palette: usedPalette } = reduceToUsedPalette(

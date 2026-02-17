@@ -471,6 +471,73 @@ export const deduplicatePaletteDynamic = (
   return { palette: newPalette, indexMap };
 };
 
+/**
+ * Merge minor colors (used in very few blocks) into the nearest major color.
+ * This prevents "speckle" or "dust" colors (e.g. 1-2 pixels) from appearing in the final palette.
+ */
+export const mergeMinorColors = (
+  blocks: MosaicBlock[],
+  palette: readonly RGB[],
+  minCount: number,
+): MosaicBlock[] => {
+  if (blocks.length === 0 || palette.length === 0) return blocks;
+
+  // 1. Count usage
+  const counts = new Array<number>(palette.length).fill(0);
+  for (const b of blocks) {
+    counts[b.paletteIndex]++;
+  }
+
+  // 2. Identify major vs minor
+  const majorIndices: number[] = [];
+  const minorIndices: number[] = [];
+  for (let i = 0; i < counts.length; i++) {
+    if (counts[i] >= minCount) {
+      majorIndices.push(i);
+    } else if (counts[i] > 0) {
+      minorIndices.push(i);
+    }
+  }
+
+  // Edge case: No major colors (image is too small or distinct), keep as is
+  if (majorIndices.length === 0) return blocks;
+
+  // Optim: If no minor colors, nothing to do
+  if (minorIndices.length === 0) return blocks;
+
+  // 3. Map minor -> closest major
+  const paletteLab = palette.map((c) => rgbToLab(c));
+  const remap = new Map<number, number>();
+
+  for (const minorIdx of minorIndices) {
+    let bestMajorIdx = majorIndices[0];
+    let minDiff = Infinity;
+    const minorLab = paletteLab[minorIdx];
+
+    for (const majorIdx of majorIndices) {
+      const d = deltaE2000(minorLab, paletteLab[majorIdx]);
+      if (d < minDiff) {
+        minDiff = d;
+        bestMajorIdx = majorIdx;
+      }
+    }
+    remap.set(minorIdx, bestMajorIdx);
+  }
+
+  // 4. Update blocks
+  return blocks.map((b) => {
+    if (remap.has(b.paletteIndex)) {
+      const newIndex = remap.get(b.paletteIndex)!;
+      return {
+        ...b,
+        paletteIndex: newIndex,
+        color: palette[newIndex],
+      };
+    }
+    return b;
+  });
+};
+
 /** Border and padding as fraction of min canvas dimension (for numbered template) */
 /** Outer border thicker (0.06) to sync with inner cell gap (CELL_GAP_FRAC) */
 const NUMBERED_TEMPLATE_BORDER_FRAC = 0.06;

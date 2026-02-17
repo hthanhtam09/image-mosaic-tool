@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import ColorByNumberToolbar from "@/components/colorByNumber/ColorByNumberToolbar";
 import ColorByNumberGrid from "@/components/colorByNumber/ColorByNumberGrid";
 import ColorByNumberPalette from "@/components/colorByNumber/ColorByNumberPalette";
+import AccessModal from "@/components/AccessModal";
 
 export default function Home() {
   const [viewportSize, setViewportSize] = useState({ width: 800, height: 600 });
@@ -40,6 +41,7 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
+      <AccessModal />
       <ColorByNumberToolbar />
 
       <main className="color-by-number-main flex flex-1 flex-col overflow-hidden">
