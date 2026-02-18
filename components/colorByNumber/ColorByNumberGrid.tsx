@@ -724,15 +724,15 @@ const PageGrid = ({
 
       {/* Palette Column (always show if layout exists, per requirement) */}
       {paletteLayout && (
-        <g transform={`translate(${PAGE_PADDING_X - 50}, ${paletteVisualTop})`}>
+        <g transform={`translate(${PAGE_PADDING_X - 40}, ${paletteVisualTop})`}>
           <PaletteColumnSVG data={data} layout={paletteLayout} />
         </g>
       )}
 
       {/* Grid centered in its available area */}
-      {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 50 offset */}
+      {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 40 offset */}
       <g
-        transform={`translate(${PAGE_PADDING_X - 50 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
+        transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
           {data.cells.map((cell) => (
@@ -795,8 +795,8 @@ export default function ColorByNumberGrid({
     const PALETTE_GAP = 30; 
     const paletteWidth = pLayout ? pLayout.palColW : 0;
     
-    // Add 50px to available width (Palette moved left into margin)
-    const PALETTE_X_OFFSET = -50;
+    // Add 40px to available width (Palette moved left into margin)
+    const PALETTE_X_OFFSET = -40;
     const maxGridW = Math.max(0, paletteAvailableW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - PALETTE_X_OFFSET);
     const maxGridH = LETTER_OUTPUT_HEIGHT - PAGE_PADDING_Y * 2;
 
@@ -884,9 +884,9 @@ export default function ColorByNumberGrid({
         const paletteWidth = pLayout ? pLayout.palColW : 0;
         
         // Grid starts at: Padding + Palette + Gap + OffsetX + OffsetShift
-        // Visual X of Palette = Padding - 50
-        // Visual X of Grid = (Padding - 50) + Palette + Gap + OffsetX
-        const gridStartX = PAGE_PADDING_X - 50 + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gLayout.offsetX;
+        // Visual X of Palette = Padding - 40
+        // Visual X of Grid = (Padding - 40) + Palette + Gap + OffsetX
+        const gridStartX = PAGE_PADDING_X - 40 + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gLayout.offsetX;
         
         const originX = gridStartX;
         const originY = pageLayout.gridVisualTop;

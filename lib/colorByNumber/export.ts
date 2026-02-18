@@ -18,7 +18,7 @@ const EXPORT_PAGE_H = Math.round(11 * EXPORT_DPI); // 3300
 const STORAGE_KEY = "color-by-number-progress";
 
 /** Page padding in layout units (applied before fitting to letter) */
-export const PAGE_PADDING_X = 120; // 0.4 inch * 300 DPI = 120px
+export const PAGE_PADDING_X = 90; // 0.3 inch * 300 DPI = 90px
 export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
 
 export const saveProgressToStorage = (
@@ -114,7 +114,7 @@ export const getPageLayout = (
  */
 /* ── Palette column constants (at 300 DPI) ── */
 export const PALETTE_GAP_TO_GRID = 5; // 5px gap between palette and grid
-export const PAL_SWATCH = Math.round(0.28 * EXPORT_DPI); // ~84px swatch
+export const PAL_SWATCH = Math.round(0.267 * EXPORT_DPI); // ~80px swatch (was 0.28 / 84px)
 export const PAL_DROPLET_H = Math.round(0.1 * EXPORT_DPI); // ~30px per mini droplet
 export const PAL_DROPLET_W = Math.round(0.07 * EXPORT_DPI); // ~21px per mini droplet
 export const PAL_DROPLET_COUNT = 5; // 5 droplet icons
@@ -123,7 +123,7 @@ export const PAL_ROW_GAP = Math.round(0.06 * EXPORT_DPI); // ~18px gap between r
 export const PAL_SWD_GAP = Math.round(0.02 * EXPORT_DPI); // gap swatch→droplets
 export const PAL_TOP_PAD = Math.round(0.35 * EXPORT_DPI);
 export const PAL_LABEL_FS = Math.round(0.11 * EXPORT_DPI); // ~33px
-export const PAL_SIDE_PAD = Math.round(0.08 * EXPORT_DPI); // ~24px side padding
+export const PAL_SIDE_PAD = Math.round(0.05 * EXPORT_DPI); // ~15px side padding (was 0.08 / 24px)
 /** 3 arc circles to the right of each swatch (larger, wider spacing, outline only) */
 export const PAL_ARC_CIRCLE_R = Math.round(0.065 * EXPORT_DPI); // ~19.5px radius
 export const PAL_ARC_GAP = Math.round(0.02 * EXPORT_DPI); // gap swatch→arc
@@ -713,7 +713,7 @@ export const exportToCanvas = (
   
   // 3. Grid available width = SafeW - PaletteW - Gap
   // Gain 50px from palette shift!
-  const PALETTE_X_OFFSET = -50;
+  const PALETTE_X_OFFSET = -40; // Shift palette left into margin (was -50)
   const gridAvailableW = Math.max(0, safeW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - PALETTE_X_OFFSET);
   const gridAvailableH = safeH;
 
@@ -746,7 +746,7 @@ export const exportToCanvas = (
   if (needsPalette && layout) {
     ctx.save();
     // Palette is positioned at Left Padding - 50px offset per user request
-    const PALETTE_X_OFFSET = -50;
+    const PALETTE_X_OFFSET = -40;
     const paletteX = PAGE_PADDING_X + PALETTE_X_OFFSET;
     
     ctx.translate(paletteX, paletteY);

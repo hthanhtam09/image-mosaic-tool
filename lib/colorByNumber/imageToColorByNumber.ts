@@ -60,6 +60,38 @@ const resizeImageToSize = (
   return ctx.getImageData(0, 0, targetW, targetH);
 };
 
+/**
+ * Crop image to exact aspect ratio (center crop).
+ * Returns a new HTMLImageElement (or ImageData/Canvas) to use for further processing.
+ */
+const cropToAspectRatio = (
+  img: HTMLImageElement,
+  targetRatio: number
+): HTMLCanvasElement => {
+  const currentRatio = img.width / img.height;
+  let sx = 0, sy = 0, sw = img.width, sh = img.height;
+
+  if (currentRatio > targetRatio) {
+    // Too wide: Crop width
+    sw = img.height * targetRatio;
+    sx = (img.width - sw) / 2;
+  } else {
+    // Too tall: Crop height
+    sh = img.width / targetRatio;
+    sy = (img.height - sh) / 2;
+  }
+  
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sw);
+  canvas.height = Math.round(sh);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get crop context");
+  
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas;
+};
+
+
 export interface ImageToColorByNumberOptions {
   /** Grid pattern to use (default: "standard") */
   gridType?: ColorByNumberGridType;
@@ -110,8 +142,31 @@ export const imageToColorByNumber = async (
   } = options;
 
   // 1. Load + initial resize (cap width)
-  const img = await loadImageFromFile(file);
-  const baseData = resizeImage(img, maxWidth);
+  // 1. Load + Crop + Resize
+  // Enforce 7 x 10.2 inch aspect ratio (~0.686)
+  const TARGET_ASPECT = 7.0 / 10.2;
+  
+  const rawImg = await loadImageFromFile(file);
+  // Crop first to ensure aspect ratio
+  // We can treat the cropped canvas as an image for resizeImage
+  const croppedCanvas = cropToAspectRatio(rawImg, TARGET_ASPECT);
+  
+  // Convert canvas to image for existing pipeline? 
+  // resizeImage expects HTMLImageElement.
+  // Let's create a temp image from canvas or overloading resizeImage?
+  // Actually resizeImage just draws input to a canvas. It accepts CanvasImageSource (which HTMLCanvasElement is).
+  // But type signature says HTMLImageElement. Let's cast or update if possible.
+  // Ideally we fix resizeImage in utils, but here we can just do:
+  const croppedImg = new Image();
+  croppedImg.src = croppedCanvas.toDataURL();
+  await new Promise(r => croppedImg.onload = r);
+
+  const baseData = resizeImage(croppedImg, maxWidth);
+  
+  // Original `img` usage:
+  // - used in resizeImageToSize
+  // So we should replace `img` with `croppedImg` for rest of scope.
+  const img = croppedImg;
 
   // 2. Compute base grid dimensions in cells
   const cols = Math.ceil(baseData.width / cellSize);
