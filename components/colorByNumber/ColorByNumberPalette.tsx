@@ -5,11 +5,17 @@
  */
 
 import { useMemo } from "react";
-import { useColorByNumberStore } from "@/store/useColorByNumberStore";
+import { useColorByNumberStore, useActiveProject } from "@/store/useColorByNumberStore";
 
 export default function ColorByNumberPalette() {
-  const { data, filled, selectedCode, setSelectedCode, isPaletteVisible, togglePalette } =
-    useColorByNumberStore();
+  const { isPaletteVisible, togglePaletteGlobal, setSelectedCode } = useColorByNumberStore();
+  const activeProject = useActiveProject();
+  
+  const data = activeProject?.data;
+  const filled = activeProject?.filled || {};
+  const selectedCode = activeProject?.selectedCode;
+  
+  const togglePalette = togglePaletteGlobal;
 
   const paletteRows = useMemo(() => {
     if (!data || !data.cells.length) return [];
