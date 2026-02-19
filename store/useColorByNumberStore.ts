@@ -139,13 +139,15 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       // Mark as processing
       idleProjects.forEach(p => updateProject(p.id, { status: 'processing' }));
 
-      // Process sequentially (or parallelLimit) to update UX
-      // Parallel is fine for now
-      await Promise.all(idleProjects.map(async (p) => {
+      // Process sequentially to prevent UI freezing
+      for (const p of idleProjects) {
           try {
+              // Yield to main thread to allow UI updates
+              await new Promise(resolve => setTimeout(resolve, 50));
+
               const result = await imageToColorByNumber(p.originalFile, {
                   gridType: p.gridType,
-                  cellSize: p.cellSize, // Use project specific setting? Or global? Assuming per-project setting.
+                  cellSize: p.cellSize,
                   useDithering: p.useDithering,
               });
               updateProject(p.id, { data: result, status: 'completed' });
@@ -153,7 +155,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
               console.error(`Failed to convert project ${p.id}`, e);
               updateProject(p.id, { status: 'error' });
           }
-      }));
+      }
   },
 
   // --- Actions working on Active Project ---

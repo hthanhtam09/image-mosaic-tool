@@ -72,6 +72,9 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
 
   const handleDownloadBoth = () => {
       if (!activeProject.data) return;
+
+      const getBaseName = (name: string) => name.replace(/\.[^/.]+$/, "");
+      const baseName = getBaseName(activeProject.name);
       
       // Colored
       const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
@@ -79,7 +82,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
           colored: true,
           showPalette: activeProject.showPalette ?? true,
       });
-      downloadCanvas(canvas1, `colored-${activeProject.name}.png`);
+      downloadCanvas(canvas1, `colored-${baseName}.png`);
 
       // Uncolored
       setTimeout(() => {
@@ -88,7 +91,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
               colored: false,
               showPalette: activeProject.showPalette ?? true,
           });
-          downloadCanvas(canvas2, `uncolored-${activeProject.name}.png`);
+          downloadCanvas(canvas2, `uncolored-${baseName}.png`);
       }, 500);
   };
 

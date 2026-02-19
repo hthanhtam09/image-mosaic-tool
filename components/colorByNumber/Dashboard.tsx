@@ -4,6 +4,9 @@ import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import { useCallback, useRef, useState } from "react";
 import type { ColorByNumberGridType } from "@/lib/colorByNumber";
 import ProjectPreviewModal from "./ProjectPreviewModal";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
+import { exportToCanvas } from "@/lib/colorByNumber";
 
 export default function Dashboard() {
   const {
@@ -81,6 +84,61 @@ export default function Dashboard() {
       setIsConverting(false);
   };
 
+  const handleDownloadAll = async () => {
+      const completedProjects = projects.filter(p => p.status === 'completed');
+      if (completedProjects.length === 0) return;
+
+      const zip = new JSZip();
+      const coloredFolder = zip.folder("colored");
+      const uncoloredFolder = zip.folder("uncolored");
+
+      if (!coloredFolder || !uncoloredFolder) return;
+
+      // Helper to get filename without extension
+      const getBaseName = (name: string) => name.replace(/\.[^/.]+$/, "");
+
+      try {
+          await Promise.all(completedProjects.map(async (project) => {
+              if (!project.data) return;
+
+              // Use original file name's base, ensure .png extension
+              const baseName = getBaseName(project.name);
+              const fileName = `${baseName}.png`;
+
+              // 1. Colored
+              const canvasColored = exportToCanvas(project.data, project.filled, {
+                  showCodes: project.showNumbers,
+                  colored: true,
+                  showPalette: project.showPalette ?? true,
+              });
+              
+              const blobColored = await new Promise<Blob | null>(resolve => canvasColored.toBlob(resolve, 'image/png'));
+              if (blobColored) {
+                  coloredFolder.file(fileName, blobColored);
+              }
+
+              // 2. Uncolored
+              const canvasUncolored = exportToCanvas(project.data, project.filled, {
+                  showCodes: project.showNumbers,
+                  colored: false,
+                  showPalette: project.showPalette ?? true,
+              });
+
+              const blobUncolored = await new Promise<Blob | null>(resolve => canvasUncolored.toBlob(resolve, 'image/png'));
+              if (blobUncolored) {
+                  uncoloredFolder.file(fileName, blobUncolored);
+              }
+          }));
+
+          const content = await zip.generateAsync({ type: "blob" });
+          saveAs(content, "color-by-number-export.zip");
+
+      } catch (error) {
+          console.error("Failed to zip and download:", error);
+          alert("Failed to generate zip file.");
+      }
+  };
+
   const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [
     { value: "standard", label: "Hình vuông" },
     { value: "honeycomb", label: "Hình tròn" },
@@ -143,6 +201,15 @@ export default function Dashboard() {
                         className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg shadow-sm transition-colors disabled:opacity-50"
                     >
                         {isConverting ? "Converting..." : `Convert All (${idleCount})`}
+                    </button>
+                )}
+                {projects.some(p => p.status === 'completed') && (
+                    <button
+                        onClick={handleDownloadAll}
+                        disabled={isConverting}
+                        className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-green-600 hover:bg-green-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isConverting ? "Processing..." : "Download All"}
                     </button>
                 )}
                  <input
