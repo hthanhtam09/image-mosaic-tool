@@ -752,27 +752,44 @@ const PageGrid = ({
 };
 
 interface ColorByNumberGridProps {
-  viewportWidth: number;
-  viewportHeight: number;
+  width: number;
+  height: number;
 }
 
 export default function ColorByNumberGrid({
-  viewportWidth,
-  viewportHeight,
+  width,
+  height,
 }: ColorByNumberGridProps) {
   const {
-    data,
-    filled,
-    selectedCode,
-    zoom,
-    panX,
-    panY,
-    showNumbers,
-    importedImageDataUrl,
-    fillCell,
-    setZoom,
-    setPan,
+    activeProjectId, // Use active project data
+    projects,
+    updateActiveProject, // To update zoom/pan/filled
   } = useColorByNumberStore();
+
+  // Helper to get active project data safely
+  const activeProject = projects.find(p => p.id === activeProjectId);
+  const data = activeProject?.data || null;
+  const filled = activeProject?.filled || {};
+  const zoom = activeProject?.zoom || 1;
+  const panX = activeProject?.panX || 0;
+  const panY = activeProject?.panY || 0;
+  const showNumbers = activeProject?.showNumbers ?? true;
+  const showPalette = activeProject?.showPalette ?? true;
+  const importedImageDataUrl = activeProject?.thumbnailDataUrl || null;
+  
+  // Actions wrapper
+  const setZoom = (z: number) => updateActiveProject({ zoom: z });
+  const setPan = (x: number, y: number) => updateActiveProject({ panX: x, panY: y });
+  
+  const fillCell = (x: number, y: number) => {
+    if (!activeProject || !data || !activeProject.selectedCode) return;
+    const cell = data.cells.find((c) => c.x === x && c.y === y);
+    if (!cell || cell.code !== activeProject.selectedCode) return;
+    const key = `${x},${y}`;
+    const newFilled = { ...activeProject.filled, [key]: true };
+    updateActiveProject({ filled: newFilled });
+  };
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const didPanRef = useRef(false);
@@ -789,160 +806,187 @@ export default function ColorByNumberGrid({
     const paletteAvailableW = LETTER_OUTPUT_WIDTH - PAGE_PADDING_X * 2;
     let pLayout: PaletteLayout | null = null;
     
-    // Always show palette
-    pLayout = calculatePaletteLayout(data, paletteAvailableW, { vertical: true });
+    // Only calculate palette layout if enabled
+    if (showPalette) {
+      pLayout = calculatePaletteLayout(data, paletteAvailableW, { vertical: true });
+    }
     
     const PALETTE_GAP = 30; 
     const paletteWidth = pLayout ? pLayout.palColW : 0;
     
     // Add 40px to available width (Palette moved left into margin)
-    const PALETTE_X_OFFSET = -40;
-    const maxGridW = Math.max(0, paletteAvailableW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - PALETTE_X_OFFSET);
-    const maxGridH = LETTER_OUTPUT_HEIGHT - PAGE_PADDING_Y * 2;
-
-    // Calculate grid layout first
-    const gLayout = getPageLayout(data, maxGridW, maxGridH);
-
-    // Vertical centering
-    const paletteVisualH = pLayout ? pLayout.totalHeight : 0;
-    const gridVisualH = gLayout.gridDims.height * gLayout.scale;
+    // Only applies if palette is shown? Or maybe we want consistent grid position?
+    // Requirement: "nếu hide thì cho ảnh hiển thị full" (if hide, show image full)
+    // So if hidden, we reclaim the space.
     
-    // Anchor to TOP padding
-    const paletteVisualTop = PAGE_PADDING_Y;
+    const PALETTE_X_OFFSET = -40; // Only relevant if palette is present
+    
+    // If palette is hidden, paletteWidth is 0. 
+    // visual available width = paletteAvailableW
+    
+    const maxGridW = Math.max(
+        0, 
+        paletteAvailableW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - (paletteWidth > 0 ? PALETTE_X_OFFSET : 0)
+    );
+    
+    const maxGridH =
+      LETTER_OUTPUT_HEIGHT - PAGE_PADDING_Y * 2; // full height available
+
+    const gridLayout = getPageLayout(data, maxGridW, maxGridH);
+    
     const gridVisualTop = PAGE_PADDING_Y;
-
+    
     return {
-      gridLayout: gLayout,
+      gridLayout,
       paletteLayout: pLayout,
-      gridVisualTop, // gridVisualTop matches gridY in export
-      paletteVisualTop, // paletteVisualTop matches paletteY in export
+      gridVisualTop,
+      paletteVisualTop: gridVisualTop,
     };
-  }, [data]);
+  }, [data, showPalette]);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom(zoom + delta);
-    },
-    [zoom, setZoom],
+  // Center the "page" in the viewport
+  const pageScale = Math.min(
+    (width - 40) / (LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP), // 2 pages side by side
+    (height - 40) / LETTER_OUTPUT_HEIGHT,
   );
+  
+  // Actually, we usually show just ONE page (the colored/uncolored one) or both?
+  // The code below renders BOTH side-by-side. 
+  // User might only want to zoom into one?
+  // For now, keep existing logic: 2 pages side-by-side.
+  
+  const totalContentW = LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
+  const totalContentH = LETTER_OUTPUT_HEIGHT;
+  
+  // Initial center (before pan)
+  const centerX = (width - totalContentW * pageScale) / 2;
+  const centerY = (height - totalContentH * pageScale) / 2;
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.button === 0) {
-      (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
-      setIsDragging(true);
-      didPanRef.current = false;
-      setLastPointer({ x: e.clientX, y: e.clientY });
+  // Event Handlers for Panning
+  const handlePointerDown = (e: React.PointerEvent) => {
+    containerRef.current?.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    didPanRef.current = false;
+    setLastPointer({ x: e.clientX, y: e.clientY });
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || !lastPointer) return;
+    const dx = e.clientX - lastPointer.x;
+    const dy = e.clientY - lastPointer.y;
+    
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        didPanRef.current = true;
     }
-  }, []);
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (isDragging && lastPointer) {
-        const dx = e.clientX - lastPointer.x;
-        const dy = e.clientY - lastPointer.y;
-        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didPanRef.current = true;
-        setPan(panX + dx, panY + dy);
-        setLastPointer({ x: e.clientX, y: e.clientY });
-      }
-    },
-    [isDragging, lastPointer, panX, panY, setPan],
-  );
+    setPan(panX + dx, panY + dy);
+    setLastPointer({ x: e.clientX, y: e.clientY });
+  };
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    (e.target as HTMLElement)?.releasePointerCapture?.(e.pointerId);
+  const handlePointerUp = (e: React.PointerEvent) => {
+    containerRef.current?.releasePointerCapture(e.pointerId);
     setIsDragging(false);
     setLastPointer(null);
-  }, []);
+  };
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!data || !selectedCode || didPanRef.current || !pageLayout) return;
-      const svg = e.currentTarget;
-      const rect = svg.getBoundingClientRect();
+  // Click to Fill
+  const handleClick = (e: React.MouseEvent) => {
+    if (didPanRef.current || !data || !pageLayout) return;
 
-      // Total scene: two pages side by side
-      const totalW = LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
-      const totalH = LETTER_OUTPUT_HEIGHT;
-      const tx = (viewportWidth - totalW * zoom) / 2 + panX;
-      const ty = (viewportHeight - totalH * zoom) / 2 + panY;
+    // Transform screen coordinates to SVG coordinates
+    // We need to inverse the transform: translate(pan) -> scale(zoom) -> translate(center) -> scale(pageScale)
+    
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-      const svgX = (e.clientX - rect.left - tx) / zoom;
-      const svgY = (e.clientY - rect.top - ty) / zoom;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-      // Only respond to clicks on the colored page (left)
-      if (
-        svgX >= 0 &&
-        svgX <= LETTER_OUTPUT_WIDTH &&
-        svgY >= 0 &&
-        svgY <= LETTER_OUTPUT_HEIGHT
-      ) {
-        const gLayout = pageLayout.gridLayout;
-        const pLayout = pageLayout.paletteLayout;
-        const PALETTE_GAP = 30;
-        const paletteWidth = pLayout ? pLayout.palColW : 0;
+    // Inverse Pan
+    const x1 = mouseX - panX;
+    const y1 = mouseY - panY;
+
+    // Inverse Zoom (pivot is center of screen? No, Zoom is usually around center or applied to group)
+    // The render transform is:
+    // translate(centerX + panX, centerY + panY) scale(pageScale * zoom)
+    
+    // So:
+    // x_local = (mouseX - (centerX + panX)) / (pageScale * zoom)
+    // y_local = (mouseY - (centerY + panY)) / (pageScale * zoom)
+    
+    const scale = pageScale * zoom;
+    const localX = (mouseX - (centerX + panX)) / scale;
+    const localY = (mouseY - (centerY + panY)) / scale;
+
+    // Identify which page was clicked
+    // Left Page (Colored): x range [0, LETTER_OUTPUT_WIDTH]
+    // Right Page (Uncolored): x range [LETTER_OUTPUT_WIDTH + PAGE_GAP, LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP]
+    
+    // Since both pages display the SAME grid (just different rendering), checking against either is fine for finding the cell.
+    // However, the Grid Render inside PageGrid has its own transform.
+    
+    let hitX = -1;
+    let hitY = -1;
+    
+    // Check Left Page
+    if (localX >= 0 && localX <= LETTER_OUTPUT_WIDTH && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
+        hitX = localX;
+        hitY = localY;
+    } 
+    // Check Right Page
+    else if (localX >= LETTER_OUTPUT_WIDTH + PAGE_GAP && localX <= totalContentW && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
+        hitX = localX - (LETTER_OUTPUT_WIDTH + PAGE_GAP);
+        hitY = localY;
+    }
+
+    if (hitX >= 0 && hitY >= 0) {
+        // Inverse PageGrid transform
+        // transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
         
-        // Grid starts at: Padding + Palette + Gap + OffsetX + OffsetShift
-        // Visual X of Palette = Padding - 40
-        // Visual X of Grid = (Padding - 40) + Palette + Gap + OffsetX
-        const gridStartX = PAGE_PADDING_X - 40 + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gLayout.offsetX;
+        const { gridLayout, paletteLayout, gridVisualTop } = pageLayout;
+        const gridXOffset = PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX;
+        const gridYOffset = gridVisualTop;
+        const gridScale = gridLayout.scale;
         
-        const originX = gridStartX;
-        const originY = pageLayout.gridVisualTop;
+        const cellX = (hitX - gridXOffset) / gridScale;
+        const cellY = (hitY - gridYOffset) / gridScale;
         
-        const gridX = (svgX - originX) / gLayout.scale;
-        const gridY = (svgY - originY) / gLayout.scale;
-        
-        const hit = hitTestCell(gridX, gridY, data);
-        if (hit) fillCell(hit.x, hit.y);
-      }
-    },
-    [
-      data,
-      selectedCode,
-      zoom,
-      panX,
-      panY,
-      viewportWidth,
-      viewportHeight,
-      fillCell,
-      pageLayout, // Depend on computed layout
-    ],
-  );
+        const cell = hitTestCell(cellX, cellY, data);
+        if (cell) {
+            fillCell(cell.x, cell.y);
+        }
+    }
+  };
 
-  if (!data || data.cells.length === 0 || !pageLayout) {
+  if (!data || !pageLayout) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-[var(--text-muted)]">
-        Import ảnh để bắt đầu
+      <div className="flex h-full w-full items-center justify-center text-[var(--text-secondary)]">
+        {!activeProjectId ? "Select a project to view" : "Processing..."}
       </div>
     );
   }
 
-  const totalW = LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
-  const totalH = LETTER_OUTPUT_HEIGHT;
+  const finalScale = pageScale * zoom;
+  const finalX = centerX + panX;
+  const finalY = centerY + panY;
 
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden"
-      onWheel={handleWheel}
+      className="h-full w-full cursor-grab active:cursor-grabbing touch-none select-none"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      onClick={handleClick}
     >
       <svg
-        width={viewportWidth}
-        height={viewportHeight}
-        className="cursor-crosshair touch-none"
-        onClick={handleClick}
-        style={{ userSelect: "none" }}
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
       >
-        <g
-          transform={`translate(${(viewportWidth - totalW * zoom) / 2 + panX}, ${(viewportHeight - totalH * zoom) / 2 + panY}) scale(${zoom})`}
-        >
-          {/* Colored page (left) */}
+        <g transform={`translate(${finalX}, ${finalY}) scale(${finalScale})`}>
+          {/* Left Page: Colored Preview */}
           <g>
             <PageGrid
               data={data}
@@ -951,9 +995,15 @@ export default function ColorByNumberGrid({
               colored={true}
               layout={pageLayout}
             />
+            {/* Page Border/Shadow for realism */}
+            <rect 
+                x={0} y={0} 
+                width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT} 
+                fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1" 
+            />
           </g>
 
-          {/* Uncolored page (right) */}
+          {/* Right Page: Uncolored Preview */}
           <g transform={`translate(${LETTER_OUTPUT_WIDTH + PAGE_GAP}, 0)`}>
             <PageGrid
               data={data}
@@ -962,27 +1012,17 @@ export default function ColorByNumberGrid({
               colored={false}
               layout={pageLayout}
             />
+             <rect 
+                x={0} y={0} 
+                width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT} 
+                fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1" 
+            />
+            
+            {/* Add Thumbnail to Top Right of Right Page */}
+            {/* Thumbnail Removed */}
           </g>
         </g>
       </svg>
-
-      {/* Imported image thumbnail – top right */}
-      {importedImageDataUrl && (
-        <div className="absolute top-3 right-3">
-          <img
-            src={importedImageDataUrl}
-            alt="Imported image"
-            className="rounded-lg border border-[var(--border-subtle)] shadow-lg"
-            style={{ width: THUMB_WIDTH, height: "auto", opacity: 0.9 }}
-          />
-        </div>
-      )}
-
-      <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text-muted)]">
-        <span>Zoom: {Math.round(zoom * 100)}%</span>
-        <span>•</span>
-        <span>Kéo để pan</span>
-      </div>
     </div>
   );
 }

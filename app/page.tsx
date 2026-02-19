@@ -10,49 +10,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ColorByNumberToolbar from "@/components/colorByNumber/ColorByNumberToolbar";
-import ColorByNumberGrid from "@/components/colorByNumber/ColorByNumberGrid";
-import ColorByNumberPalette from "@/components/colorByNumber/ColorByNumberPalette";
 import AccessModal from "@/components/AccessModal";
+import Dashboard from "@/components/colorByNumber/Dashboard";
+import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 
 export default function Home() {
-  const [viewportSize, setViewportSize] = useState({ width: 800, height: 600 });
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const { isPaletteVisible } = useColorByNumberStore();
 
   useEffect(() => {
     const updateSize = () => {
-      if (typeof window === "undefined") return;
-      const main = document.querySelector("main.color-by-number-main");
-      if (main) {
-        const rect = main.getBoundingClientRect();
-        setViewportSize({
-          width: Math.max(100, rect.width),
-          height: Math.max(100, rect.height),
-        });
-      }
+      setViewportSize({
+        width: window.innerWidth - 288,
+        height: window.innerHeight,
+      });
     };
 
     updateSize();
-    const ro = new ResizeObserver(updateSize);
-    const main = document.querySelector("main.color-by-number-main");
-    if (main) ro.observe(main);
-
-    return () => ro.disconnect();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <main className="flex h-screen w-screen overflow-hidden bg-[var(--bg-primary)]">
       <AccessModal />
-      <ColorByNumberToolbar />
-
-      <main className="color-by-number-main flex flex-1 flex-col overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
-          <ColorByNumberGrid
-            viewportWidth={viewportSize.width}
-            viewportHeight={viewportSize.height}
-          />
-        </div>
-        <ColorByNumberPalette />
-      </main>
-    </div>
+      
+      {/* Main Content Area: Dashboard */}
+      <section className="relative flex-1 h-full overflow-hidden">
+        <Dashboard /> {/* Dashboard handles grid/preview/modal internally */}
+      </section>
+    </main>
   );
 }

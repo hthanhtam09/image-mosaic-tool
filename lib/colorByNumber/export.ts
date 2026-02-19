@@ -686,17 +686,19 @@ export const exportToCanvas = (
   options: {
     showCodes?: boolean;
     colored?: boolean;
+    showPalette?: boolean;
   },
 ): HTMLCanvasElement => {
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
+  const showPalette = options.showPalette ?? true;
 
   // Page dimensions: strict 8.5x11 @ 300DPI
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
 
-  // For uncolored mode (OR colored mode now per request), add palette on the LEFT
-  const needsPalette = true;
+  // For uncolored mode (OR colored mode now per request), add palette on the LEFT if enabled
+  const needsPalette = showPalette;
   
   // 1. Determine "Safe Area" based on fixed margins
   const safeW = pageW - PAGE_PADDING_X * 2;
