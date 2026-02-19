@@ -34,9 +34,21 @@ export default function Dashboard() {
       setIsImporting(true);
 
       try {
-        const fileList = Array.from(files);
+        // 1. Convert to array and Sort naturally (1, 2, 10...)
+        const fileList = Array.from(files).sort((a, b) => 
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+        );
+
+        // Pattern cycle: Square -> Circle -> Diamond -> Pentagon
+        const patternCycle: ColorByNumberGridType[] = [
+             "standard",  // 1: Square
+             "honeycomb", // 2: Circle
+             "diamond",   // 3: Diamond
+             "pentagon"   // 4: Pentagon
+        ];
+
         // Process sequentially to read files
-        await Promise.all(fileList.map(async (file) => {
+        await Promise.all(fileList.map(async (file, index) => {
              const reader = new FileReader();
              const dataUrl = await new Promise<string>((resolve, reject) => {
                reader.onload = () => resolve(reader.result as string);
@@ -44,9 +56,12 @@ export default function Dashboard() {
                reader.readAsDataURL(file);
              });
 
-             // Add project with IDLE status
+             // Calculate pattern based on index
+             const pattern = patternCycle[index % patternCycle.length];
+
+             // Add project with assigned pattern
              addProject(file, dataUrl, {
-                gridType: 'standard', // Default, user can change later
+                gridType: pattern, 
              });
         }));
 
@@ -144,17 +159,20 @@ export default function Dashboard() {
         {/* Grid of Project Cards */}
         <div className="flex-1 overflow-y-auto pr-2 no-scrollbar">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6 pb-8">
-                {projects.map(project => (
+                {projects
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+                    .map(project => (
                     <div 
                         key={project.id} 
                         className="flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                     >
                         {/* Image Preview / Status Overlay */}
-                        <div className="relative aspect-[4/3] bg-black/20 group">
+                        <div className="relative w-full pt-[100%] bg-white/5 group border-b border-[var(--border-subtle)] overflow-hidden">
                             <img 
                                 src={project.thumbnailDataUrl} 
                                 alt={project.name} 
-                                className="w-full h-full object-cover"
+                                className="absolute inset-0 w-full h-full object-cover object-top"
                             />
                             
                             {/* Status Overlay */}
