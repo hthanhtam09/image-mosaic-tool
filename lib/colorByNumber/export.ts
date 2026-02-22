@@ -831,7 +831,7 @@ export const exportToCanvas = (
     if (showCodes && cell.code) {
       const brightness = getBrightness(fillColor);
       ctx.fillStyle = brightness < 128 ? "#ffffff" : "#999999";
-      ctx.font = `600 ${cl.r * 0.6}px sans-serif`;
+      ctx.font = `600 ${cl.r * 0.9}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(cell.code, cl.cx, cl.cy);

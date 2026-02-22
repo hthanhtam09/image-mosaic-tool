@@ -670,7 +670,7 @@ export const renderNumberedTemplateToCanvas = (
     ctx.fill();
   }
 
-  const fontSize = Math.max(12, Math.round(cellSize * 0.55));
+  const fontSize = Math.max(12, Math.round(cellSize * 0.75));
   ctx.font = `${fontSize}px 400 "JetBrains Mono", "SF Mono", Monaco, Consolas, monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -748,7 +748,7 @@ export const renderMosaicWithNumbersToCanvas = (
   ctx.translate(originX, originY);
   ctx.scale(scale, scale);
 
-  const fontSize = Math.max(10, blockSize * 0.6);
+  const fontSize = Math.max(10, blockSize * 0.8);
   ctx.font = `${fontSize}px 400 "JetBrains Mono", "SF Mono", Monaco, Consolas, monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
