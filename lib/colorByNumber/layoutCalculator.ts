@@ -45,10 +45,10 @@ const getHoneycombCellLayout = (
   cellSize: number,
   gap: number,
 ): CellLayout => {
-  const r = (cellSize - gap) / 2;
+  const r = cellSize / 2;
   const rowStep = Math.sqrt(3) * r;
-  const rowOffset = y % 2 === 1 ? cellSize * 0.5 : 0;
-  const cx = x * cellSize + cellSize / 2 + rowOffset;
+  const rowOffset = y % 2 === 1 ? r : 0;
+  const cx = x * cellSize + r + rowOffset;
   const cy = (y + 0.5) * rowStep;
   return { cx, cy, r, shape: "circle" };
 };
@@ -58,7 +58,7 @@ const getHoneycombCellLayout = (
  * Vertical step = 1.5*r so corners of one row touch midpoints of edges of adjacent rows (interlock).
  * Odd rows offset by r = cellSize/2 so centers sit in the "gap" between row above/below.
  */
-const DIAMOND_ROW_STEP_FACTOR = 1.5; // rowStep = 1.5 * r => no gaps when staggered
+const DIAMOND_ROW_STEP_FACTOR = 1.0; // rowStep = 1.0 * r => no gaps when staggered
 
 const getDiamondCellLayout = (
   x: number,
@@ -106,16 +106,14 @@ const getPentagonCellLayout = (
 ): CellLayout => {
   // Solid tiling (Hexagon specific):
   // We want Width = cellSize for consistent column spacing.
-  // Previous logic used cellSize / sqrt(3) which made it larger.
-  // Now using cellSize / 2 to match other shapes height/width constraints better.
-  const r = cellSize / 2;
+  const r = cellSize / Math.sqrt(3);
 
   // Vertical step for interlocking hexagons (point-up):
-  // step = 1.5 * r
+  // To avoid gaps, use 1.5 * r
   const rowStep = 1.5 * r;
 
   // Horizontal offset for odd rows
-  const rowOffset = y % 2 === 1 ? cellSize * 0.5 : 0;
+  const rowOffset = y % 2 === 1 ? cellSize / 2 : 0;
 
   const cx = x * cellSize + cellSize / 2 + rowOffset;
   const cy = (y + 0.5) * rowStep;
@@ -155,9 +153,9 @@ export const getGridDimensions = (
   const gap = cellGap ?? CELL_GAP_DEFAULT;
 
   if (gridType === "honeycomb") {
-    const r = (cellSize - gap) / 2;
+    const r = cellSize / 2;
     const rowStep = Math.sqrt(3) * r;
-    const gridW = width * cellSize + cellSize * 0.5;
+    const gridW = width * cellSize + (height > 1 ? r : 0);
     const gridH = height * rowStep;
     return { width: gridW, height: gridH };
   }
@@ -172,11 +170,9 @@ export const getGridDimensions = (
 
   if (gridType === "pentagon") {
     // Matches getPentagonCellLayout logic
-    // r = cellSize / 2
-    // rowStep = 1.5 * r
-    const r = cellSize / 2;
+    const r = cellSize / Math.sqrt(3);
     const rowStep = 1.5 * r;
-    const gridW = width * cellSize + (height > 1 ? cellSize * 0.5 : 0);
+    const gridW = width * cellSize + (height > 1 ? cellSize / 2 : 0);
     const gridH = height * rowStep;
     return { width: gridW, height: gridH };
   }
@@ -207,10 +203,10 @@ export const hitTestCell = (
   }
 
   if (gridType === "honeycomb") {
-    const r = (cellSize - gap) / 2;
+    const r = cellSize / 2;
     const rowStep = Math.sqrt(3) * r;
     const row = Math.floor(py / rowStep);
-    const rowOffset = row % 2 === 1 ? cellSize * 0.5 : 0;
+    const rowOffset = row % 2 === 1 ? r : 0;
     const col = Math.floor((px - rowOffset) / cellSize);
     if (col >= 0 && col < width && row >= 0 && row < height) {
       const layout = getHoneycombCellLayout(col, row, cellSize, gap);
@@ -239,7 +235,7 @@ export const hitTestCell = (
   }
 
   if (gridType === "pentagon") {
-    const r = cellSize / 2;
+    const r = cellSize / Math.sqrt(3);
     const rowStep = 1.5 * r;
     
     // Simple hit test similar to diamond/honeycomb
@@ -259,7 +255,7 @@ export const hitTestCell = (
     for (const rCandidate of candidates) {
         if (rCandidate < 0 || rCandidate >= height) continue;
         
-        const rowOffset = rCandidate % 2 === 1 ? cellSize * 0.5 : 0;
+        const rowOffset = rCandidate % 2 === 1 ? cellSize / 2 : 0;
         const colCandidate = Math.floor((px - rowOffset) / cellSize);
         
         // Also check col+1 if near edge? 

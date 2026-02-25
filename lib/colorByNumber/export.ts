@@ -84,6 +84,50 @@ const getBrightness = (hex: string): number => {
   );
 };
 
+const getRoundedPolygonPath = (
+  ctx: CanvasRenderingContext2D,
+  points: { x: number; y: number }[],
+  radius: number,
+): void => {
+  if (points.length < 3) return;
+
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    const curr = points[i];
+    const prev = points[(i - 1 + points.length) % points.length];
+    const next = points[(i + 1) % points.length];
+
+    const vcp_x = prev.x - curr.x;
+    const vcp_y = prev.y - curr.y;
+    const len_cp = Math.sqrt(vcp_x * vcp_x + vcp_y * vcp_y);
+    const ucp_x = vcp_x / len_cp;
+    const ucp_y = vcp_y / len_cp;
+
+    const vcn_x = next.x - curr.x;
+    const vcn_y = next.y - curr.y;
+    const len_cn = Math.sqrt(vcn_x * vcn_x + vcn_y * vcn_y);
+    const ucn_x = vcn_x / len_cn;
+    const ucn_y = vcn_y / len_cn;
+
+    const r = Math.min(radius, len_cp / 2, len_cn / 2);
+
+    const sx = curr.x + ucp_x * r;
+    const sy = curr.y + ucp_y * r;
+
+    const ex = curr.x + ucn_x * r;
+    const ey = curr.y + ucn_y * r;
+
+    if (i === 0) {
+      ctx.moveTo(sx, sy);
+    } else {
+      ctx.lineTo(sx, sy);
+    }
+
+    ctx.quadraticCurveTo(curr.x, curr.y, ex, ey);
+  }
+  ctx.closePath();
+};
+
 /**
  * Compute the transform needed to fit the grid into the given box (center aligned).
  */
@@ -400,26 +444,30 @@ const drawPalSwatch = (
     ctx.fill();
     ctx.stroke();
   } else if (shape === "diamond") {
+    const side = size * 0.6;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((45 * Math.PI) / 180);
     ctx.beginPath();
-    ctx.moveTo(cx, cy - half);
-    ctx.lineTo(cx + half, cy);
-    ctx.lineTo(cx, cy + half);
-    ctx.lineTo(cx - half, cy);
-    ctx.closePath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(-side / 2, -side / 2, side, side, side * 0.15);
+    } else {
+      ctx.rect(-side / 2, -side / 2, side, side);
+    }
+    ctx.fillStyle = fillColor;
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
   } else if (shape === "pentagon") {
     // Pentagon -> Renders as Hexagon to minimize gaps
     // Point up: -90, -30, 30, 90, 150, 210
     const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
-    ctx.beginPath();
-    angles.forEach((angle, i) => {
-      const px = cx + half * Math.cos(angle);
-      const py = cy + half * Math.sin(angle);
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    });
-    ctx.closePath();
+    const points = angles.map((angle) => ({
+      x: cx + half * Math.cos(angle),
+      y: cy + half * Math.sin(angle),
+    }));
+    getRoundedPolygonPath(ctx, points, half * 0.15);
+    ctx.fillStyle = fillColor;
     ctx.fill();
     ctx.stroke();
   } else {
@@ -574,25 +622,26 @@ const renderPaletteColumnCBN = (
         ctx.lineTo(x, y + rx);
         ctx.quadraticCurveTo(x, y, x + rx, y);
         ctx.closePath();
-      } else {
-        ctx.moveTo(shapeX, shapeY - r);
-        ctx.lineTo(shapeX + r, shapeY);
-        ctx.lineTo(shapeX, shapeY + r);
-        ctx.lineTo(shapeX - r, shapeY);
-        ctx.lineTo(shapeX - r, shapeY);
-        ctx.closePath();
-      }
-      if (shape === "pentagon") {
-        // Hexagon angles
-        const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
+      } else if (shape === "diamond") {
+        const side = r * 2 * 0.707 * 0.9;
+        ctx.save();
+        ctx.translate(shapeX, shapeY);
+        ctx.rotate((45 * Math.PI) / 180);
         ctx.beginPath();
-        angles.forEach((a, k) => {
-            const px = shapeX + r * Math.cos(a);
-            const py = shapeY + r * Math.sin(a);
-            if (k === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-        });
-        ctx.closePath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(-side / 2, -side / 2, side, side, side * 0.15);
+        } else {
+          ctx.rect(-side / 2, -side / 2, side, side);
+        }
+        ctx.restore();
+      } else {
+        // Pentagon
+        const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
+        const points = angles.map((a) => ({
+          x: shapeX + r * Math.cos(a),
+          y: shapeY + r * Math.sin(a),
+        }));
+        getRoundedPolygonPath(ctx, points, r * 0.15);
       }
       ctx.fill();
       ctx.stroke();
@@ -798,34 +847,42 @@ export const exportToCanvas = (
       ctx.fill();
       ctx.stroke();
     } else if (data.gridType === "diamond") {
+      const side = cl.r * Math.sqrt(2);
+      ctx.save();
+      ctx.translate(cl.cx, cl.cy);
+      ctx.rotate(45 * Math.PI / 180);
       ctx.beginPath();
-      ctx.moveTo(cl.cx, cl.cy - cl.r);
-      ctx.lineTo(cl.cx + cl.r, cl.cy);
-      ctx.lineTo(cl.cx, cl.cy + cl.r);
-      ctx.lineTo(cl.cx - cl.r, cl.cy);
-      ctx.closePath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(-side / 2, -side / 2, side, side, side * 0.15);
+      } else {
+        ctx.rect(-side / 2, -side / 2, side, side);
+      }
       ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
+      ctx.restore();
     } else if (data.gridType === "pentagon") {
       // Hexagon angles
       const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
-      ctx.beginPath();
-      angles.forEach((a, k) => {
-        const px = cl.cx + cl.r * Math.cos(a);
-        const py = cl.cy + cl.r * Math.sin(a);
-        if (k === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      });
-      ctx.closePath();
+      const points = angles.map((a) => ({
+        x: cl.cx + cl.r * Math.cos(a),
+        y: cl.cy + cl.r * Math.sin(a),
+      }));
+      getRoundedPolygonPath(ctx, points, cl.r * 0.15);
       ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     } else {
       const s = data.cellSize;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(cell.x * s, cell.y * s, s, s, s * 0.15);
+      } else {
+          ctx.rect(cell.x * s, cell.y * s, s, s);
+      }
       ctx.fillStyle = fillColor;
-      ctx.fillRect(cell.x * s, cell.y * s, s, s);
-      ctx.strokeRect(cell.x * s, cell.y * s, s, s);
+      ctx.fill();
+      ctx.stroke();
     }
 
     if (showCodes && cell.code) {

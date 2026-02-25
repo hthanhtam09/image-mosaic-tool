@@ -137,7 +137,7 @@ export const imageToColorByNumber = async (
   const {
     gridType = "standard",
     cellSize = 25,
-    maxWidth = 1200,
+    maxWidth = 1800,
     useDithering = true,
   } = options;
 
@@ -174,18 +174,17 @@ export const imageToColorByNumber = async (
 
   // 3. Compensate for shorter row steps in honeycomb/diamond
   if (gridType === "honeycomb") {
-    const gap = 2;
-    const r = (cellSize - gap) / 2;
+    const r = cellSize / 2;
     const rowStep = Math.sqrt(3) * r;
     rows = Math.ceil(rows * (cellSize / rowStep));
   } else if (gridType === "diamond") {
     const r = cellSize / 2;
-    const rowStep = 1.5 * r;
+    const rowStep = 1.0 * r;
     rows = Math.ceil(rows * (cellSize / rowStep));
   } else if (gridType === "pentagon") {
-    // Pentagon/Hexagon: r = cellSize/2, step = 1.5*r = 0.75*cellSize
+    // Pentagon/Hexagon: r = cellSize/sqrt(3), step = 1.5*r
     // We need more rows to cover the same height because rows overlap.
-    const r = cellSize / 2;
+    const r = cellSize / Math.sqrt(3);
     const rowStep = 1.5 * r;
     rows = Math.ceil(rows * (cellSize / rowStep));
   }
