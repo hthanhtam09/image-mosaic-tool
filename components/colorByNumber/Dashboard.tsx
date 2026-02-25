@@ -86,13 +86,7 @@ export default function Dashboard() {
 
     const handleDownloadAll = async () => {
         const completedProjects = projects.filter(p => p.status === 'completed');
-        if (completedProjects.length === 0) return;
-
         const zip = new JSZip();
-        const coloredFolder = zip.folder("colored");
-        const uncoloredFolder = zip.folder("uncolored");
-
-        if (!coloredFolder || !uncoloredFolder) return;
 
         // Helper to get filename without extension
         const getBaseName = (name: string) => name.replace(/\.[^/.]+$/, "");
@@ -105,6 +99,8 @@ export default function Dashboard() {
                 const baseName = getBaseName(project.name);
                 const fileName = `${baseName}.png`;
 
+                const hasPalette = project.showPalette !== false;
+
                 // 1. Colored
                 const canvasColored = exportToCanvas(project.data, project.filled, {
                     showCodes: project.showNumbers,
@@ -114,19 +110,25 @@ export default function Dashboard() {
 
                 const blobColored = await new Promise<Blob | null>(resolve => canvasColored.toBlob(resolve, 'image/png'));
                 if (blobColored) {
-                    coloredFolder.file(fileName, blobColored);
+                    if (hasPalette) {
+                        zip.folder("colored")?.file(fileName, blobColored);
+                    } else {
+                        zip.file(fileName, blobColored);
+                    }
                 }
 
-                // 2. Uncolored
-                const canvasUncolored = exportToCanvas(project.data, project.filled, {
-                    showCodes: project.showNumbers,
-                    colored: false,
-                    showPalette: project.showPalette ?? true,
-                });
+                if (hasPalette) {
+                    // 2. Uncolored
+                    const canvasUncolored = exportToCanvas(project.data, project.filled, {
+                        showCodes: project.showNumbers,
+                        colored: false,
+                        showPalette: project.showPalette ?? true,
+                    });
 
-                const blobUncolored = await new Promise<Blob | null>(resolve => canvasUncolored.toBlob(resolve, 'image/png'));
-                if (blobUncolored) {
-                    uncoloredFolder.file(fileName, blobUncolored);
+                    const blobUncolored = await new Promise<Blob | null>(resolve => canvasUncolored.toBlob(resolve, 'image/png'));
+                    if (blobUncolored) {
+                        zip.folder("uncolored")?.file(fileName, blobUncolored);
+                    }
                 }
             }));
 

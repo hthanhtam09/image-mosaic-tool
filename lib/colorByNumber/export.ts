@@ -750,8 +750,11 @@ export const exportToCanvas = (
   const needsPalette = showPalette;
   
   // 1. Determine "Safe Area" based on fixed margins
-  const safeW = pageW - PAGE_PADDING_X * 2;
-  const safeH = pageH - PAGE_PADDING_Y * 2;
+  const padX = showPalette ? PAGE_PADDING_X : 0;
+  const padY = PAGE_PADDING_Y;
+
+  const safeW = pageW - padX * 2;
+  const safeH = pageH - padY * 2;
 
   // 2. Calculate palette layout (vertical)
   let layout: PaletteLayout | null = null;
@@ -764,7 +767,7 @@ export const exportToCanvas = (
   
   // 3. Grid available width = SafeW - PaletteW - Gap
   // Gain 50px from palette shift!
-  const PALETTE_X_OFFSET = -40; // Shift palette left into margin (was -50)
+  const PALETTE_X_OFFSET = showPalette ? -40 : 0; // Shift palette left into margin (was -50)
   const gridAvailableW = Math.max(0, safeW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - PALETTE_X_OFFSET);
   const gridAvailableH = safeH;
 
@@ -776,8 +779,8 @@ export const exportToCanvas = (
   const gridVisualH = gridLayout.gridDims.height * gridLayout.scale;
   
   // Anchor to TOP padding (0.4 inch) instead of centering vertically
-  const paletteY = PAGE_PADDING_Y;
-  const gridY = PAGE_PADDING_Y;
+  const paletteY = padY;
+  const gridY = padY + (showPalette ? 0 : gridLayout.offsetY);
   
   // Grid Top is just gridY
   const gridVisualTop = gridY;
@@ -797,8 +800,7 @@ export const exportToCanvas = (
   if (needsPalette && layout) {
     ctx.save();
     // Palette is positioned at Left Padding - 50px offset per user request
-    const PALETTE_X_OFFSET = -40;
-    const paletteX = PAGE_PADDING_X + PALETTE_X_OFFSET;
+    const paletteX = padX + PALETTE_X_OFFSET;
     
     ctx.translate(paletteX, paletteY);
     renderPaletteColumnCBN(ctx, data, layout);
@@ -808,20 +810,7 @@ export const exportToCanvas = (
   // ── Grid (Right) ──
   ctx.save();
   // Grid starts after Palette + Gap
-  // AND gridLayout.offsetX centers it within gridAvailableW
-  // So: PaddingX + PaletteW + Gap + offsetX
-  // BUT we need to account for the -50 offset we gave the palette! 
-  // Wait, if palette moves left, grid can move left too? Or grid just gets wider?
-  // We want grid to get wider.
-  // Start X should be relative to the *visual* end of the palette.
-  // Visual Palette End = (PaddingX - 50) + PaletteWidth.
-  // So Grid Start X = (PaddingX - 50) + PaletteWidth + Gap + offsetX
-  // Re-calculate gridAvailableW with the offset in mind (giving more space)
-  // safeW is (PageW - 2*PadX).
-  // Used Space = (PaletteW + Gap) - 50.
-  // Available = safeW - UsedSpace = safeW - PaletteW - Gap + 50.
-  
-  const gridStartX = PAGE_PADDING_X + PALETTE_X_OFFSET + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gridLayout.offsetX;
+  const gridStartX = padX + PALETTE_X_OFFSET + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gridLayout.offsetX;
   
   ctx.translate(gridStartX, gridVisualTop);
   ctx.scale(gridLayout.scale, gridLayout.scale);
