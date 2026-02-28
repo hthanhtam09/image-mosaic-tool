@@ -7,6 +7,7 @@ import ProjectPreviewModal from "./ProjectPreviewModal";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { exportToCanvas } from "@/lib/colorByNumber";
+import { rgbToExtendedColorName } from "@/lib/utils";
 
 export default function Dashboard() {
     const {
@@ -141,6 +142,146 @@ export default function Dashboard() {
         }
     };
 
+    /* ── Download Color Palette Chart ── */
+    const handleDownloadPalette = () => {
+        const completedProjects = projects.filter(p => p.status === 'completed');
+        if (completedProjects.length === 0) return;
+
+        // Step 1: Collect all unique hex colors from all completed projects
+        const allHexColors = new Set<string>();
+        for (const project of completedProjects) {
+            if (!project.data) continue;
+            for (const cell of project.data.cells) {
+                allHexColors.add(cell.color.toLowerCase());
+            }
+        }
+
+        // Step 2: Name each hex using the extended 70+ color palette, then deduplicate by name
+        // This ensures each color name appears only ONCE in the chart
+        const nameToColor = new Map<string, { hex: string; name: string }>();
+
+        for (const hex of allHexColors) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+
+            const match = rgbToExtendedColorName({ r, g, b });
+
+            // Skip white / ivory / cream (near-white colors)
+            const skipNames = ['white', 'ivory', 'cream'];
+            if (skipNames.includes(match.name.toLowerCase())) continue;
+
+            // Deduplicate by name: keep the first hex encountered for each name
+            if (!nameToColor.has(match.name)) {
+                // Use the canonical RGB from the extended palette for consistent display
+                const canonicalHex = `#${match.rgb.r.toString(16).padStart(2, '0')}${match.rgb.g.toString(16).padStart(2, '0')}${match.rgb.b.toString(16).padStart(2, '0')}`;
+                nameToColor.set(match.name, { hex: canonicalHex, name: match.name });
+            }
+        }
+
+        const colors = Array.from(nameToColor.values());
+        const totalColors = colors.length;
+        if (totalColors === 0) return;
+
+        // --- Canvas rendering (hexagon palette chart) ---
+        const COLS = Math.min(10, totalColors);
+        const HEX_RADIUS = 28; // radius of each hexagon
+        const HEX_W = HEX_RADIUS * 2;
+        const HEX_H = Math.sqrt(3) * HEX_RADIUS;
+        const GAP_X = 8;
+        const GAP_Y = 6;
+        const LABEL_HEIGHT = 32; // space for text below hexagon
+        const CELL_W = HEX_W + GAP_X;
+        const CELL_H = HEX_H + LABEL_HEIGHT + GAP_Y;
+        const ROWS = Math.ceil(totalColors / COLS);
+        const PADDING_X = 30;
+        const PADDING_TOP = 60; // space for title
+        const PADDING_BOTTOM = 20;
+
+        const canvasW = COLS * CELL_W + PADDING_X * 2;
+        const canvasH = PADDING_TOP + ROWS * CELL_H + PADDING_BOTTOM;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // White background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasW, canvasH);
+
+        // Title: total number of colors
+        ctx.fillStyle = '#222222';
+        ctx.font = 'bold 22px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${totalColors} COLORS`, canvasW / 2, PADDING_TOP / 2);
+
+        // Draw a thin line under the title
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(PADDING_X, PADDING_TOP - 10);
+        ctx.lineTo(canvasW - PADDING_X, PADDING_TOP - 10);
+        ctx.stroke();
+
+        // Helper: draw hexagon
+        const drawHexagon = (cx: number, cy: number, r: number) => {
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i - Math.PI / 6; // flat-top hexagon
+                const x = cx + r * Math.cos(angle);
+                const y = cy + r * Math.sin(angle);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+        };
+
+        // Draw each color
+        colors.forEach((color, idx) => {
+            const col = idx % COLS;
+            const row = Math.floor(idx / COLS);
+            const cx = PADDING_X + col * CELL_W + HEX_W / 2;
+            const cy = PADDING_TOP + row * CELL_H + HEX_H / 2;
+
+            // Hexagon fill
+            drawHexagon(cx, cy, HEX_RADIUS - 1);
+            ctx.fillStyle = color.hex;
+            ctx.fill();
+
+            // Hexagon border
+            drawHexagon(cx, cy, HEX_RADIUS - 1);
+            ctx.strokeStyle = '#cccccc';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Color name below hexagon (wrap text if needed)
+            ctx.fillStyle = '#333333';
+            ctx.font = '11px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            const textY = cy + HEX_H / 2 + 4;
+            const maxTextW = CELL_W - 4;
+            const words = color.name.split(' ');
+            if (words.length > 1 && ctx.measureText(color.name).width > maxTextW) {
+                // Two-line text
+                ctx.fillText(words[0], cx, textY);
+                ctx.fillText(words.slice(1).join(' '), cx, textY + 13);
+            } else {
+                ctx.fillText(color.name, cx, textY);
+            }
+        });
+
+        // Download
+        const link = document.createElement('a');
+        link.download = `color-palette-${totalColors}-colors.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    };
+
     const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [
         { value: "standard", label: "Hình vuông" },
         { value: "honeycomb", label: "Hình tròn" },
@@ -206,13 +347,23 @@ export default function Dashboard() {
                         </button>
                     )}
                     {projects.some(p => p.status === 'completed') && (
-                        <button
-                            onClick={handleDownloadAll}
-                            disabled={isConverting}
-                            className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-green-600 hover:bg-green-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isConverting ? "Processing..." : "Download All"}
-                        </button>
+                        <>
+                            <button
+                                onClick={handleDownloadAll}
+                                disabled={isConverting}
+                                className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-green-600 hover:bg-green-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isConverting ? "Processing..." : "Download All"}
+                            </button>
+                            <button
+                                onClick={handleDownloadPalette}
+                                disabled={isConverting}
+                                className="px-6 py-2 text-sm font-medium text-white rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Download a chart of all colors used across all images"
+                            >
+                                🎨 Download Palette
+                            </button>
+                        </>
                     )}
                     <input
                         ref={imageInputRef}

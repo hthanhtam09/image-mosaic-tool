@@ -142,6 +142,134 @@ export const rgbToColorNameEn = (color: RGB): string => {
 };
 
 /**
+ * Extended color palette (~70 colors) for finer-grained color naming.
+ * Used only for palette chart exports – does NOT affect the core color-by-number quantization.
+ */
+export const EXTENDED_COLORS_EN: { rgb: RGB; name: string }[] = [
+  // Whites / off-whites
+  { rgb: { r: 255, g: 255, b: 255 }, name: "White" },
+  { rgb: { r: 255, g: 250, b: 240 }, name: "Ivory" },
+  { rgb: { r: 245, g: 245, b: 220 }, name: "Beige" },
+  { rgb: { r: 255, g: 253, b: 208 }, name: "Cream" },
+
+  // Blacks / dark grays
+  { rgb: { r: 0, g: 0, b: 0 }, name: "Black" },
+  { rgb: { r: 54, g: 69, b: 79 }, name: "Charcoal" },
+  { rgb: { r: 64, g: 64, b: 64 }, name: "Dark gray" },
+
+  // Grays
+  { rgb: { r: 128, g: 128, b: 128 }, name: "Gray" },
+  { rgb: { r: 169, g: 169, b: 169 }, name: "Silver" },
+  { rgb: { r: 192, g: 192, b: 192 }, name: "Light gray" },
+  { rgb: { r: 112, g: 128, b: 144 }, name: "Slate" },
+
+  // Reds
+  { rgb: { r: 255, g: 0, b: 0 }, name: "Red" },
+  { rgb: { r: 220, g: 20, b: 60 }, name: "Crimson" },
+  { rgb: { r: 178, g: 34, b: 34 }, name: "Dark red" },
+  { rgb: { r: 128, g: 0, b: 0 }, name: "Maroon" },
+  { rgb: { r: 255, g: 99, b: 71 }, name: "Tomato" },
+  { rgb: { r: 205, g: 92, b: 92 }, name: "Indian red" },
+  { rgb: { r: 188, g: 71, b: 73 }, name: "Brick red" },
+
+  // Pinks
+  { rgb: { r: 255, g: 192, b: 203 }, name: "Pink" },
+  { rgb: { r: 255, g: 105, b: 180 }, name: "Hot pink" },
+  { rgb: { r: 255, g: 182, b: 193 }, name: "Light pink" },
+  { rgb: { r: 219, g: 112, b: 147 }, name: "Rose" },
+  { rgb: { r: 250, g: 128, b: 114 }, name: "Salmon" },
+
+  // Oranges
+  { rgb: { r: 255, g: 165, b: 0 }, name: "Orange" },
+  { rgb: { r: 255, g: 140, b: 0 }, name: "Dark orange" },
+  { rgb: { r: 255, g: 127, b: 80 }, name: "Coral" },
+  { rgb: { r: 255, g: 160, b: 122 }, name: "Peach" },
+  { rgb: { r: 255, g: 191, b: 0 }, name: "Amber" },
+
+  // Yellows
+  { rgb: { r: 255, g: 255, b: 0 }, name: "Yellow" },
+  { rgb: { r: 255, g: 215, b: 0 }, name: "Gold" },
+  { rgb: { r: 255, g: 239, b: 0 }, name: "Lemon" },
+  { rgb: { r: 240, g: 230, b: 140 }, name: "Khaki" },
+
+  // Tans / Browns
+  { rgb: { r: 210, g: 180, b: 140 }, name: "Tan" },
+  { rgb: { r: 244, g: 164, b: 96 }, name: "Sandy brown" },
+  { rgb: { r: 210, g: 105, b: 30 }, name: "Chocolate" },
+  { rgb: { r: 139, g: 69, b: 19 }, name: "Brown" },
+  { rgb: { r: 160, g: 82, b: 45 }, name: "Sienna" },
+  { rgb: { r: 101, g: 67, b: 33 }, name: "Dark brown" },
+  { rgb: { r: 183, g: 65, b: 14 }, name: "Rust" },
+  { rgb: { r: 128, g: 0, b: 32 }, name: "Burgundy" },
+
+  // Greens
+  { rgb: { r: 0, g: 128, b: 0 }, name: "Green" },
+  { rgb: { r: 0, g: 255, b: 0 }, name: "Lime" },
+  { rgb: { r: 154, g: 205, b: 50 }, name: "Yellow green" },
+  { rgb: { r: 34, g: 139, b: 34 }, name: "Forest green" },
+  { rgb: { r: 0, g: 100, b: 0 }, name: "Dark green" },
+  { rgb: { r: 80, g: 200, b: 120 }, name: "Emerald" },
+  { rgb: { r: 62, g: 180, b: 137 }, name: "Mint" },
+  { rgb: { r: 0, g: 255, b: 127 }, name: "Spring green" },
+  { rgb: { r: 128, g: 128, b: 0 }, name: "Olive" },
+  { rgb: { r: 46, g: 139, b: 87 }, name: "Sea green" },
+  { rgb: { r: 144, g: 238, b: 144 }, name: "Light green" },
+
+  // Cyans / Teals
+  { rgb: { r: 0, g: 206, b: 209 }, name: "Cyan" },
+  { rgb: { r: 0, g: 128, b: 128 }, name: "Teal" },
+  { rgb: { r: 64, g: 224, b: 208 }, name: "Turquoise" },
+  { rgb: { r: 127, g: 255, b: 212 }, name: "Aqua" },
+  { rgb: { r: 95, g: 158, b: 160 }, name: "Cadet blue" },
+
+  // Blues
+  { rgb: { r: 0, g: 0, b: 255 }, name: "Blue" },
+  { rgb: { r: 65, g: 105, b: 225 }, name: "Royal blue" },
+  { rgb: { r: 0, g: 0, b: 139 }, name: "Dark blue" },
+  { rgb: { r: 0, g: 0, b: 80 }, name: "Navy" },
+  { rgb: { r: 135, g: 206, b: 235 }, name: "Sky blue" },
+  { rgb: { r: 70, g: 130, b: 180 }, name: "Steel blue" },
+  { rgb: { r: 0, g: 71, b: 171 }, name: "Cobalt" },
+  { rgb: { r: 100, g: 149, b: 237 }, name: "Cornflower" },
+  { rgb: { r: 173, g: 216, b: 230 }, name: "Light blue" },
+
+  // Purples
+  { rgb: { r: 128, g: 0, b: 128 }, name: "Purple" },
+  { rgb: { r: 75, g: 0, b: 130 }, name: "Indigo" },
+  { rgb: { r: 148, g: 103, b: 189 }, name: "Violet" },
+  { rgb: { r: 221, g: 160, b: 221 }, name: "Plum" },
+  { rgb: { r: 230, g: 190, b: 255 }, name: "Lavender" },
+  { rgb: { r: 186, g: 85, b: 211 }, name: "Orchid" },
+  { rgb: { r: 102, g: 51, b: 153 }, name: "Dark purple" },
+
+  // Magentas / Fuchsia
+  { rgb: { r: 255, g: 0, b: 255 }, name: "Magenta" },
+  { rgb: { r: 255, g: 0, b: 128 }, name: "Fuchsia" },
+  { rgb: { r: 200, g: 162, b: 200 }, name: "Lilac" },
+  { rgb: { r: 227, g: 115, b: 131 }, name: "Mauve" },
+];
+
+/**
+ * Extended color name: closest match from EXTENDED_COLORS_EN (~70 colors).
+ * Used for palette chart exports only.
+ */
+export const rgbToExtendedColorName = (color: RGB): { name: string; rgb: RGB } => {
+  let minDist = Infinity;
+  let best = EXTENDED_COLORS_EN[0];
+  for (const entry of EXTENDED_COLORS_EN) {
+    const dr = color.r - entry.rgb.r;
+    const dg = color.g - entry.rgb.g;
+    const db = color.b - entry.rgb.b;
+    const dist = dr * dr + dg * dg + db * db;
+    if (dist < minDist) {
+      minDist = dist;
+      best = entry;
+    }
+  }
+  return { name: best.name, rgb: best.rgb };
+};
+
+/**
  * Get label for palette index (1-9, then A, B, …, N for color-by-number)
  */
 export const paletteIndexToLabel = (index: number): string => {
