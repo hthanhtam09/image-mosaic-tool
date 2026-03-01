@@ -23,6 +23,7 @@ export default function Dashboard() {
 
     const [previewProjectId, setPreviewProjectId] = useState<string | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const imageInputPartialRef = useRef<HTMLInputElement>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
 
@@ -79,6 +80,55 @@ export default function Dashboard() {
         [addProject],
     );
 
+    /* ── Import Image (Batch) – 3/4 Color ── */
+    const handleImportPartialClick = useCallback(() => {
+        imageInputPartialRef.current?.click();
+    }, []);
+
+    const handleImageFileChangePartial = useCallback(
+        async (e: React.ChangeEvent<HTMLInputElement>) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            setIsImporting(true);
+
+            try {
+                const fileList = Array.from(files).sort((a, b) =>
+                    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+                );
+
+                const patternCycle: ColorByNumberGridType[] = [
+                    "standard",
+                    "honeycomb",
+                    "diamond",
+                    "pentagon"
+                ];
+
+                await Promise.all(fileList.map(async (file, index) => {
+                    const reader = new FileReader();
+                    const dataUrl = await new Promise<string>((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+
+                    const pattern = patternCycle[index % patternCycle.length];
+
+                    addProject(file, dataUrl, {
+                        gridType: pattern,
+                        partialColor: true,
+                    });
+                }));
+
+            } catch (err) {
+                console.error("Failed to import images:", err);
+            } finally {
+                setIsImporting(false);
+                e.target.value = "";
+            }
+        },
+        [addProject],
+    );
+
     const handleConvertAll = async () => {
         setIsConverting(true);
         await convertAllIdleProjects();
@@ -107,6 +157,7 @@ export default function Dashboard() {
                     showCodes: project.showNumbers,
                     colored: true,
                     showPalette: project.showPalette ?? true,
+                    coloredRatio: project.partialColor ? 0.75 : 1,
                 });
 
                 const blobColored = await new Promise<Blob | null>(resolve => canvasColored.toBlob(resolve, 'image/png'));
@@ -309,6 +360,13 @@ export default function Dashboard() {
                 >
                     Import Images
                 </button>
+                <button
+                    onClick={handleImportPartialClick}
+                    className="mt-10 px-8 py-4 text-lg font-medium text-[var(--accent)] border-2 border-[var(--accent)] hover:bg-[var(--accent)]/10 rounded-xl shadow-lg transition-transform hover:scale-105 active:scale-95"
+                    title="Import images and color only the top 3/4, leaving the bottom 1/4 uncolored"
+                >
+                    🎨 Import 3/4 Color
+                </button>
                 <input
                     ref={imageInputRef}
                     type="file"
@@ -316,6 +374,14 @@ export default function Dashboard() {
                     className="hidden"
                     multiple
                     onChange={handleImageFileChange}
+                />
+                <input
+                    ref={imageInputPartialRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="hidden"
+                    multiple
+                    onChange={handleImageFileChangePartial}
                 />
             </div>
         );
@@ -336,6 +402,13 @@ export default function Dashboard() {
                         className="px-4 py-2 text-sm font-medium text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg hover:bg-white/5 transition-colors"
                     >
                         + Add More
+                    </button>
+                    <button
+                        onClick={handleImportPartialClick}
+                        className="px-4 py-2 text-sm font-medium text-[var(--accent)] border border-[var(--accent)] rounded-lg hover:bg-[var(--accent)]/10 transition-colors"
+                        title="Import images – color top 3/4 only"
+                    >
+                        🎨 + Add 3/4 Color
                     </button>
                     {idleCount > 0 && (
                         <button
@@ -373,6 +446,14 @@ export default function Dashboard() {
                         multiple
                         onChange={handleImageFileChange}
                     />
+                    <input
+                        ref={imageInputPartialRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg"
+                        className="hidden"
+                        multiple
+                        onChange={handleImageFileChangePartial}
+                    />
                 </div>
             </div>
 
@@ -409,6 +490,13 @@ export default function Dashboard() {
                                     {project.status === 'completed' && (
                                         <div className="absolute top-2 right-2 px-2 py-1 text-xs font-medium bg-green-500/80 text-white rounded backdrop-blur-sm">
                                             Ready
+                                        </div>
+                                    )}
+
+                                    {/* Partial Color Badge */}
+                                    {project.partialColor && (
+                                        <div className="absolute bottom-2 right-2 px-2 py-1 text-xs font-medium bg-purple-500/80 text-white rounded backdrop-blur-sm">
+                                            3/4 🎨
                                         </div>
                                     )}
 

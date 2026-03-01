@@ -81,6 +81,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
           showCodes: activeProject.showNumbers,
           colored: true,
           showPalette: activeProject.showPalette ?? true,
+          coloredRatio: activeProject.partialColor ? 0.75 : 1,
       });
       downloadCanvas(canvas1, `colored-${baseName}.png`);
 

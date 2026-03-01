@@ -14,6 +14,7 @@ import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import {
   getCellLayout,
   hitTestCell,
+  getGridDimensions,
 } from "@/lib/colorByNumber/layoutCalculator";
 import {
   getPageLayout,
@@ -24,6 +25,8 @@ import {
   getPalColW,
   PAGE_PADDING_X,
   PAGE_PADDING_Y,
+  DIAG_START_Y,
+  DIAG_END_Y,
 } from "@/lib/colorByNumber/export";
 import type { ColorByNumberData, ColorByNumberCell } from "@/lib/colorByNumber";
 import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
@@ -463,15 +466,27 @@ const CellPentagon = ({
   data,
   showNumbers,
   colored,
+  partialColor,
+  gridDims,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
+  partialColor?: boolean;
+  gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  const fillColor = colored
+  // Diagonal partial color check
+  let isCellColored = colored;
+  if (colored && partialColor && gridDims) {
+    const nx = layout.cx / gridDims.width;
+    const ny = layout.cy / gridDims.height;
+    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
+    isCellColored = ny <= diagonalY;
+  }
+  const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
@@ -479,8 +494,6 @@ const CellPentagon = ({
   const cx = layout.cx;
   const cy = layout.cy;
 
-  // Hexagon (6 sides) for tight packing "like the image"
-  // Point up: -90, -30, 30, 90, 150, 210
   const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
   const points = angles.map((angle) => ({
     x: cx + r * Math.cos(angle),
@@ -505,6 +518,11 @@ const CellPentagon = ({
           fontSize={r * 0.6}
           fontWeight={600}
           fontFamily="sans-serif"
+          {...(isCellColored ? {
+            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.7)",
+            strokeWidth: r * 0.08,
+            paintOrder: "stroke",
+          } : {})}
         >
           {cell.code}
         </text>
@@ -519,15 +537,26 @@ const CellCircle = ({
   data,
   showNumbers,
   colored,
+  partialColor,
+  gridDims,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
+  partialColor?: boolean;
+  gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  const fillColor = colored
+  let isCellColored = colored;
+  if (colored && partialColor && gridDims) {
+    const nx = layout.cx / gridDims.width;
+    const ny = layout.cy / gridDims.height;
+    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
+    isCellColored = ny <= diagonalY;
+  }
+  const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
@@ -552,6 +581,11 @@ const CellCircle = ({
           fontSize={layout.r * 0.6}
           fontWeight={600}
           fontFamily="sans-serif"
+          {...(isCellColored ? {
+            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.7)",
+            strokeWidth: layout.r * 0.08,
+            paintOrder: "stroke",
+          } : {})}
         >
           {cell.code}
         </text>
@@ -566,22 +600,31 @@ const CellSquare = ({
   data,
   showNumbers,
   colored,
+  partialColor,
+  gridDims,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
+  partialColor?: boolean;
+  gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  const fillColor = colored
+  let isCellColored = colored;
+  if (colored && partialColor && gridDims) {
+    const nx = layout.cx / gridDims.width;
+    const ny = layout.cy / gridDims.height;
+    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
+    isCellColored = ny <= diagonalY;
+  }
+  const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
   const s = data.cellSize;
-  // Use s for rx? The layout.r is not available here, but s is the full side length.
-  // We want corners to be rounded.
-  
+
   return (
     <g>
       <rect
@@ -604,6 +647,11 @@ const CellSquare = ({
           fontSize={s * 0.5}
           fontWeight={600}
           fontFamily="sans-serif"
+          {...(isCellColored ? {
+            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.7)",
+            strokeWidth: s * 0.06,
+            paintOrder: "stroke",
+          } : {})}
         >
           {cell.code}
         </text>
@@ -618,26 +666,30 @@ const CellDiamond = ({
   data,
   showNumbers,
   colored,
+  partialColor,
+  gridDims,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
+  partialColor?: boolean;
+  gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  const fillColor = colored
+  let isCellColored = colored;
+  if (colored && partialColor && gridDims) {
+    const nx = layout.cx / gridDims.width;
+    const ny = layout.cy / gridDims.height;
+    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
+    isCellColored = ny <= diagonalY;
+  }
+  const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL;
   const textColor = getTextColor(fillColor);
-  const half = layout.r; 
-  // half is distance from center to vertex.
-  // Bounding square side for a diamond with "radius" half:
-  // We want the diamond vertices to match (cx, cy-half), etc.
-  // A square centered at cy,cy rotated 45deg has vertices at distance "d" from center.
-  // For a square of side L, d = L * sqrt(2) / 2.
-  // We want d = half.
-  // So L * sqrt(2) / 2 = half => L = 2 * half / sqrt(2) = half * sqrt(2).
+  const half = layout.r;
   const side = half * Math.sqrt(2);
 
   return (
@@ -664,6 +716,11 @@ const CellDiamond = ({
           fontSize={half * 0.6}
           fontWeight={600}
           fontFamily="sans-serif"
+          {...(isCellColored ? {
+            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.7)",
+            strokeWidth: half * 0.08,
+            paintOrder: "stroke",
+          } : {})}
         >
           {cell.code}
         </text>
@@ -686,12 +743,14 @@ const PageGrid = ({
   showNumbers,
   colored,
   layout,
+  partialColor,
 }: {
   data: ColorByNumberData;
   filled: Record<string, boolean>;
   showNumbers: boolean;
   colored: boolean;
   layout: PageGridLayout;
+  partialColor?: boolean;
 }) => {
   const {
     gridLayout,
@@ -699,6 +758,8 @@ const PageGrid = ({
     paletteVisualTop,
     gridVisualTop,
   } = layout;
+
+  const gridDims = getGridDimensions(data);
 
   const CellComponent =
     data.gridType === "honeycomb"
@@ -743,6 +804,8 @@ const PageGrid = ({
               data={data}
               showNumbers={showNumbers}
               colored={colored}
+              partialColor={partialColor}
+              gridDims={gridDims}
             />
           ))}
         </g>
@@ -775,6 +838,7 @@ export default function ColorByNumberGrid({
   const panY = activeProject?.panY || 0;
   const showNumbers = activeProject?.showNumbers ?? true;
   const showPalette = activeProject?.showPalette ?? true;
+  const partialColor = activeProject?.partialColor ?? false;
   const importedImageDataUrl = activeProject?.thumbnailDataUrl || null;
   
   // Actions wrapper
@@ -994,6 +1058,7 @@ export default function ColorByNumberGrid({
               showNumbers={showNumbers}
               colored={true}
               layout={pageLayout}
+              partialColor={partialColor}
             />
             {/* Page Border/Shadow for realism */}
             <rect 

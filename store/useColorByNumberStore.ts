@@ -28,6 +28,8 @@ export interface Project {
   useDithering: boolean;
   showNumbers: boolean;
   showPalette: boolean;
+  /** If true, only the top 3/4 of the image is colored on export */
+  partialColor: boolean;
 
   // Viewport
   zoom: number;
@@ -92,6 +94,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       useDithering: true,   // Default
       showNumbers: true,
       showPalette: true,    // Default
+      partialColor: false,  // Default: full color
       zoom: 1,
       panX: 0,
       panY: 0,

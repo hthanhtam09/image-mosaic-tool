@@ -8,6 +8,11 @@
 import type { ColorByNumberData, FilledMap } from "./types";
 import { getGridDimensions, getCellLayout } from "./layoutCalculator";
 import type { ColorByNumberCell } from "./types";
+
+/** Diagonal cut: line from bottom-left (x=0, y=DIAG_START_Y) to mid-right (x=1, y=DIAG_END_Y).
+ *  Cells above the line are colored, below are uncolored (smaller portion). */
+export const DIAG_START_Y = 0.95; // slightly above bottom-left corner
+export const DIAG_END_Y = 0.50;   // middle of the right side
 import { getPaletteColorName } from "@/lib/palette";
 
 /** 300 DPI for crisp print-quality exports */
@@ -736,11 +741,14 @@ export const exportToCanvas = (
     showCodes?: boolean;
     colored?: boolean;
     showPalette?: boolean;
+    /** Ratio of rows (from top) to color. 0.75 = top 3/4 colored, bottom 1/4 uncolored */
+    coloredRatio?: number;
   },
 ): HTMLCanvasElement => {
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
   const showPalette = options.showPalette ?? true;
+  const coloredRatio = options.coloredRatio ?? 1;
 
   // Page dimensions: strict 8.5x11 @ 300DPI
   const pageW = EXPORT_PAGE_W;
@@ -823,9 +831,21 @@ export const exportToCanvas = (
   ctx.lineCap = "butt";
   ctx.lineJoin = "miter";
 
+  // Diagonal cutoff for partial coloring (bottom-right corner uncolored)
+  const gridDims = getGridDimensions(data);
+
   const renderCell = (cell: ColorByNumberCell, filledCell: boolean) => {
     const cl = getCellLayout(cell.x, cell.y, data);
-    const fillColor = colored
+    // When coloredRatio < 1, use diagonal cut: line from top-left to mid-right
+    let isCellColored = colored;
+    if (colored && coloredRatio < 1) {
+      const nx = cl.cx / gridDims.width;  // 0..1 horizontal
+      const ny = cl.cy / gridDims.height; // 0..1 vertical
+      // Diagonal line: y = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * x
+      const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
+      isCellColored = ny <= diagonalY;
+    }
+    const fillColor = isCellColored
       ? getCellFillColor(cell.color, filledCell)
       : "#ffffff";
 
@@ -875,12 +895,24 @@ export const exportToCanvas = (
     }
 
     if (showCodes && cell.code) {
+      ctx.save();
       const brightness = getBrightness(fillColor);
-      ctx.fillStyle = brightness < 128 ? "#ffffff" : "#999999";
+      const textFill = brightness < 128 ? "#ffffff" : "#999999";
       ctx.font = `600 ${cl.r * 0.9}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+
+      // Add stroke outline in colored mode so numbers are always readable
+      if (isCellColored) {
+        ctx.strokeStyle = brightness < 128 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)";
+        ctx.lineWidth = cl.r * 0.15;
+        ctx.lineJoin = "round";
+        ctx.strokeText(cell.code, cl.cx, cl.cy);
+      }
+
+      ctx.fillStyle = textFill;
       ctx.fillText(cell.code, cl.cx, cl.cy);
+      ctx.restore();
     }
   };
 
