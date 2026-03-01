@@ -183,30 +183,32 @@ export default function Dashboard() {
     };
 
     /* ── Download Color Palette Chart ── */
-    const handleDownloadPalette = () => {
+    const handleDownloadPalette = async () => {
         const completedProjects = projects.filter(p => p.status === 'completed');
         if (completedProjects.length === 0) return;
 
-        // Collect all unique hex colors across all completed projects (dedup by exact hex)
-        const allHexColors = new Set<string>();
+        // We use a Set to keep only ONE representative per exact hex color
+        const uniqueColors = new Set<string>();
+
         for (const project of completedProjects) {
             if (!project.data) continue;
             for (const cell of project.data.cells) {
-                allHexColors.add(cell.color.toLowerCase());
+                const hex = cell.color.toLowerCase();
+                
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                
+                // Skip white / near-white
+                if (brightness >= 250) continue;
+                
+                // Store exact unique hex
+                uniqueColors.add(hex);
             }
         }
 
-        // Filter out white / near-white
-        const colors: string[] = [];
-        for (const hex of allHexColors) {
-            const r = parseInt(hex.slice(1, 3), 16);
-            const g = parseInt(hex.slice(3, 5), 16);
-            const b = parseInt(hex.slice(5, 7), 16);
-            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-            if (brightness >= 250) continue;
-            colors.push(hex);
-        }
-
+        const colors = Array.from(uniqueColors);
         const totalColors = colors.length;
         if (totalColors === 0) return;
 
@@ -222,15 +224,17 @@ export default function Dashboard() {
         // Auto-calculate columns and hexagon size to fit all colors
         const COLS = Math.min(10, totalColors);
         const ROWS = Math.ceil(totalColors / COLS);
-        const GAP_RATIO = 0.15; // gap as fraction of hex size
+        const GAP_RATIO = 0.3; // gap as fraction of radius
 
         // Max hex size that fits within available space
-        const maxHexW = availW / (COLS + (COLS - 1) * GAP_RATIO / 2);
-        const maxHexH = availH / (ROWS + (ROWS - 1) * GAP_RATIO / 2);
-        const HEX_RADIUS = Math.min(maxHexW / 2, maxHexH / Math.sqrt(3)) * 0.95;
+        // Pointy-topped hexagon: width = sqrt(3) * R, height = 2 * R
+        const maxR_W = availW / (COLS * Math.sqrt(3) + (COLS - 1) * GAP_RATIO);
+        const maxR_H = availH / (ROWS * 2 + (ROWS - 1) * GAP_RATIO);
+        const HEX_RADIUS = Math.min(maxR_W, maxR_H) * 0.95;
 
-        const HEX_W = HEX_RADIUS * 2;
-        const HEX_H = Math.sqrt(3) * HEX_RADIUS;
+        // Correct dimensions for pointy-topped hexagon
+        const HEX_W = Math.sqrt(3) * HEX_RADIUS;
+        const HEX_H = 2 * HEX_RADIUS;
         const GAP = Math.round(HEX_RADIUS * GAP_RATIO);
         const CELL_W = HEX_W + GAP;
         const CELL_H = HEX_H + GAP;

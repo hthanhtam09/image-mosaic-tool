@@ -91,6 +91,30 @@ const cropToAspectRatio = (
   return canvas;
 };
 
+/**
+ * Remove Gemini watermark from the image.
+ * The watermark is usually at the bottom right corner.
+ * To maintain the image's center, we crop equally from all 4 sides.
+ */
+const removeGeminiWatermark = (img: HTMLImageElement): HTMLCanvasElement => {
+  const canvas = document.createElement("canvas");
+  // Crop about 6% from each side, which is enough to remove the bottom-right watermark
+  const cropX = Math.max(img.width * 0.06, 80);
+  const cropY = Math.max(img.height * 0.06, 80);
+
+  canvas.width = img.width - cropX * 2;
+  canvas.height = img.height - cropY * 2;
+  
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get crop context");
+  
+  ctx.drawImage(
+    img, 
+    cropX, cropY, canvas.width, canvas.height, 
+    0, 0, canvas.width, canvas.height
+  );
+  return canvas;
+};
 
 export interface ImageToColorByNumberOptions {
   /** Grid pattern to use (default: "standard") */
@@ -142,21 +166,23 @@ export const imageToColorByNumber = async (
   } = options;
 
   // 1. Load + initial resize (cap width)
-  // 1. Load + Crop + Resize
+  // 1. Load + Crop Watermark + Crop to Aspect Ratio + Resize
   // Enforce 7 x 10.2 inch aspect ratio (~0.686)
   const TARGET_ASPECT = 7.0 / 10.2;
   
   const rawImg = await loadImageFromFile(file);
-  // Crop first to ensure aspect ratio
+
+  // Remove Gemini watermark before applying aspect ratio crop
+  const watermarkRemovedCanvas = removeGeminiWatermark(rawImg);
+  const watermarkRemovedImg = new Image();
+  watermarkRemovedImg.src = watermarkRemovedCanvas.toDataURL();
+  await new Promise(r => watermarkRemovedImg.onload = r);
+
+  // Crop to ensure aspect ratio
   // We can treat the cropped canvas as an image for resizeImage
-  const croppedCanvas = cropToAspectRatio(rawImg, TARGET_ASPECT);
+  const croppedCanvas = cropToAspectRatio(watermarkRemovedImg, TARGET_ASPECT);
   
-  // Convert canvas to image for existing pipeline? 
-  // resizeImage expects HTMLImageElement.
-  // Let's create a temp image from canvas or overloading resizeImage?
-  // Actually resizeImage just draws input to a canvas. It accepts CanvasImageSource (which HTMLCanvasElement is).
-  // But type signature says HTMLImageElement. Let's cast or update if possible.
-  // Ideally we fix resizeImage in utils, but here we can just do:
+  // Convert canvas to image for existing pipeline
   const croppedImg = new Image();
   croppedImg.src = croppedCanvas.toDataURL();
   await new Promise(r => croppedImg.onload = r);
