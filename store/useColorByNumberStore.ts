@@ -24,12 +24,9 @@ export interface Project {
 
   // Independent settings
   gridType: ColorByNumberGridType;
-  cellSize: number;
   useDithering: boolean;
-  showNumbers: boolean;
-  showPalette: boolean;
-  /** If true, only the top 3/4 of the image is colored on export */
-  partialColor: boolean;
+  /** Partial color split mode: 'none' | 'diagonal-bl-tr' | 'diagonal-tl-br' | 'horizontal-middle' | 'horizontal-sides' */
+  partialColorMode: 'none' | 'diagonal-bl-tr' | 'diagonal-tl-br' | 'horizontal-middle' | 'horizontal-sides';
 
   // Viewport
   zoom: number;
@@ -41,6 +38,11 @@ export interface ColorByNumberState {
   // Global / UI state
   isPaletteVisible: boolean;
   
+  // Global settings (shared across all projects)
+  globalCellSize: number;
+  globalShowNumbers: boolean;
+  globalShowPalette: boolean;
+  
   // Projects
   projects: Project[];
   activeProjectId: string | null;
@@ -48,8 +50,13 @@ export interface ColorByNumberState {
   // Actions
   togglePaletteGlobal: () => void;
 
+  // Global settings actions
+  setGlobalCellSize: (size: number) => void;
+  toggleGlobalShowNumbers: () => void;
+  toggleGlobalShowPalette: () => void;
+
   // Project Management
-  addProject: (file: File, dataUrl: string, options?: Partial<Project>) => void; // Updated signature
+  addProject: (file: File, dataUrl: string, options?: Partial<Project>) => void;
   setActiveProject: (id: string | null) => void;
   removeProject: (id: string) => void;
   updateActiveProject: (updates: Partial<Project>) => void;
@@ -64,9 +71,6 @@ export interface ColorByNumberState {
   fillCell: (x: number, y: number) => void;
   setSelectedCode: (code: string | null) => void;
   resetFill: () => void;
-  toggleShowNumbers: (projectId: string) => void;
-  togglePalette: (projectId: string) => void;
-  setCellSize: (projectId: string, size: number) => void;
   
   // Async actions
   updateActiveProjectData: (data: ColorByNumberData) => void;
@@ -74,10 +78,27 @@ export interface ColorByNumberState {
 
 export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   isPaletteVisible: true,
+  globalCellSize: 29,
+  globalShowNumbers: true,
+  globalShowPalette: true,
   projects: [],
   activeProjectId: null,
 
   togglePaletteGlobal: () => set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),
+
+  // Global settings actions
+  setGlobalCellSize: (size) => {
+    set((state) => ({
+      globalCellSize: size,
+      // Reset all completed projects to idle so they re-convert with new cell size
+      projects: state.projects.map(p => 
+        p.status === 'completed' ? { ...p, status: 'idle' as const } : p
+      ),
+    }));
+  },
+
+  toggleGlobalShowNumbers: () => set((state) => ({ globalShowNumbers: !state.globalShowNumbers })),
+  toggleGlobalShowPalette: () => set((state) => ({ globalShowPalette: !state.globalShowPalette })),
 
   addProject: (file, dataUrl, options = {}) => {
     const newProject: Project = {
@@ -85,20 +106,17 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       name: file.name,
       originalFile: file,
       thumbnailDataUrl: dataUrl,
-      data: null, // Initially null
-      status: 'idle', // Initially idle
+      data: null,
+      status: 'idle',
       filled: {},
       selectedCode: null,
-      gridType: "standard", // Default
-      cellSize: 29,         // Default
-      useDithering: true,   // Default
-      showNumbers: true,
-      showPalette: true,    // Default
-      partialColor: false,  // Default: full color
+      gridType: "standard",
+      useDithering: true,
+      partialColorMode: 'none',
       zoom: 1,
       panX: 0,
       panY: 0,
-      ...options, // Override defaults if provided
+      ...options,
     };
 
     set((state) => ({
@@ -143,6 +161,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       idleProjects.forEach(p => updateProject(p.id, { status: 'processing' }));
 
       // Process sequentially to prevent UI freezing
+      const { globalCellSize } = get();
       for (const p of idleProjects) {
           try {
               // Yield to main thread to allow UI updates
@@ -150,7 +169,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
 
               const result = await imageToColorByNumber(p.originalFile, {
                   gridType: p.gridType,
-                  cellSize: p.cellSize,
+                  cellSize: globalCellSize,
                   useDithering: p.useDithering,
               });
               updateProject(p.id, { data: result, status: 'completed' });
@@ -193,33 +212,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     get().updateActiveProject({ filled: {} });
   },
 
-  toggleShowNumbers: (projectId) => {
-    const { projects } = get();
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return;
-    get().updateProject(projectId, { showNumbers: !project.showNumbers });
-  },
 
-  togglePalette: (projectId) => {
-    const { projects } = get();
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return;
-    get().updateProject(projectId, { showPalette: !project.showPalette });
-  },
-
-  setCellSize: (projectId, size) => {
-      const { projects } = get();
-      const project = projects.find(p => p.id === projectId);
-      if (!project) return;
-
-      // If status is completed, reset to idle to indicate it needs reprocessing?
-      // Or just update the setting and let user hit convert.
-      // Legacy logic updated ALL idle projects. New logic updates specific project.
-      
-      const newStatus = project.status === 'completed' ? 'idle' : project.status;
-      
-      get().updateProject(projectId, { cellSize: size, status: newStatus });
-  },
 
   setUseDithering: (use: boolean) => {
       get().updateActiveProject({ useDithering: use });

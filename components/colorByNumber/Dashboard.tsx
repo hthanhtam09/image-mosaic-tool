@@ -1,13 +1,13 @@
 "use client";
 
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ColorByNumberGridType } from "@/lib/colorByNumber";
+import type { PartialColorMode } from "@/lib/colorByNumber";
 import ProjectPreviewModal from "./ProjectPreviewModal";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { exportToCanvas } from "@/lib/colorByNumber";
-import { rgbToExtendedColorName } from "@/lib/utils";
 
 export default function Dashboard() {
     const {
@@ -16,16 +16,45 @@ export default function Dashboard() {
         convertAllIdleProjects,
         updateProject,
         removeProject,
-        setCellSize,
-        toggleShowNumbers,
-        togglePalette,
+        globalCellSize,
+        globalShowNumbers,
+        globalShowPalette,
+        setGlobalCellSize,
+        toggleGlobalShowNumbers,
+        toggleGlobalShowPalette,
     } = useColorByNumberStore();
+
+    const [showSettings, setShowSettings] = useState(false);
+    const settingsRef = useRef<HTMLDivElement>(null);
+
+    // Close settings dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+                setShowSettings(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const [previewProjectId, setPreviewProjectId] = useState<string | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
-    const imageInputPartialRef = useRef<HTMLInputElement>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
+    const [splitColorDropdownId, setSplitColorDropdownId] = useState<string | null>(null);
+    const splitColorRef = useRef<HTMLDivElement>(null);
+
+    // Close split color dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutsideSplit = (e: MouseEvent) => {
+            if (splitColorRef.current && !splitColorRef.current.contains(e.target as Node)) {
+                setSplitColorDropdownId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutsideSplit);
+        return () => document.removeEventListener('mousedown', handleClickOutsideSplit);
+    }, []);
 
     /* ── Import Image (Batch) ── */
     const handleImportClick = useCallback(() => {
@@ -80,54 +109,14 @@ export default function Dashboard() {
         [addProject],
     );
 
-    /* ── Import Image (Batch) – 3/4 Color ── */
-    const handleImportPartialClick = useCallback(() => {
-        imageInputPartialRef.current?.click();
-    }, []);
-
-    const handleImageFileChangePartial = useCallback(
-        async (e: React.ChangeEvent<HTMLInputElement>) => {
-            const files = e.target.files;
-            if (!files || files.length === 0) return;
-            setIsImporting(true);
-
-            try {
-                const fileList = Array.from(files).sort((a, b) =>
-                    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-                );
-
-                const patternCycle: ColorByNumberGridType[] = [
-                    "standard",
-                    "honeycomb",
-                    "diamond",
-                    "pentagon"
-                ];
-
-                await Promise.all(fileList.map(async (file, index) => {
-                    const reader = new FileReader();
-                    const dataUrl = await new Promise<string>((resolve, reject) => {
-                        reader.onload = () => resolve(reader.result as string);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
-
-                    const pattern = patternCycle[index % patternCycle.length];
-
-                    addProject(file, dataUrl, {
-                        gridType: pattern,
-                        partialColor: true,
-                    });
-                }));
-
-            } catch (err) {
-                console.error("Failed to import images:", err);
-            } finally {
-                setIsImporting(false);
-                e.target.value = "";
-            }
-        },
-        [addProject],
-    );
+    /* ── Split Color Mode Options ── */
+    const SPLIT_COLOR_MODES: { value: PartialColorMode; label: string; icon: string }[] = [
+        { value: 'none', label: 'Full Color', icon: '🟩' },
+        { value: 'diagonal-bl-tr', label: 'Diagonal ↗', icon: '◣' },
+        { value: 'diagonal-tl-br', label: 'Diagonal ↘', icon: '◤' },
+        { value: 'horizontal-middle', label: 'Top Half', icon: '⬒' },
+        { value: 'horizontal-sides', label: 'Bottom Half', icon: '⬓' },
+    ];
 
     const handleConvertAll = async () => {
         setIsConverting(true);
@@ -150,14 +139,14 @@ export default function Dashboard() {
                 const baseName = getBaseName(project.name);
                 const fileName = `${baseName}.png`;
 
-                const hasPalette = project.showPalette !== false;
+                const hasPalette = globalShowPalette;
 
                 // 1. Colored
                 const canvasColored = exportToCanvas(project.data, project.filled, {
-                    showCodes: project.showNumbers,
+                    showCodes: globalShowNumbers,
                     colored: true,
-                    showPalette: project.showPalette ?? true,
-                    coloredRatio: project.partialColor ? 0.75 : 1,
+                    showPalette: globalShowPalette,
+                    partialColorMode: project.partialColorMode,
                 });
 
                 const blobColored = await new Promise<Blob | null>(resolve => canvasColored.toBlob(resolve, 'image/png'));
@@ -169,12 +158,12 @@ export default function Dashboard() {
                     }
                 }
 
-                if (hasPalette) {
-                    // 2. Uncolored
+                if (hasPalette && project.partialColorMode === 'none') {
+                    // 2. Uncolored (only for full color projects)
                     const canvasUncolored = exportToCanvas(project.data, project.filled, {
-                        showCodes: project.showNumbers,
+                        showCodes: globalShowNumbers,
                         colored: false,
-                        showPalette: project.showPalette ?? true,
+                        showPalette: globalShowPalette,
                     });
 
                     const blobUncolored = await new Promise<Blob | null>(resolve => canvasUncolored.toBlob(resolve, 'image/png'));
@@ -198,7 +187,7 @@ export default function Dashboard() {
         const completedProjects = projects.filter(p => p.status === 'completed');
         if (completedProjects.length === 0) return;
 
-        // Step 1: Collect all unique hex colors from all completed projects
+        // Collect all unique hex colors across all completed projects (dedup by exact hex)
         const allHexColors = new Set<string>();
         for (const project of completedProjects) {
             if (!project.data) continue;
@@ -207,81 +196,66 @@ export default function Dashboard() {
             }
         }
 
-        // Step 2: Name each hex using the extended 70+ color palette, then deduplicate by name
-        // This ensures each color name appears only ONCE in the chart
-        const nameToColor = new Map<string, { hex: string; name: string }>();
-
+        // Filter out white / near-white
+        const colors: string[] = [];
         for (const hex of allHexColors) {
             const r = parseInt(hex.slice(1, 3), 16);
             const g = parseInt(hex.slice(3, 5), 16);
             const b = parseInt(hex.slice(5, 7), 16);
-
-            const match = rgbToExtendedColorName({ r, g, b });
-
-            // Skip white / ivory / cream (near-white colors)
-            const skipNames = ['white', 'ivory', 'cream'];
-            if (skipNames.includes(match.name.toLowerCase())) continue;
-
-            // Deduplicate by name: keep the first hex encountered for each name
-            if (!nameToColor.has(match.name)) {
-                // Use the canonical RGB from the extended palette for consistent display
-                const canonicalHex = `#${match.rgb.r.toString(16).padStart(2, '0')}${match.rgb.g.toString(16).padStart(2, '0')}${match.rgb.b.toString(16).padStart(2, '0')}`;
-                nameToColor.set(match.name, { hex: canonicalHex, name: match.name });
-            }
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            if (brightness >= 250) continue;
+            colors.push(hex);
         }
 
-        const colors = Array.from(nameToColor.values());
         const totalColors = colors.length;
         if (totalColors === 0) return;
 
-        // --- Canvas rendering (hexagon palette chart) ---
+        // --- 300 DPI letter page (8.5" × 11") ---
+        const DPI = 300;
+        const PAGE_W = Math.round(8.5 * DPI); // 2550
+        const PAGE_H = Math.round(11 * DPI);  // 3300
+        const MARGIN = Math.round(0.5 * DPI); // 0.5" margin = 150px
+
+        const availW = PAGE_W - MARGIN * 2;
+        const availH = PAGE_H - MARGIN * 2;
+
+        // Auto-calculate columns and hexagon size to fit all colors
         const COLS = Math.min(10, totalColors);
-        const HEX_RADIUS = 28; // radius of each hexagon
+        const ROWS = Math.ceil(totalColors / COLS);
+        const GAP_RATIO = 0.15; // gap as fraction of hex size
+
+        // Max hex size that fits within available space
+        const maxHexW = availW / (COLS + (COLS - 1) * GAP_RATIO / 2);
+        const maxHexH = availH / (ROWS + (ROWS - 1) * GAP_RATIO / 2);
+        const HEX_RADIUS = Math.min(maxHexW / 2, maxHexH / Math.sqrt(3)) * 0.95;
+
         const HEX_W = HEX_RADIUS * 2;
         const HEX_H = Math.sqrt(3) * HEX_RADIUS;
-        const GAP_X = 8;
-        const GAP_Y = 6;
-        const LABEL_HEIGHT = 32; // space for text below hexagon
-        const CELL_W = HEX_W + GAP_X;
-        const CELL_H = HEX_H + LABEL_HEIGHT + GAP_Y;
-        const ROWS = Math.ceil(totalColors / COLS);
-        const PADDING_X = 30;
-        const PADDING_TOP = 60; // space for title
-        const PADDING_BOTTOM = 20;
+        const GAP = Math.round(HEX_RADIUS * GAP_RATIO);
+        const CELL_W = HEX_W + GAP;
+        const CELL_H = HEX_H + GAP;
 
-        const canvasW = COLS * CELL_W + PADDING_X * 2;
-        const canvasH = PADDING_TOP + ROWS * CELL_H + PADDING_BOTTOM;
+        // Center the grid on the page
+        const gridW = COLS * CELL_W - GAP;
+        const gridH = ROWS * CELL_H - GAP;
+        const offsetX = (PAGE_W - gridW) / 2;
+        const offsetY = (PAGE_H - gridH) / 2;
 
         const canvas = document.createElement('canvas');
-        canvas.width = canvasW;
-        canvas.height = canvasH;
+        canvas.width = PAGE_W;
+        canvas.height = PAGE_H;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         // White background
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvasW, canvasH);
-
-        // Title: total number of colors
-        ctx.fillStyle = '#222222';
-        ctx.font = 'bold 22px Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`${totalColors} COLORS`, canvasW / 2, PADDING_TOP / 2);
-
-        // Draw a thin line under the title
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(PADDING_X, PADDING_TOP - 10);
-        ctx.lineTo(canvasW - PADDING_X, PADDING_TOP - 10);
-        ctx.stroke();
+        ctx.fillRect(0, 0, PAGE_W, PAGE_H);
 
         // Helper: draw hexagon
         const drawHexagon = (cx: number, cy: number, r: number) => {
             ctx.beginPath();
             for (let i = 0; i < 6; i++) {
-                const angle = (Math.PI / 3) * i - Math.PI / 6; // flat-top hexagon
+                const angle = (Math.PI / 3) * i - Math.PI / 6;
                 const x = cx + r * Math.cos(angle);
                 const y = cy + r * Math.sin(angle);
                 if (i === 0) ctx.moveTo(x, y);
@@ -290,40 +264,21 @@ export default function Dashboard() {
             ctx.closePath();
         };
 
-        // Draw each color
-        colors.forEach((color, idx) => {
+        // Draw each color (hexagon only)
+        colors.forEach((hex, idx) => {
             const col = idx % COLS;
             const row = Math.floor(idx / COLS);
-            const cx = PADDING_X + col * CELL_W + HEX_W / 2;
-            const cy = PADDING_TOP + row * CELL_H + HEX_H / 2;
+            const cx = offsetX + col * CELL_W + HEX_W / 2;
+            const cy = offsetY + row * CELL_H + HEX_H / 2;
 
-            // Hexagon fill
             drawHexagon(cx, cy, HEX_RADIUS - 1);
-            ctx.fillStyle = color.hex;
+            ctx.fillStyle = hex;
             ctx.fill();
 
-            // Hexagon border
             drawHexagon(cx, cy, HEX_RADIUS - 1);
             ctx.strokeStyle = '#cccccc';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;
             ctx.stroke();
-
-            // Color name below hexagon (wrap text if needed)
-            ctx.fillStyle = '#333333';
-            ctx.font = '11px Arial, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-
-            const textY = cy + HEX_H / 2 + 4;
-            const maxTextW = CELL_W - 4;
-            const words = color.name.split(' ');
-            if (words.length > 1 && ctx.measureText(color.name).width > maxTextW) {
-                // Two-line text
-                ctx.fillText(words[0], cx, textY);
-                ctx.fillText(words.slice(1).join(' '), cx, textY + 13);
-            } else {
-                ctx.fillText(color.name, cx, textY);
-            }
         });
 
         // Download
@@ -360,13 +315,6 @@ export default function Dashboard() {
                 >
                     Import Images
                 </button>
-                <button
-                    onClick={handleImportPartialClick}
-                    className="mt-10 px-8 py-4 text-lg font-medium text-[var(--accent)] border-2 border-[var(--accent)] hover:bg-[var(--accent)]/10 rounded-xl shadow-lg transition-transform hover:scale-105 active:scale-95"
-                    title="Import images and color only the top 3/4, leaving the bottom 1/4 uncolored"
-                >
-                    🎨 Import 3/4 Color
-                </button>
                 <input
                     ref={imageInputRef}
                     type="file"
@@ -374,14 +322,6 @@ export default function Dashboard() {
                     className="hidden"
                     multiple
                     onChange={handleImageFileChange}
-                />
-                <input
-                    ref={imageInputPartialRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg"
-                    className="hidden"
-                    multiple
-                    onChange={handleImageFileChangePartial}
                 />
             </div>
         );
@@ -396,19 +336,94 @@ export default function Dashboard() {
                 <h1 className="text-2xl font-bold text-[var(--text-primary)]">
                     Dashboard ({projects.length})
                 </h1>
-                <div className="flex gap-4">
+                <div className="flex gap-4 items-center">
+                    {/* Settings Icon */}
+                    <div className="relative" ref={settingsRef}>
+                        <button
+                            onClick={() => setShowSettings(!showSettings)}
+                            className={`p-2 rounded-lg border transition-colors ${
+                                showSettings
+                                    ? 'bg-[var(--accent)]/20 border-[var(--accent)] text-[var(--accent)]'
+                                    : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'
+                            }`}
+                            title="Global Settings"
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="3" />
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                            </svg>
+                        </button>
+
+                        {/* Settings Dropdown */}
+                        {showSettings && (
+                            <div className="absolute right-0 top-full mt-2 w-72 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl shadow-2xl z-50 p-5 space-y-5">
+                                <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="3" />
+                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                    </svg>
+                                    Global Settings
+                                </h3>
+
+                                {/* Cell Size */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-xs text-[var(--text-secondary)] font-medium">Cell Size</label>
+                                        <span className="text-xs text-[var(--text-primary)] font-mono bg-[var(--bg-primary)] px-2 py-0.5 rounded">{globalCellSize}px</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min={10}
+                                        max={100}
+                                        step={1}
+                                        value={globalCellSize}
+                                        onChange={(e) => setGlobalCellSize(Number(e.target.value))}
+                                        className="w-full"
+                                    />
+                                    <p className="text-[10px] text-[var(--text-muted)] mt-1">Changing cell size will reset all completed projects</p>
+                                </div>
+
+                                <div className="border-t border-[var(--border-subtle)]" />
+
+                                {/* Toggles */}
+                                <div className="space-y-3">
+                                    <label className="flex items-center justify-between cursor-pointer group">
+                                        <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">Show Numbers</span>
+                                        <div
+                                            onClick={toggleGlobalShowNumbers}
+                                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
+                                                globalShowNumbers ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
+                                            }`}
+                                        >
+                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                                                globalShowNumbers ? 'translate-x-4' : 'translate-x-0.5'
+                                            }`} />
+                                        </div>
+                                    </label>
+
+                                    <label className="flex items-center justify-between cursor-pointer group">
+                                        <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">Show Palette</span>
+                                        <div
+                                            onClick={toggleGlobalShowPalette}
+                                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
+                                                globalShowPalette ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
+                                            }`}
+                                        >
+                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                                                globalShowPalette ? 'translate-x-4' : 'translate-x-0.5'
+                                            }`} />
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         onClick={handleImportClick}
                         className="px-4 py-2 text-sm font-medium text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg hover:bg-white/5 transition-colors"
                     >
                         + Add More
-                    </button>
-                    <button
-                        onClick={handleImportPartialClick}
-                        className="px-4 py-2 text-sm font-medium text-[var(--accent)] border border-[var(--accent)] rounded-lg hover:bg-[var(--accent)]/10 transition-colors"
-                        title="Import images – color top 3/4 only"
-                    >
-                        🎨 + Add 3/4 Color
                     </button>
                     {idleCount > 0 && (
                         <button
@@ -445,14 +460,6 @@ export default function Dashboard() {
                         className="hidden"
                         multiple
                         onChange={handleImageFileChange}
-                    />
-                    <input
-                        ref={imageInputPartialRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg"
-                        className="hidden"
-                        multiple
-                        onChange={handleImageFileChangePartial}
                     />
                 </div>
             </div>
@@ -493,10 +500,10 @@ export default function Dashboard() {
                                         </div>
                                     )}
 
-                                    {/* Partial Color Badge */}
-                                    {project.partialColor && (
+                                    {/* Split Color Badge */}
+                                    {project.partialColorMode !== 'none' && (
                                         <div className="absolute bottom-2 right-2 px-2 py-1 text-xs font-medium bg-purple-500/80 text-white rounded backdrop-blur-sm">
-                                            3/4 🎨
+                                            {SPLIT_COLOR_MODES.find(m => m.value === project.partialColorMode)?.icon} Split
                                         </div>
                                     )}
 
@@ -541,45 +548,21 @@ export default function Dashboard() {
                                             </select>
                                         </div>
 
-                                        {/* Cell Size Slider */}
-                                        <div>
-                                            <div className="flex items-center justify-between mb-1">
-                                                <label className="text-xs text-[var(--text-secondary)]">Cell Size</label>
-                                                <span className="text-xs text-[var(--text-primary)] font-mono">{project.cellSize}px</span>
+                                        {/* Split Color Mode */}
+                                        <div className="relative" ref={splitColorDropdownId === project.id ? splitColorRef : undefined}>
+                                            <label className="text-xs text-[var(--text-secondary)] block mb-1">Split Color</label>
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={project.partialColorMode}
+                                                    onChange={(e) => updateProject(project.id, { partialColorMode: e.target.value as PartialColorMode, status: 'idle' })}
+                                                    disabled={project.status === 'processing'}
+                                                    className="flex-1 text-sm bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg px-2 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                                                >
+                                                    {SPLIT_COLOR_MODES.map(m => (
+                                                        <option key={m.value} value={m.value}>{m.icon} {m.label}</option>
+                                                    ))}
+                                                </select>
                                             </div>
-                                            <input
-                                                type="range"
-                                                min={10}
-                                                max={100}
-                                                step={1}
-                                                value={project.cellSize}
-                                                onChange={(e) => setCellSize(project.id, Number(e.target.value))}
-                                                disabled={project.status === 'processing'}
-                                                className="w-full"
-                                            />
-                                        </div>
-
-                                        {/* Toggles */}
-                                        <div className="flex items-center gap-4">
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={project.showNumbers}
-                                                    onChange={() => toggleShowNumbers(project.id)}
-                                                    className="rounded border-[var(--border-default)] bg-transparent text-[var(--accent)] focus:ring-0 w-3.5 h-3.5"
-                                                />
-                                                <span className="text-xs text-[var(--text-secondary)] select-none">Numbers</span>
-                                            </label>
-
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={project.showPalette ?? true}
-                                                    onChange={() => togglePalette(project.id)}
-                                                    className="rounded border-[var(--border-default)] bg-transparent text-[var(--accent)] focus:ring-0 w-3.5 h-3.5"
-                                                />
-                                                <span className="text-xs text-[var(--text-secondary)] select-none">Palette</span>
-                                            </label>
                                         </div>
                                     </div>
 

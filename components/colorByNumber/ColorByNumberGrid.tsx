@@ -20,13 +20,12 @@ import {
   getPageLayout,
   calculatePaletteLayout,
   type PaletteLayout,
+  type PartialColorMode,
   PAL_DROPLET_COUNT,
   PALETTE_GAP_TO_GRID,
   getPalColW,
   PAGE_PADDING_X,
   PAGE_PADDING_Y,
-  DIAG_START_Y,
-  DIAG_END_Y,
 } from "@/lib/colorByNumber/export";
 import type { ColorByNumberData, ColorByNumberCell } from "@/lib/colorByNumber";
 import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
@@ -466,7 +465,7 @@ const CellPentagon = ({
   data,
   showNumbers,
   colored,
-  partialColor,
+  partialColorMode,
   gridDims,
 }: {
   cell: ColorByNumberCell;
@@ -474,17 +473,23 @@ const CellPentagon = ({
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
-  partialColor?: boolean;
+  partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
-  // Diagonal partial color check
   let isCellColored = colored;
-  if (colored && partialColor && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
-    isCellColored = ny <= diagonalY;
+    if (partialColorMode === 'diagonal-bl-tr') {
+      isCellColored = ny <= (1 - nx);
+    } else if (partialColorMode === 'diagonal-tl-br') {
+      isCellColored = ny <= nx;
+    } else if (partialColorMode === 'horizontal-middle') {
+      isCellColored = ny <= 0.5;
+    } else if (partialColorMode === 'horizontal-sides') {
+      isCellColored = ny > 0.5;
+    }
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -537,7 +542,7 @@ const CellCircle = ({
   data,
   showNumbers,
   colored,
-  partialColor,
+  partialColorMode,
   gridDims,
 }: {
   cell: ColorByNumberCell;
@@ -545,16 +550,23 @@ const CellCircle = ({
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
-  partialColor?: boolean;
+  partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColor && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
-    isCellColored = ny <= diagonalY;
+    if (partialColorMode === 'diagonal-bl-tr') {
+      isCellColored = ny <= (1 - nx);
+    } else if (partialColorMode === 'diagonal-tl-br') {
+      isCellColored = ny <= nx;
+    } else if (partialColorMode === 'horizontal-middle') {
+      isCellColored = ny <= 0.5;
+    } else if (partialColorMode === 'horizontal-sides') {
+      isCellColored = ny > 0.5;
+    }
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -600,7 +612,7 @@ const CellSquare = ({
   data,
   showNumbers,
   colored,
-  partialColor,
+  partialColorMode,
   gridDims,
 }: {
   cell: ColorByNumberCell;
@@ -608,16 +620,23 @@ const CellSquare = ({
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
-  partialColor?: boolean;
+  partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColor && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
-    isCellColored = ny <= diagonalY;
+    if (partialColorMode === 'diagonal-bl-tr') {
+      isCellColored = ny <= (1 - nx);
+    } else if (partialColorMode === 'diagonal-tl-br') {
+      isCellColored = ny <= nx;
+    } else if (partialColorMode === 'horizontal-middle') {
+      isCellColored = ny <= 0.5;
+    } else if (partialColorMode === 'horizontal-sides') {
+      isCellColored = ny > 0.5;
+    }
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -666,7 +685,7 @@ const CellDiamond = ({
   data,
   showNumbers,
   colored,
-  partialColor,
+  partialColorMode,
   gridDims,
 }: {
   cell: ColorByNumberCell;
@@ -674,16 +693,23 @@ const CellDiamond = ({
   data: ColorByNumberData;
   showNumbers: boolean;
   colored: boolean;
-  partialColor?: boolean;
+  partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColor && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
-    isCellColored = ny <= diagonalY;
+    if (partialColorMode === 'diagonal-bl-tr') {
+      isCellColored = ny <= (1 - nx);
+    } else if (partialColorMode === 'diagonal-tl-br') {
+      isCellColored = ny <= nx;
+    } else if (partialColorMode === 'horizontal-middle') {
+      isCellColored = ny <= 0.5;
+    } else if (partialColorMode === 'horizontal-sides') {
+      isCellColored = ny > 0.5;
+    }
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -743,14 +769,14 @@ const PageGrid = ({
   showNumbers,
   colored,
   layout,
-  partialColor,
+  partialColorMode,
 }: {
   data: ColorByNumberData;
   filled: Record<string, boolean>;
   showNumbers: boolean;
   colored: boolean;
   layout: PageGridLayout;
-  partialColor?: boolean;
+  partialColorMode?: PartialColorMode;
 }) => {
   const {
     gridLayout,
@@ -804,7 +830,7 @@ const PageGrid = ({
               data={data}
               showNumbers={showNumbers}
               colored={colored}
-              partialColor={partialColor}
+              partialColorMode={partialColorMode}
               gridDims={gridDims}
             />
           ))}
@@ -827,6 +853,8 @@ export default function ColorByNumberGrid({
     activeProjectId, // Use active project data
     projects,
     updateActiveProject, // To update zoom/pan/filled
+    globalShowNumbers,
+    globalShowPalette,
   } = useColorByNumberStore();
 
   // Helper to get active project data safely
@@ -836,9 +864,9 @@ export default function ColorByNumberGrid({
   const zoom = activeProject?.zoom || 1;
   const panX = activeProject?.panX || 0;
   const panY = activeProject?.panY || 0;
-  const showNumbers = activeProject?.showNumbers ?? true;
-  const showPalette = activeProject?.showPalette ?? true;
-  const partialColor = activeProject?.partialColor ?? false;
+  const showNumbers = globalShowNumbers;
+  const showPalette = globalShowPalette;
+  const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
   const importedImageDataUrl = activeProject?.thumbnailDataUrl || null;
   
   // Actions wrapper
@@ -1058,7 +1086,7 @@ export default function ColorByNumberGrid({
               showNumbers={showNumbers}
               colored={true}
               layout={pageLayout}
-              partialColor={partialColor}
+              partialColorMode={partialColorMode}
             />
             {/* Page Border/Shadow for realism */}
             <rect 

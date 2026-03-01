@@ -9,10 +9,8 @@ import type { ColorByNumberData, FilledMap } from "./types";
 import { getGridDimensions, getCellLayout } from "./layoutCalculator";
 import type { ColorByNumberCell } from "./types";
 
-/** Diagonal cut: line from bottom-left (x=0, y=DIAG_START_Y) to mid-right (x=1, y=DIAG_END_Y).
- *  Cells above the line are colored, below are uncolored (smaller portion). */
-export const DIAG_START_Y = 0.95; // slightly above bottom-left corner
-export const DIAG_END_Y = 0.50;   // middle of the right side
+/** Partial color split mode type */
+export type PartialColorMode = 'none' | 'diagonal-bl-tr' | 'diagonal-tl-br' | 'horizontal-middle' | 'horizontal-sides';
 import { getPaletteColorName } from "@/lib/palette";
 
 /** 300 DPI for crisp print-quality exports */
@@ -741,14 +739,14 @@ export const exportToCanvas = (
     showCodes?: boolean;
     colored?: boolean;
     showPalette?: boolean;
-    /** Ratio of rows (from top) to color. 0.75 = top 3/4 colored, bottom 1/4 uncolored */
-    coloredRatio?: number;
+    /** Split color mode for partial coloring */
+    partialColorMode?: PartialColorMode;
   },
 ): HTMLCanvasElement => {
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
   const showPalette = options.showPalette ?? true;
-  const coloredRatio = options.coloredRatio ?? 1;
+  const partialColorMode = options.partialColorMode ?? 'none';
 
   // Page dimensions: strict 8.5x11 @ 300DPI
   const pageW = EXPORT_PAGE_W;
@@ -836,14 +834,27 @@ export const exportToCanvas = (
 
   const renderCell = (cell: ColorByNumberCell, filledCell: boolean) => {
     const cl = getCellLayout(cell.x, cell.y, data);
-    // When coloredRatio < 1, use diagonal cut: line from top-left to mid-right
+    // When partialColorMode is active, determine which cells are colored
     let isCellColored = colored;
-    if (colored && coloredRatio < 1) {
+    if (colored && partialColorMode !== 'none') {
       const nx = cl.cx / gridDims.width;  // 0..1 horizontal
       const ny = cl.cy / gridDims.height; // 0..1 vertical
-      // Diagonal line: y = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * x
-      const diagonalY = DIAG_START_Y + (DIAG_END_Y - DIAG_START_Y) * nx;
-      isCellColored = ny <= diagonalY;
+      
+      if (partialColorMode === 'diagonal-bl-tr') {
+        // Diagonal from bottom-left to top-right: colored above the line
+        // Line: y = 1 - x (in normalized coords)
+        isCellColored = ny <= (1 - nx);
+      } else if (partialColorMode === 'diagonal-tl-br') {
+        // Diagonal from top-left to bottom-right: colored above the line
+        // Line: y = x
+        isCellColored = ny <= nx;
+      } else if (partialColorMode === 'horizontal-middle') {
+        // Horizontal cut: top half colored, bottom half uncolored
+        isCellColored = ny <= 0.5;
+      } else if (partialColorMode === 'horizontal-sides') {
+        // Horizontal cut inverted: bottom half colored, top half uncolored
+        isCellColored = ny > 0.5;
+      }
     }
     const fillColor = isCellColored
       ? getCellFillColor(cell.color, filledCell)

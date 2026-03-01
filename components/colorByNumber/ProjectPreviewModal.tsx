@@ -23,7 +23,10 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
       setZoom, 
       setPan, 
       removeProject,
-      activeProjectId
+      activeProjectId,
+      globalShowNumbers,
+      globalShowPalette,
+      globalCellSize,
   } = useColorByNumberStore();
 
   // Set active project on mount if not already
@@ -78,22 +81,24 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
       
       // Colored
       const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
-          showCodes: activeProject.showNumbers,
+          showCodes: globalShowNumbers,
           colored: true,
-          showPalette: activeProject.showPalette ?? true,
-          coloredRatio: activeProject.partialColor ? 0.75 : 1,
+          showPalette: globalShowPalette,
+          partialColorMode: activeProject.partialColorMode,
       });
       downloadCanvas(canvas1, `colored-${baseName}.png`);
 
-      // Uncolored
-      setTimeout(() => {
-          const canvas2 = exportToCanvas(activeProject.data!, activeProject.filled, {
-              showCodes: activeProject.showNumbers,
-              colored: false,
-              showPalette: activeProject.showPalette ?? true,
-          });
-          downloadCanvas(canvas2, `uncolored-${baseName}.png`);
-      }, 500);
+      // Uncolored (only for full color projects)
+      if (activeProject.partialColorMode === 'none') {
+          setTimeout(() => {
+              const canvas2 = exportToCanvas(activeProject.data!, activeProject.filled, {
+                  showCodes: globalShowNumbers,
+                  colored: false,
+                  showPalette: globalShowPalette,
+              });
+              downloadCanvas(canvas2, `uncolored-${baseName}.png`);
+          }, 500);
+      }
   };
 
   return (
@@ -107,7 +112,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                 <div>
                     <h3 className="text-lg font-semibold text-[var(--text-primary)]">{activeProject.name}</h3>
                     <p className="text-sm text-[var(--text-secondary)]">
-                        {activeProject.gridType} • {activeProject.cellSize}px • {activeProject.zoom * 100}%
+                        {activeProject.gridType} • {globalCellSize}px • {activeProject.zoom * 100}%
                     </p>
                 </div>
             </div>
