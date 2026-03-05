@@ -278,7 +278,7 @@ const PaletteColumnSVG = ({
 
               const w = sDW;
               const h = sDH;
-              
+
               const tipY = dropTop;
               const bottomY = dropTop + h;
               const halfW = w / 2;
@@ -312,7 +312,7 @@ const PaletteColumnSVG = ({
                   {/* Fill */}
                   {isFull && <path d={pathData} fill={color} />}
                   {isHalf && (
-                     <path d={pathData} fill={color} clipPath={`url(#${clipId})`} />
+                    <path d={pathData} fill={color} clipPath={`url(#${clipId})`} />
                   )}
 
                   {/* Outline */}
@@ -369,7 +369,7 @@ const PaletteColumnSVG = ({
                 if (shape === "diamond") {
                   // Approximating diamond with rotated rect
                   const side = r * 2 * 0.707 * 0.9;
-                   return (
+                  return (
                     <g key={i} transform={`rotate(45, ${shapeX}, ${shapeY})`}>
                       <rect
                         x={shapeX - side / 2}
@@ -423,23 +423,6 @@ const PaletteColumnSVG = ({
                   paddingRight: sInputPad * 1.5,
                 }}
               >
-                <span className="shrink-0 text-black" aria-hidden>
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="rotate-[-20deg]"
-                  >
-                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                    <path d="M2 2l7.586 7.586" />
-                  </svg>
-                </span>
                 <input
                   type="text"
                   className="min-w-0 flex-1 border-0 bg-transparent pb-0.5 text-center text-xs text-[#333] outline-none placeholder:text-[#999]"
@@ -868,11 +851,11 @@ export default function ColorByNumberGrid({
   const showPalette = globalShowPalette;
   const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
   const importedImageDataUrl = activeProject?.thumbnailDataUrl || null;
-  
+
   // Actions wrapper
   const setZoom = (z: number) => updateActiveProject({ zoom: z });
   const setPan = (x: number, y: number) => updateActiveProject({ panX: x, panY: y });
-  
+
   const fillCell = (x: number, y: number) => {
     if (!activeProject || !data || !activeProject.selectedCode) return;
     const cell = data.cells.find((c) => c.x === x && c.y === y);
@@ -897,37 +880,37 @@ export default function ColorByNumberGrid({
     // Palette width available is full page width - padding
     const paletteAvailableW = LETTER_OUTPUT_WIDTH - PAGE_PADDING_X * 2;
     let pLayout: PaletteLayout | null = null;
-    
+
     // Only calculate palette layout if enabled
     if (showPalette) {
       pLayout = calculatePaletteLayout(data, paletteAvailableW, { vertical: true });
     }
-    
-    const PALETTE_GAP = 30; 
+
+    const PALETTE_GAP = 30;
     const paletteWidth = pLayout ? pLayout.palColW : 0;
-    
+
     // Add 40px to available width (Palette moved left into margin)
     // Only applies if palette is shown? Or maybe we want consistent grid position?
     // Requirement: "nếu hide thì cho ảnh hiển thị full" (if hide, show image full)
     // So if hidden, we reclaim the space.
-    
+
     const PALETTE_X_OFFSET = -40; // Only relevant if palette is present
-    
+
     // If palette is hidden, paletteWidth is 0. 
     // visual available width = paletteAvailableW
-    
+
     const maxGridW = Math.max(
-        0, 
-        paletteAvailableW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - (paletteWidth > 0 ? PALETTE_X_OFFSET : 0)
+      0,
+      paletteAvailableW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - (paletteWidth > 0 ? PALETTE_X_OFFSET : 0)
     );
-    
+
     const maxGridH =
       LETTER_OUTPUT_HEIGHT - PAGE_PADDING_Y * 2; // full height available
 
     const gridLayout = getPageLayout(data, maxGridW, maxGridH);
-    
+
     const gridVisualTop = PAGE_PADDING_Y;
-    
+
     return {
       gridLayout,
       paletteLayout: pLayout,
@@ -941,15 +924,15 @@ export default function ColorByNumberGrid({
     (width - 40) / (LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP), // 2 pages side by side
     (height - 40) / LETTER_OUTPUT_HEIGHT,
   );
-  
+
   // Actually, we usually show just ONE page (the colored/uncolored one) or both?
   // The code below renders BOTH side-by-side. 
   // User might only want to zoom into one?
   // For now, keep existing logic: 2 pages side-by-side.
-  
+
   const totalContentW = LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
   const totalContentH = LETTER_OUTPUT_HEIGHT;
-  
+
   // Initial center (before pan)
   const centerX = (width - totalContentW * pageScale) / 2;
   const centerY = (height - totalContentH * pageScale) / 2;
@@ -966,9 +949,9 @@ export default function ColorByNumberGrid({
     if (!isDragging || !lastPointer) return;
     const dx = e.clientX - lastPointer.x;
     const dy = e.clientY - lastPointer.y;
-    
+
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        didPanRef.current = true;
+      didPanRef.current = true;
     }
 
     setPan(panX + dx, panY + dy);
@@ -987,7 +970,7 @@ export default function ColorByNumberGrid({
 
     // Transform screen coordinates to SVG coordinates
     // We need to inverse the transform: translate(pan) -> scale(zoom) -> translate(center) -> scale(pageScale)
-    
+
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -1001,11 +984,11 @@ export default function ColorByNumberGrid({
     // Inverse Zoom (pivot is center of screen? No, Zoom is usually around center or applied to group)
     // The render transform is:
     // translate(centerX + panX, centerY + panY) scale(pageScale * zoom)
-    
+
     // So:
     // x_local = (mouseX - (centerX + panX)) / (pageScale * zoom)
     // y_local = (mouseY - (centerY + panY)) / (pageScale * zoom)
-    
+
     const scale = pageScale * zoom;
     const localX = (mouseX - (centerX + panX)) / scale;
     const localY = (mouseY - (centerY + panY)) / scale;
@@ -1013,40 +996,40 @@ export default function ColorByNumberGrid({
     // Identify which page was clicked
     // Left Page (Colored): x range [0, LETTER_OUTPUT_WIDTH]
     // Right Page (Uncolored): x range [LETTER_OUTPUT_WIDTH + PAGE_GAP, LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP]
-    
+
     // Since both pages display the SAME grid (just different rendering), checking against either is fine for finding the cell.
     // However, the Grid Render inside PageGrid has its own transform.
-    
+
     let hitX = -1;
     let hitY = -1;
-    
+
     // Check Left Page
     if (localX >= 0 && localX <= LETTER_OUTPUT_WIDTH && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
-        hitX = localX;
-        hitY = localY;
-    } 
+      hitX = localX;
+      hitY = localY;
+    }
     // Check Right Page
     else if (localX >= LETTER_OUTPUT_WIDTH + PAGE_GAP && localX <= totalContentW && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
-        hitX = localX - (LETTER_OUTPUT_WIDTH + PAGE_GAP);
-        hitY = localY;
+      hitX = localX - (LETTER_OUTPUT_WIDTH + PAGE_GAP);
+      hitY = localY;
     }
 
     if (hitX >= 0 && hitY >= 0) {
-        // Inverse PageGrid transform
-        // transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
-        
-        const { gridLayout, paletteLayout, gridVisualTop } = pageLayout;
-        const gridXOffset = PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX;
-        const gridYOffset = gridVisualTop;
-        const gridScale = gridLayout.scale;
-        
-        const cellX = (hitX - gridXOffset) / gridScale;
-        const cellY = (hitY - gridYOffset) / gridScale;
-        
-        const cell = hitTestCell(cellX, cellY, data);
-        if (cell) {
-            fillCell(cell.x, cell.y);
-        }
+      // Inverse PageGrid transform
+      // transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
+
+      const { gridLayout, paletteLayout, gridVisualTop } = pageLayout;
+      const gridXOffset = PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX;
+      const gridYOffset = gridVisualTop;
+      const gridScale = gridLayout.scale;
+
+      const cellX = (hitX - gridXOffset) / gridScale;
+      const cellY = (hitY - gridYOffset) / gridScale;
+
+      const cell = hitTestCell(cellX, cellY, data);
+      if (cell) {
+        fillCell(cell.x, cell.y);
+      }
     }
   };
 
@@ -1089,10 +1072,10 @@ export default function ColorByNumberGrid({
               partialColorMode={partialColorMode}
             />
             {/* Page Border/Shadow for realism */}
-            <rect 
-                x={0} y={0} 
-                width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT} 
-                fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1" 
+            <rect
+              x={0} y={0}
+              width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT}
+              fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1"
             />
           </g>
 
@@ -1105,12 +1088,12 @@ export default function ColorByNumberGrid({
               colored={false}
               layout={pageLayout}
             />
-             <rect 
-                x={0} y={0} 
-                width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT} 
-                fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1" 
+            <rect
+              x={0} y={0}
+              width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT}
+              fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1"
             />
-            
+
             {/* Add Thumbnail to Top Right of Right Page */}
             {/* Thumbnail Removed */}
           </g>

@@ -66,10 +66,13 @@ const resizeImageToSize = (
  */
 const cropToAspectRatio = (
   img: HTMLImageElement,
-  targetRatio: number
+  targetRatio: number,
 ): HTMLCanvasElement => {
   const currentRatio = img.width / img.height;
-  let sx = 0, sy = 0, sw = img.width, sh = img.height;
+  let sx = 0,
+    sy = 0,
+    sw = img.width,
+    sh = img.height;
 
   if (currentRatio > targetRatio) {
     // Too wide: Crop width
@@ -80,13 +83,13 @@ const cropToAspectRatio = (
     sh = img.width / targetRatio;
     sy = (img.height - sh) / 2;
   }
-  
+
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(sw);
   canvas.height = Math.round(sh);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not get crop context");
-  
+
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
   return canvas;
 };
@@ -104,14 +107,20 @@ const removeGeminiWatermark = (img: HTMLImageElement): HTMLCanvasElement => {
 
   canvas.width = img.width - cropX * 2;
   canvas.height = img.height - cropY * 2;
-  
+
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not get crop context");
-  
+
   ctx.drawImage(
-    img, 
-    cropX, cropY, canvas.width, canvas.height, 
-    0, 0, canvas.width, canvas.height
+    img,
+    cropX,
+    cropY,
+    canvas.width,
+    canvas.height,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
   );
   return canvas;
 };
@@ -169,26 +178,26 @@ export const imageToColorByNumber = async (
   // 1. Load + Crop Watermark + Crop to Aspect Ratio + Resize
   // Enforce 7 x 10.2 inch aspect ratio (~0.686)
   const TARGET_ASPECT = 7.0 / 10.2;
-  
+
   const rawImg = await loadImageFromFile(file);
 
   // Remove Gemini watermark before applying aspect ratio crop
   const watermarkRemovedCanvas = removeGeminiWatermark(rawImg);
   const watermarkRemovedImg = new Image();
   watermarkRemovedImg.src = watermarkRemovedCanvas.toDataURL();
-  await new Promise(r => watermarkRemovedImg.onload = r);
+  await new Promise((r) => (watermarkRemovedImg.onload = r));
 
   // Crop to ensure aspect ratio
   // We can treat the cropped canvas as an image for resizeImage
   const croppedCanvas = cropToAspectRatio(watermarkRemovedImg, TARGET_ASPECT);
-  
+
   // Convert canvas to image for existing pipeline
   const croppedImg = new Image();
   croppedImg.src = croppedCanvas.toDataURL();
-  await new Promise(r => croppedImg.onload = r);
+  await new Promise((r) => (croppedImg.onload = r));
 
   const baseData = resizeImage(croppedImg, maxWidth);
-  
+
   // Original `img` usage:
   // - used in resizeImageToSize
   // So we should replace `img` with `croppedImg` for rest of scope.
@@ -228,6 +237,36 @@ export const imageToColorByNumber = async (
   // 24 colors is a good balance: enough for detail, small enough for labeling.
   const { palette: initialPalette } = quantizeImage(imageData, 24);
 
+  // DEBUG: Log the quantized palette to understand what colors the quantizer produces
+  console.log(
+    "[CBN] Quantized palette (" + initialPalette.length + " colors):",
+  );
+  initialPalette.forEach((c, i) => {
+    const hex = rgbToHex(c);
+    console.log(`  [${i}] rgb(${c.r},${c.g},${c.b}) = ${hex}`);
+  });
+
+  // 5a. FORCE-ADD PURE WHITE TO PALETTE
+  // The quantizer (rgbquant) often lumps white and light beige into a single cluster
+  // when the image has many competing vibrant colors. Force-adding pure white ensures
+  // white areas (faces, highlights) are correctly separated from backgrounds.
+  // Also snap any existing near-white palette colors to pure white.
+  let hasWhite = false;
+  for (let i = 0; i < initialPalette.length; i++) {
+    const c = initialPalette[i];
+    if (c.r >= 245 && c.g >= 245 && c.b >= 245) {
+      // Already close to pure white, snap it
+      initialPalette[i] = { r: 255, g: 255, b: 255 };
+      hasWhite = true;
+    }
+  }
+  if (!hasWhite) {
+    // No white-ish color was found in the quantized palette — force-add one.
+    // This is critical for images with white areas that the quantizer missed.
+    initialPalette.push({ r: 255, g: 255, b: 255 });
+    console.log("[CBN] Force-added pure white to palette (was missing)");
+  }
+
   // 5b. DEDUPLICATE Dynamic Palette
   // Merge colors that are perceptually very close (e.g. 2 shades of orange).
   // Threshold 12.0 is generous enough to merge subtle variations.
@@ -235,6 +274,13 @@ export const imageToColorByNumber = async (
     initialPalette,
     12.0,
   );
+
+  console.log("[CBN] After dedup (" + dynamicPalette.length + " colors):");
+  dynamicPalette.forEach((c, i) => {
+    const hex = rgbToHex(c);
+    const w = isWhite(c) ? " [WHITE]" : "";
+    console.log(`  [${i}] rgb(${c.r},${c.g},${c.b}) = ${hex}${w}`);
+  });
 
   // 6. Create mosaic blocks using the DYNAMIC palette
   // This ensures "Orange" in image stays "Orange" even if it's not in the 24 basic colors.
@@ -250,7 +296,6 @@ export const imageToColorByNumber = async (
   // Merge colors that appear in fewer than 10 blocks into their nearest neighbor.
   // This removes 1-2 pixel "dust" that is annoying to paint.
   rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
-
 
   // 7. Reduce to only used palette colors (remap indices to 0..K-1)
   const { blocks, palette: usedPalette } = reduceToUsedPalette(

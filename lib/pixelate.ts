@@ -5,6 +5,14 @@
 import type { RGB } from "./utils";
 import { paletteIndexToLabel, getLetterSizeFit, isWhite } from "./utils";
 
+/**
+ * Near-white check: more lenient than isWhite (≥250).
+ * Catches off-whites that quantizers produce (e.g. 240,238,234)
+ * which are perceptually white but fail the strict threshold.
+ * Used to prevent merging white-ish colors with gray/beige.
+ */
+const isNearWhite = (c: RGB): boolean => c.r >= 225 && c.g >= 225 && c.b >= 225;
+
 export interface MosaicBlock {
   x: number;
   y: number;
@@ -56,10 +64,7 @@ const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
   const Cbar = (C1 + C2) / 2;
   const G =
     0.5 *
-    (1 -
-      Math.sqrt(
-        Math.pow(Cbar, 7) / (Math.pow(Cbar, 7) + Math.pow(25, 7)),
-      ));
+    (1 - Math.sqrt(Math.pow(Cbar, 7) / (Math.pow(Cbar, 7) + Math.pow(25, 7))));
   const a1p = a1 * (1 + G);
   const a2p = a2 * (1 + G);
   const C1p = Math.sqrt(a1p * a1p + b1 * b1);
@@ -74,8 +79,7 @@ const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
     if (dhp > Math.PI) dhp -= 2 * Math.PI;
     else if (dhp < -Math.PI) dhp += 2 * Math.PI;
   }
-  const dHp =
-    2 * Math.sqrt(C1p * C2p) * Math.sin(dhp / 2);
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(dhp / 2);
 
   const Lpbar = (L1 + L2) / 2;
   const Cpbar = (C1p + C2p) / 2;
@@ -93,14 +97,10 @@ const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
     0.2 * Math.cos(4 * hpbar - (63 * Math.PI) / 180);
   const dtheta = 30 * Math.exp(-Math.pow(hpbar - (275 * Math.PI) / 180, 2));
   const Rc =
-    2 *
-    Math.sqrt(
-      Math.pow(Cpbar, 7) / (Math.pow(Cpbar, 7) + Math.pow(25, 7)),
-    );
+    2 * Math.sqrt(Math.pow(Cpbar, 7) / (Math.pow(Cpbar, 7) + Math.pow(25, 7)));
   const Sl =
     1 +
-    (0.015 * Math.pow(Lpbar - 50, 2)) /
-      Math.sqrt(20 + Math.pow(Lpbar - 50, 2));
+    (0.015 * Math.pow(Lpbar - 50, 2)) / Math.sqrt(20 + Math.pow(Lpbar - 50, 2));
   const Sc = 1 + 0.045 * Cpbar;
   const Sh = 1 + 0.015 * Cpbar * T;
   const Rt = -Math.sin(2 * dtheta * (Math.PI / 180)) * Rc;
@@ -117,10 +117,7 @@ const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
  * Find palette index whose color is perceptually closest to the given Lab.
  * Uses CIEDE2000; paletteLab is pre-computed to avoid repeated rgbToLab.
  */
-const findPaletteIndexFromLab = (
-  lab: Lab,
-  paletteLab: Lab[],
-): number => {
+const findPaletteIndexFromLab = (lab: Lab, paletteLab: Lab[]): number => {
   let minDeltaE = Infinity;
   let bestIndex = 0;
   for (let i = 0; i < paletteLab.length; i++) {
@@ -167,7 +164,14 @@ const ditherToPalette = (
     bF[i] = data[j + 2];
   }
 
-  const addError = (x: number, y: number, er: number, eg: number, eb: number, factor: number) => {
+  const addError = (
+    x: number,
+    y: number,
+    er: number,
+    eg: number,
+    eb: number,
+    factor: number,
+  ) => {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
     const idx = y * width + x;
     rF[idx] += er * factor;
@@ -181,7 +185,11 @@ const ditherToPalette = (
       const r = Math.max(0, Math.min(255, rF[idx]));
       const g = Math.max(0, Math.min(255, gF[idx]));
       const b = Math.max(0, Math.min(255, bF[idx]));
-      const pixelColor: RGB = { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+      const pixelColor: RGB = {
+        r: Math.round(r),
+        g: Math.round(g),
+        b: Math.round(b),
+      };
       const palIdx = findPaletteIndex(pixelColor, palette, paletteLab);
       const pal = palette[palIdx];
       const j = (y * width + x) * 4;
@@ -333,12 +341,7 @@ export const createMosaicBlocks = (
       for (let col = 0; col < cols; col++) {
         const blockX = col * blockSize;
         const blockY = row * blockSize;
-        const pixelLabs = blockPixelLabs(
-          imageData,
-          blockX,
-          blockY,
-          blockSize,
-        );
+        const pixelLabs = blockPixelLabs(imageData, blockX, blockY, blockSize);
         const bestIndex =
           pixelLabs.length > 0
             ? bestPaletteIndexByMinTotalError(pixelLabs, paletteLab)
@@ -462,6 +465,10 @@ export const deduplicatePaletteDynamic = (
       if (indexMap[j] !== -1) continue; // already merged
       const d = deltaE2000(paletteLab[i], paletteLab[j]);
       if (d < threshold) {
+        // Never merge near-white with non-near-white (prevents white face → gray background)
+        const iIsNW = isNearWhite(palette[i]);
+        const jIsNW = isNearWhite(palette[j]);
+        if (iIsNW !== jIsNW) continue;
         indexMap[j] = newIdx;
       }
     }
@@ -510,6 +517,9 @@ export const mergeMinorColors = (
   const remap = new Map<number, number>();
 
   for (const minorIdx of minorIndices) {
+    // Never merge near-white into non-white (keep white as distinct color)
+    if (isNearWhite(palette[minorIdx])) continue;
+
     let bestMajorIdx = majorIndices[0];
     let minDiff = Infinity;
     const minorLab = paletteLab[minorIdx];

@@ -12,9 +12,14 @@ import {
 } from "./utils";
 import { getPaletteColorName } from "./palette";
 import { renderNumberedTemplateToCanvas } from "./pixelate";
-import { renderToCanvas, PAGE_WIDTH_PX, PAGE_HEIGHT_PX, GRID_PADDING_PX } from "./grid";
+import {
+  renderToCanvas,
+  PAGE_WIDTH_PX,
+  PAGE_HEIGHT_PX,
+  renderPaletteColumn,
+  getPaletteColumnWidth,
+} from "./grid";
 import type { GridConfig, ExportMode, PaletteExportInfo } from "./grid";
-import { renderPaletteColumn, getPaletteColumnWidth } from "./grid";
 
 const downloadCanvasAsImage = (
   canvas: HTMLCanvasElement,
@@ -163,4 +168,3 @@ export const exportGridTemplate = (
         : "template";
   downloadCanvasAsImage(canvas, `grid-${suffix}-${Date.now()}.png`);
 };
-
