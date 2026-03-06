@@ -2,8 +2,7 @@
 
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ColorByNumberGridType } from "@/lib/colorByNumber";
-import type { PartialColorMode } from "@/lib/colorByNumber";
+import type { ColorByNumberGridType, PartialColorMode } from "@/lib/colorByNumber";
 import ProjectPreviewModal from "./ProjectPreviewModal";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -72,13 +71,16 @@ export default function Dashboard() {
                 const fileList = Array.from(files).sort((a, b) =>
                     a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
                 );
-
-                // Pattern cycle: Square -> Circle -> Diamond -> Pentagon
+                // Pattern cycle: Square -> Circle -> Diamond -> Pentagon -> Puzzle -> Islamic -> Fish Scale -> Trapezoid
                 const patternCycle: ColorByNumberGridType[] = [
-                    "standard",  // 1: Square
-                    "honeycomb", // 2: Circle
-                    "diamond",   // 3: Diamond
-                    "pentagon"   // 4: Pentagon
+                    "standard",
+                    "honeycomb",
+                    "diamond",
+                    "pentagon",
+                    "puzzle",
+                    "islamic",
+                    "fish-scale",
+                    "trapezoid",
                 ];
 
                 // Process sequentially to read files
@@ -194,15 +196,15 @@ export default function Dashboard() {
             if (!project.data) continue;
             for (const cell of project.data.cells) {
                 const hex = cell.color.toLowerCase();
-                
+
                 const r = parseInt(hex.slice(1, 3), 16);
                 const g = parseInt(hex.slice(3, 5), 16);
                 const b = parseInt(hex.slice(5, 7), 16);
                 const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                
+
                 // Skip white / near-white
                 if (brightness >= 250) continue;
-                
+
                 // Store exact unique hex
                 uniqueColors.add(hex);
             }
@@ -293,10 +295,14 @@ export default function Dashboard() {
     };
 
     const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [
-        { value: "standard", label: "Hình vuông" },
-        { value: "honeycomb", label: "Hình tròn" },
-        { value: "diamond", label: "Hình thoi" },
-        { value: "pentagon", label: "Ngũ giác" },
+        { value: "standard", label: "Square" },
+        { value: "honeycomb", label: "Circle" },
+        { value: "diamond", label: "Diamond" },
+        { value: "pentagon", label: "Hexagon" },
+        { value: "puzzle", label: "Puzzle" },
+        { value: "islamic", label: "Islamic" },
+        { value: "fish-scale", label: "Fish Scale" },
+        { value: "trapezoid", label: "Trapezoid" },
     ];
 
     // Logic: 
@@ -306,13 +312,6 @@ export default function Dashboard() {
     if (projects.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-full w-full p-8 text-center">
-                <div className="mb-6 p-6 bg-[var(--bg-secondary)] rounded-full">
-                    <span className="text-6xl">📷</span>
-                </div>
-                <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-2">Start Your Project</h2>
-                <p className="text-[var(--text-secondary)] mb-8 max-w-md">
-                    Import images to create color-by-number templates. You can process multiple images at once.
-                </p>
                 <button
                     onClick={handleImportClick}
                     className="px-8 py-4 text-lg font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl shadow-lg transition-transform hover:scale-105 active:scale-95"
@@ -345,11 +344,10 @@ export default function Dashboard() {
                     <div className="relative" ref={settingsRef}>
                         <button
                             onClick={() => setShowSettings(!showSettings)}
-                            className={`p-2 rounded-lg border transition-colors ${
-                                showSettings
-                                    ? 'bg-[var(--accent)]/20 border-[var(--accent)] text-[var(--accent)]'
-                                    : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'
-                            }`}
+                            className={`p-2 rounded-lg border transition-colors ${showSettings
+                                ? 'bg-[var(--accent)]/20 border-[var(--accent)] text-[var(--accent)]'
+                                : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'
+                                }`}
                             title="Global Settings"
                         >
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -395,13 +393,11 @@ export default function Dashboard() {
                                         <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">Show Numbers</span>
                                         <div
                                             onClick={toggleGlobalShowNumbers}
-                                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
-                                                globalShowNumbers ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
-                                            }`}
+                                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${globalShowNumbers ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
+                                                }`}
                                         >
-                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                                                globalShowNumbers ? 'translate-x-4' : 'translate-x-0.5'
-                                            }`} />
+                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${globalShowNumbers ? 'translate-x-4' : 'translate-x-0.5'
+                                                }`} />
                                         </div>
                                     </label>
 
@@ -409,13 +405,11 @@ export default function Dashboard() {
                                         <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">Show Palette</span>
                                         <div
                                             onClick={toggleGlobalShowPalette}
-                                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
-                                                globalShowPalette ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
-                                            }`}
+                                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${globalShowPalette ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
+                                                }`}
                                         >
-                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                                                globalShowPalette ? 'translate-x-4' : 'translate-x-0.5'
-                                            }`} />
+                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${globalShowPalette ? 'translate-x-4' : 'translate-x-0.5'
+                                                }`} />
                                         </div>
                                     </label>
                                 </div>

@@ -3,7 +3,7 @@
  * Precise position logic for each grid pattern.
  */
 
-import type { ColorByNumberGridType, ColorByNumberData } from "./types";
+import type { ColorByNumberData } from "./types";
 
 export interface CellLayout {
   /** Center X in grid coordinates */
@@ -13,7 +13,15 @@ export interface CellLayout {
   /** Radius for circle (honeycomb), half-edge for diamond/square */
   r: number;
   /** Shape type per cell */
-  shape: "circle" | "square" | "diamond" | "pentagon";
+  shape:
+    | "circle"
+    | "square"
+    | "diamond"
+    | "pentagon"
+    | "puzzle"
+    | "islamic"
+    | "fish-scale"
+    | "trapezoid";
 }
 
 const CELL_GAP_DEFAULT = 2;
@@ -43,7 +51,7 @@ const getHoneycombCellLayout = (
   x: number,
   y: number,
   cellSize: number,
-  gap: number,
+  _gap: number,
 ): CellLayout => {
   const r = cellSize / 2;
   const rowStep = Math.sqrt(3) * r;
@@ -122,6 +130,85 @@ const getPentagonCellLayout = (
   return { cx, cy, r, shape: "pentagon" };
 };
 
+/**
+ * Puzzle Grid – puzzle pieces on a standard grid.
+ * Same positioning as standard grid (square cells), but with shape="puzzle"
+ * so the renderer draws interlocking jigsaw tabs/blanks.
+ */
+const getPuzzleCellLayout = (
+  x: number,
+  y: number,
+  cellSize: number,
+  _gap: number,
+): CellLayout => {
+  const cx = x * cellSize + cellSize / 2;
+  const cy = y * cellSize + cellSize / 2;
+  const r = cellSize / 2;
+  return { cx, cy, r, shape: "puzzle" };
+};
+
+/**
+ * Islamic Grid – star-and-cross tiles on a standard grid.
+ * Same positioning as standard grid, shape="islamic" for renderer.
+ */
+const getIslamicCellLayout = (
+  x: number,
+  y: number,
+  cellSize: number,
+  _gap: number,
+): CellLayout => {
+  const cx = x * cellSize + cellSize / 2;
+  const cy = y * cellSize + cellSize / 2;
+  const r = cellSize / 2;
+  return { cx, cy, r, shape: "islamic" };
+};
+
+/**
+ * Fish Scale Grid - overlapping circular cells.
+ * rowStep = r (50% vertical overlap)
+ * rowOffset = (y % 2 === 1) ? r : 0
+ */
+const getFishScaleCellLayout = (
+  x: number,
+  y: number,
+  cellSize: number,
+  _gap: number,
+): CellLayout => {
+  const r = cellSize / 2;
+  const rowStep = r;
+  const rowOffset = y % 2 === 1 ? r : 0;
+  const cx = x * cellSize + r + rowOffset;
+  const cy = (y + 0.5) * rowStep;
+  return { cx, cy, r, shape: "fish-scale" };
+};
+
+/**
+ * Trapezoid Grid – vertical columns with zigzag dividers.
+ * Vertices for (x, y):
+ * delta(k) = (k % 2 === 0) ? 0 : slant
+ * P1: (x*W, y*H + delta(x))
+ * P2: ((x+1)*W, y*H + delta(x+1))
+ * P3: ((x+1)*W, (y+1)*H + delta(x+1))
+ * P4: (x*W, (y+1)*H + delta(x))
+ */
+export const TRAPEZOID_SLANT_FACTOR = 0.25;
+
+const getTrapezoidCellLayout = (
+  x: number,
+  y: number,
+  cellSize: number,
+  _gap: number,
+): CellLayout => {
+  const slant = cellSize * TRAPEZOID_SLANT_FACTOR;
+  const deltaX = x % 2 === 0 ? 0 : slant;
+  const deltaX1 = (x + 1) % 2 === 0 ? 0 : slant;
+
+  const cx = x * cellSize + cellSize / 2;
+  const cy = y * cellSize + cellSize / 2 + (deltaX + deltaX1) / 2;
+  const r = cellSize / 2;
+  return { cx, cy, r, shape: "trapezoid" };
+};
+
 export const getCellLayout = (
   x: number,
   y: number,
@@ -137,6 +224,14 @@ export const getCellLayout = (
       return getDiamondCellLayout(x, y, cellSize, gap);
     case "pentagon":
       return getPentagonCellLayout(x, y, cellSize, gap);
+    case "puzzle":
+      return getPuzzleCellLayout(x, y, cellSize, gap);
+    case "islamic":
+      return getIslamicCellLayout(x, y, cellSize, gap);
+    case "fish-scale":
+      return getFishScaleCellLayout(x, y, cellSize, gap);
+    case "trapezoid":
+      return getTrapezoidCellLayout(x, y, cellSize, gap);
     case "standard":
     default:
       return getStandardCellLayout(x, y, cellSize, gap);
@@ -177,6 +272,22 @@ export const getGridDimensions = (
     return { width: gridW, height: gridH };
   }
 
+  if (gridType === "fish-scale") {
+    const r = cellSize / 2;
+    const rowStep = r;
+    const gridW = width * cellSize + (height > 1 ? r : 0);
+    const gridH = height * rowStep + r; // Add r for the bottom curve of the last row
+    return { width: gridW, height: gridH };
+  }
+
+  if (gridType === "trapezoid") {
+    const slant = cellSize * TRAPEZOID_SLANT_FACTOR;
+    const gridW = width * cellSize;
+    const gridH = height * cellSize + slant;
+    return { width: gridW, height: gridH };
+  }
+
+  // Standard and Puzzle grids use the same dimensions
   const gridW = width * cellSize;
   const gridH = height * cellSize;
   return { width: gridW, height: gridH };
@@ -193,7 +304,11 @@ export const hitTestCell = (
   const { width, height, cellSize, gridType, cellGap } = data;
   const gap = cellGap ?? CELL_GAP_DEFAULT;
 
-  if (gridType === "standard") {
+  if (
+    gridType === "standard" ||
+    gridType === "puzzle" ||
+    gridType === "islamic"
+  ) {
     const col = Math.floor(px / cellSize);
     const row = Math.floor(py / cellSize);
     if (col >= 0 && col < width && row >= 0 && row < height) {
@@ -237,97 +352,154 @@ export const hitTestCell = (
   if (gridType === "pentagon") {
     const r = cellSize / Math.sqrt(3);
     const rowStep = 1.5 * r;
-    
+
     // Simple hit test similar to diamond/honeycomb
     // Note: This is an approximation since rows overlap in value.
     // Ideally we should check the closest 2 rows.
-    // But for "click to fill", checking the primary mapped row is usually sufficient 
+    // But for "click to fill", checking the primary mapped row is usually sufficient
     // unless clicking exactly on the jagged edge.
     const row = Math.floor(py / rowStep);
-    
-    // Check row and row-1 because of overlap? 
+
+    // Check row and row-1 because of overlap?
     // Let's stick to the basic logic and improve if edge-cases are reported.
     // Actually, due to the overlap (2r vs 1.5r), a point can belong to row K or K-1/K+1.
     // We can iterate candidate rows [row-1, row, row+1].
-    
+
     const candidates = [row - 1, row, row + 1];
-    
+
     for (const rCandidate of candidates) {
-        if (rCandidate < 0 || rCandidate >= height) continue;
-        
-        const rowOffset = rCandidate % 2 === 1 ? cellSize / 2 : 0;
-        const colCandidate = Math.floor((px - rowOffset) / cellSize);
-        
-        // Also check col+1 if near edge? 
-        // Let's just check the calculated col.
-        if (colCandidate >= 0 && colCandidate < width) {
-             const layout = getPentagonCellLayout(colCandidate, rCandidate, cellSize, gap);
-             // Hexagon hit test
-             // Point in hexagon check.
-             // Hexagon is intersection of 3 strips or just check distance in 6 directions?
-             // Or simplier: max(|dx|, |dy_rotated|) check?
-             // Since it's regular hexagon:
-             // distance from center <= inner_radius (sqrt(3)/2 * r)? No that's inscribed circle.
-             
-             // Simple hexagon distance function:
-             // dx = abs(px - cx)
-             // dy = abs(py - cy)
-             // return dy <= r * sqrt(3)/2 ??? No.
-             
-             // Point-up hexagon:
-             // max( |y|, |x|*sqrt(3) + |y| ) <= sqrt(3) * r ??? 
-             // Let's look up standard Hexagon equations.
-             // max(|dx|*sin(30) + |dy|*cos(30), |dx|) ??? 
-             // For point-TOP hexagon (flat sides left/right?? No, point top means flat sides are angled).
-             // Point UP: tips at (0, -r), (0, r). Flat vertical sides? No.
-             // Point UP: vertices at 90 deg, etc. Left/Right vertices are at 0 deg??
-             // Wait, CellPentagon uses -90 (top), -30, 30, 90 (bottom), 150, 210.
-             // So vertices are at Top, Bottom, and 4 corners.
-             // Flat sides are LEFT and RIGHT? 
-             // cos(-30) = sqrt(3)/2. 
-             // Vertices: (0,-r), (w/2, -r/2), (w/2, r/2), (0, r), (-w/2, r/2), (-w/2, -r/2).
-             // Yes, flat sides are vertical lines at x = +/- w/2.
-             // NO. The vertices are at x= w/2, y = +/- r/2.
-             // The side connects (w/2, -r/2) to (w/2, r/2). This is a vertical line.
-             // So it is a "Flat-topped" hexagon? NO. It is "Point-topped" if top is a point.
-             // Vertices include (0, -r). So top is a point.
-             // Layout: 
-             // (0, -r) -> Top Point.
-             // (w/2, -r/2) -> Top Right.
-             // (w/2, r/2) -> Bottom Right.
-             // (0, r) -> Bottom Point.
-             // (-w/2, r/2) -> Bottom Left.
-             // (-w/2, -r/2) -> Top Left.
-             // So it is POINT-TOPPED.
-             
-             // Check: 
-             // |dy| <= r 
-             // |dx|*sqrt(3) + |dy| <= sqrt(3)*r ?
-             //
-             // Let's use `isPointInPolygon` logic for robustness or a dedicated check.
-             // Since we have the layout center and r, let's use the explicit polygon check.
-             
-             const polyPoints = [-90, -30, 30, 90, 150, 210].map(deg => {
-                 const rad = deg * Math.PI / 180;
-                 return {
-                     x: layout.cx + layout.r * Math.cos(rad),
-                     y: layout.cy + layout.r * Math.sin(rad)
-                 };
-             });
-             
-             // Ray casting algorithm for point in polygon
-             let inside = false;
-             for (let i = 0, j = polyPoints.length - 1; i < polyPoints.length; j = i++) {
-                 const xi = polyPoints[i].x, yi = polyPoints[i].y;
-                 const xj = polyPoints[j].x, yj = polyPoints[j].y;
-                 const intersect = ((yi > py) !== (yj > py))
-                     && (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
-                 if (intersect) inside = !inside;
-             }
-             
-             if (inside) return { x: colCandidate, y: rCandidate };
+      if (rCandidate < 0 || rCandidate >= height) continue;
+
+      const rowOffset = rCandidate % 2 === 1 ? cellSize / 2 : 0;
+      const colCandidate = Math.floor((px - rowOffset) / cellSize);
+
+      // Also check col+1 if near edge?
+      // Let's just check the calculated col.
+      if (colCandidate >= 0 && colCandidate < width) {
+        const layout = getPentagonCellLayout(
+          colCandidate,
+          rCandidate,
+          cellSize,
+          gap,
+        );
+        // Hexagon hit test
+        // Point in hexagon check.
+        // Hexagon is intersection of 3 strips or just check distance in 6 directions?
+        // Or simplier: max(|dx|, |dy_rotated|) check?
+        // Since it's regular hexagon:
+        // distance from center <= inner_radius (sqrt(3)/2 * r)? No that's inscribed circle.
+
+        // Simple hexagon distance function:
+        // dx = abs(px - cx)
+        // dy = abs(py - cy)
+        // return dy <= r * sqrt(3)/2 ??? No.
+
+        // Point-up hexagon:
+        // max( |y|, |x|*sqrt(3) + |y| ) <= sqrt(3) * r ???
+        // Let's look up standard Hexagon equations.
+        // max(|dx|*sin(30) + |dy|*cos(30), |dx|) ???
+        // For point-TOP hexagon (flat sides left/right?? No, point top means flat sides are angled).
+        // Point UP: tips at (0, -r), (0, r). Flat vertical sides? No.
+        // Point UP: vertices at 90 deg, etc. Left/Right vertices are at 0 deg??
+        // Wait, CellPentagon uses -90 (top), -30, 30, 90 (bottom), 150, 210.
+        // So vertices are at Top, Bottom, and 4 corners.
+        // Flat sides are LEFT and RIGHT?
+        // cos(-30) = sqrt(3)/2.
+        // Vertices: (0,-r), (w/2, -r/2), (w/2, r/2), (0, r), (-w/2, r/2), (-w/2, -r/2).
+        // Yes, flat sides are vertical lines at x = +/- w/2.
+        // NO. The vertices are at x= w/2, y = +/- r/2.
+        // The side connects (w/2, -r/2) to (w/2, r/2). This is a vertical line.
+        // So it is a "Flat-topped" hexagon? NO. It is "Point-topped" if top is a point.
+        // Vertices include (0, -r). So top is a point.
+        // Layout:
+        // (0, -r) -> Top Point.
+        // (w/2, -r/2) -> Top Right.
+        // (w/2, r/2) -> Bottom Right.
+        // (0, r) -> Bottom Point.
+        // (-w/2, r/2) -> Bottom Left.
+        // (-w/2, -r/2) -> Top Left.
+        // So it is POINT-TOPPED.
+
+        // Check:
+        // |dy| <= r
+        // |dx|*sqrt(3) + |dy| <= sqrt(3)*r ?
+        //
+        // Let's use `isPointInPolygon` logic for robustness or a dedicated check.
+        // Since we have the layout center and r, let's use the explicit polygon check.
+
+        const polyPoints = [-90, -30, 30, 90, 150, 210].map((deg) => {
+          const rad = (deg * Math.PI) / 180;
+          return {
+            x: layout.cx + layout.r * Math.cos(rad),
+            y: layout.cy + layout.r * Math.sin(rad),
+          };
+        });
+
+        // Ray casting algorithm for point in polygon
+        let inside = false;
+        for (
+          let i = 0, j = polyPoints.length - 1;
+          i < polyPoints.length;
+          j = i++
+        ) {
+          const xi = polyPoints[i].x,
+            yi = polyPoints[i].y;
+          const xj = polyPoints[j].x,
+            yj = polyPoints[j].y;
+          const intersect =
+            yi > py !== yj > py &&
+            px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+          if (intersect) inside = !inside;
         }
+
+        if (inside) return { x: colCandidate, y: rCandidate };
+      }
     }
+  }
+
+  if (gridType === "fish-scale") {
+    const r = cellSize / 2;
+    const rowStep = r;
+
+    // Because fish scales overlap vertically, check rows in reverse order (bottom to top)
+    // as SVG renders them in normal order (top ones are later in DOM).
+    for (let rIdx = height - 1; rIdx >= 0; rIdx--) {
+      const expectedCy = (rIdx + 0.5) * rowStep;
+      if (Math.abs(py - expectedCy) > r) continue;
+
+      const rowOffset = rIdx % 2 === 1 ? r : 0;
+      const cIdx = Math.floor((px - rowOffset) / cellSize);
+
+      for (let dc = -1; dc <= 1; dc++) {
+        const col = cIdx + dc;
+        if (col < 0 || col >= width) continue;
+
+        const layout = getFishScaleCellLayout(col, rIdx, cellSize, gap);
+        const dx = px - layout.cx;
+        const dy = py - layout.cy;
+
+        if (dx * dx + dy * dy <= layout.r * layout.r)
+          return { x: col, y: rIdx };
+      }
+    }
+    return null;
+  }
+
+  if (gridType === "trapezoid") {
+    const slant = cellSize * TRAPEZOID_SLANT_FACTOR;
+    const col = Math.floor(px / cellSize);
+    if (col < 0 || col >= width) return null;
+
+    const deltaX = col % 2 === 0 ? 0 : slant;
+    const deltaX1 = (col + 1) % 2 === 0 ? 0 : slant;
+
+    const t = (px - col * cellSize) / cellSize;
+    const row = Math.floor((py - (deltaX + t * (deltaX1 - deltaX))) / cellSize);
+
+    if (row >= 0 && row < height) {
+      return { x: col, y: row };
+    }
+    return null;
   }
 
   return null;

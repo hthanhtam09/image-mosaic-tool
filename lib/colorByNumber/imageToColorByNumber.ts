@@ -222,6 +222,10 @@ export const imageToColorByNumber = async (
     const r = cellSize / Math.sqrt(3);
     const rowStep = 1.5 * r;
     rows = Math.ceil(rows * (cellSize / rowStep));
+  } else if (gridType === "fish-scale") {
+    // Fish scale has rowStep = r = cellSize/2 (50% vertical overlap)
+    const rowStep = cellSize / 2;
+    rows = Math.ceil(rows * (cellSize / rowStep));
   }
 
   // 4. Compute target pixel dimensions and resize image to fill

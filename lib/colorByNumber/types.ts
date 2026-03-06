@@ -2,7 +2,15 @@
  * Color by Number – types for interactive tô màu theo số
  */
 
-export type ColorByNumberGridType = "honeycomb" | "diamond" | "standard" | "pentagon";
+export type ColorByNumberGridType =
+  | "honeycomb"
+  | "diamond"
+  | "standard"
+  | "pentagon"
+  | "puzzle"
+  | "islamic"
+  | "fish-scale"
+  | "trapezoid";
 
 export interface ColorByNumberCell {
   x: number;

@@ -5,12 +5,20 @@
  * The grid is centered on the page with padding.
  */
 
-import type { ColorByNumberData, FilledMap } from "./types";
-import { getGridDimensions, getCellLayout } from "./layoutCalculator";
-import type { ColorByNumberCell } from "./types";
+import type { ColorByNumberData, FilledMap, ColorByNumberCell } from "./types";
+import {
+  getGridDimensions,
+  getCellLayout,
+  TRAPEZOID_SLANT_FACTOR,
+} from "./layoutCalculator";
 
 /** Partial color split mode type */
-export type PartialColorMode = 'none' | 'diagonal-bl-tr' | 'diagonal-tl-br' | 'horizontal-middle' | 'horizontal-sides';
+export type PartialColorMode =
+  | "none"
+  | "diagonal-bl-tr"
+  | "diagonal-tl-br"
+  | "horizontal-middle"
+  | "horizontal-sides";
 import { getPaletteColorName } from "@/lib/palette";
 
 /** 300 DPI for crisp print-quality exports */
@@ -210,7 +218,6 @@ export const palRowH = () =>
 export const PAL_HORIZONTAL_GAP = Math.round(0.05 * EXPORT_DPI); // Gap between items in a row
 export const PAL_VERTICAL_GAP = Math.round(0.05 * EXPORT_DPI); // Gap between rows of items
 
-
 export interface PaletteLayout {
   palColW: number;
   palRowH: number;
@@ -247,12 +254,10 @@ export interface PaletteLayout {
   verticalGap: number;
 }
 
-
-
 export const calculatePaletteLayout = (
   data: ColorByNumberData,
   availableWidth: number,
-  options?: { vertical?: boolean }
+  options?: { vertical?: boolean },
 ): PaletteLayout | null => {
   // Build unique palette entries (skip white / empty codes)
   const codeToColor = new Map<string, string>();
@@ -279,40 +284,41 @@ export const calculatePaletteLayout = (
   // Layout calculations for horizontal grid
   // We want to fit as many items as possible in availableWidth
   // Item width = getPalColW()
-  
+
   // Layout calculations
   const itemWidth = getPalColW();
   const itemHeight = palRowH();
-  
+
   const hGap = PAL_HORIZONTAL_GAP;
   const vGap = PAL_VERTICAL_GAP;
-  
+
   let itemsPerRow = 7;
   let scale = 1;
-  
+
   if (options?.vertical) {
-      // Logic for vertical column on the left
-      itemsPerRow = 1;
-      scale = 0.8; // Scale up for left column visibility (was 0.6)
+    // Logic for vertical column on the left
+    itemsPerRow = 1;
+    scale = 0.8; // Scale up for left column visibility (was 0.6)
   } else {
-       // Logic for horizontal bottom (optional/legacy now?)
-       itemsPerRow = 7;
+    // Logic for horizontal bottom (optional/legacy now?)
+    itemsPerRow = 7;
   }
-  
+
   const sc = scale;
 
   const sItemWidth = itemWidth * sc;
   const sItemHeight = itemHeight * sc;
   const sHGap = hGap * sc;
   const sVGap = vGap * sc;
-  
-  const rowCount = Math.ceil(codes.length / itemsPerRow);
-  
-  const totalHeight = rowCount * sItemHeight + (rowCount - 1) * sVGap + PAL_TOP_PAD * sc;
 
-  // We do NOT scale down the palette itself based on height here. 
+  const rowCount = Math.ceil(codes.length / itemsPerRow);
+
+  const totalHeight =
+    rowCount * sItemHeight + (rowCount - 1) * sVGap + PAL_TOP_PAD * sc;
+
+  // We do NOT scale down the palette itself based on height here.
   // The palette takes what it needs.
-  
+
   const sInputW = PAL_INPUT_W * sc;
   const sInputPad = PAL_INPUT_PAD * sc;
 
@@ -349,7 +355,6 @@ export const calculatePaletteLayout = (
     verticalGap: sVGap,
   };
 };
-
 
 /** Draw a water-droplet outline; fill from bottom by fillRatio (0..1). */
 const drawDropletShape = (
@@ -400,25 +405,25 @@ const drawDropletShape = (
     ctx.save();
     buildPath();
     ctx.clip();
-    
+
     // If fillRatio is roughly 0.5, we fill the LEFT half (vertical slice).
     // If fillRatio is 1, full fill.
     // The previous implementation was bottom-up fill, but "half a tear" usually implies left/right split visually or top/bottom?
     // "1 nửa nước mắt" usually means left/right split for progress.
     // Let's support both: if fillRatio is exactly 0.5, do left-half fill.
-    // If it's continuous (not 0.5 or 1), keep bottom-up? 
+    // If it's continuous (not 0.5 or 1), keep bottom-up?
     // The requirement says "min ít nhất của nước mắt là 1 nửa" -> implied discrete steps 0.5, 1, 1.5.
-    
+
     if (Math.abs(fillRatio - 0.5) < 0.01) {
-       // Left half fill
-       ctx.fillStyle = fillColor;
-       ctx.fillRect(cx - halfW - 1, topY - 1, halfW + 1, h + 2);
+      // Left half fill
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(cx - halfW - 1, topY - 1, halfW + 1, h + 2);
     } else {
-       // Full fill (or bottom up if we wanted that, but we use discrete 1.0 or 0.5 now)
-       ctx.fillStyle = fillColor;
-       ctx.fillRect(cx - halfW - 1, topY - 1, w + 2, h + 2);
+      // Full fill (or bottom up if we wanted that, but we use discrete 1.0 or 0.5 now)
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(cx - halfW - 1, topY - 1, w + 2, h + 2);
     }
-    
+
     ctx.restore();
   }
   buildPath();
@@ -427,13 +432,229 @@ const drawDropletShape = (
   ctx.stroke();
 };
 
+/**
+ * Draw a puzzle piece path on canvas context.
+ * Every edge has a tab or blank. Adjacent cells interlock.
+ * Boundary edges always have blanks (indentations).
+ */
+const drawPuzzlePiecePath = (
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  x: number,
+  y: number,
+  gridW: number,
+  gridH: number,
+) => {
+  const half = size / 2;
+  const tabSize = size * 0.18;
+  const tabWidth = size * 0.22;
+
+  const left = cx - half;
+  const right = cx + half;
+  const top = cy - half;
+  const bottom = cy + half;
+
+  const rightDir = x < gridW - 1 && x % 2 === 0 ? 1 : -1;
+  const bottomDir = y < gridH - 1 && y % 2 === 0 ? 1 : -1;
+  const leftDir = x > 0 && x % 2 === 0 ? -1 : 1;
+  const topDir = y > 0 && y % 2 === 0 ? -1 : 1;
+
+  ctx.beginPath();
+  ctx.moveTo(left, top);
+
+  // Top edge (left to right)
+  ctx.lineTo(cx - tabWidth, top);
+  ctx.bezierCurveTo(
+    cx - tabWidth,
+    top + topDir * tabSize * 0.2,
+    cx - tabSize * 0.9,
+    top + topDir * tabSize,
+    cx,
+    top + topDir * tabSize,
+  );
+  ctx.bezierCurveTo(
+    cx + tabSize * 0.9,
+    top + topDir * tabSize,
+    cx + tabWidth,
+    top + topDir * tabSize * 0.2,
+    cx + tabWidth,
+    top,
+  );
+  ctx.lineTo(right, top);
+
+  // Right edge (top to bottom)
+  ctx.lineTo(right, cy - tabWidth);
+  ctx.bezierCurveTo(
+    right + rightDir * tabSize * 0.2,
+    cy - tabWidth,
+    right + rightDir * tabSize,
+    cy - tabSize * 0.9,
+    right + rightDir * tabSize,
+    cy,
+  );
+  ctx.bezierCurveTo(
+    right + rightDir * tabSize,
+    cy + tabSize * 0.9,
+    right + rightDir * tabSize * 0.2,
+    cy + tabWidth,
+    right,
+    cy + tabWidth,
+  );
+  ctx.lineTo(right, bottom);
+
+  // Bottom edge (right to left)
+  ctx.lineTo(cx + tabWidth, bottom);
+  ctx.bezierCurveTo(
+    cx + tabWidth,
+    bottom + bottomDir * tabSize * 0.2,
+    cx + tabSize * 0.9,
+    bottom + bottomDir * tabSize,
+    cx,
+    bottom + bottomDir * tabSize,
+  );
+  ctx.bezierCurveTo(
+    cx - tabSize * 0.9,
+    bottom + bottomDir * tabSize,
+    cx - tabWidth,
+    bottom + bottomDir * tabSize * 0.2,
+    cx - tabWidth,
+    bottom,
+  );
+  ctx.lineTo(left, bottom);
+
+  // Left edge (bottom to top)
+  ctx.lineTo(left, cy + tabWidth);
+  ctx.bezierCurveTo(
+    left + leftDir * tabSize * 0.2,
+    cy + tabWidth,
+    left + leftDir * tabSize,
+    cy + tabSize * 0.9,
+    left + leftDir * tabSize,
+    cy,
+  );
+  ctx.bezierCurveTo(
+    left + leftDir * tabSize,
+    cy - tabSize * 0.9,
+    left + leftDir * tabSize * 0.2,
+    cy - tabWidth,
+    left,
+    cy - tabWidth,
+  );
+  ctx.lineTo(left, top);
+
+  ctx.closePath();
+};
+
+/**
+ * Draw Islamic star-and-cross tile path on canvas.
+ * Stars at (x+y) even, crosses at (x+y) odd.
+ * The geometry is a mathematically perfect zero-gap tessellation.
+ */
+const drawIslamicTilePath = (
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  x: number,
+  y: number,
+) => {
+  const h = size / 2;
+  const SQRT2 = Math.SQRT2;
+  const R_star = h * SQRT2; // Distance to star tips
+  const v = h * (SQRT2 - 1); // Distance to star inner valleys
+  const R_cross = h * (2 - SQRT2); // Distance to cross inner pinches (2h - R_star)
+
+  const isStar = (x + y) % 2 === 0;
+
+  ctx.beginPath();
+  if (isStar) {
+    ctx.moveTo(cx, cy - R_star);
+    ctx.lineTo(cx + v, cy - h);
+    ctx.lineTo(cx + h, cy - h);
+    ctx.lineTo(cx + h, cy - v);
+    ctx.lineTo(cx + R_star, cy);
+    ctx.lineTo(cx + h, cy + v);
+    ctx.lineTo(cx + h, cy + h);
+    ctx.lineTo(cx + v, cy + h);
+    ctx.lineTo(cx, cy + R_star);
+    ctx.lineTo(cx - v, cy + h);
+    ctx.lineTo(cx - h, cy + h);
+    ctx.lineTo(cx - h, cy + v);
+    ctx.lineTo(cx - R_star, cy);
+    ctx.lineTo(cx - h, cy - v);
+    ctx.lineTo(cx - h, cy - h);
+    ctx.lineTo(cx - v, cy - h);
+  } else {
+    ctx.moveTo(cx - v, cy - h);
+    ctx.lineTo(cx, cy - R_cross);
+    ctx.lineTo(cx + v, cy - h);
+    ctx.lineTo(cx + h, cy - h);
+    ctx.lineTo(cx + h, cy - v);
+    ctx.lineTo(cx + R_cross, cy);
+    ctx.lineTo(cx + h, cy + v);
+    ctx.lineTo(cx + h, cy + h);
+    ctx.lineTo(cx + v, cy + h);
+    ctx.lineTo(cx, cy + R_cross);
+    ctx.lineTo(cx - v, cy + h);
+    ctx.lineTo(cx - h, cy + h);
+    ctx.lineTo(cx - h, cy + v);
+    ctx.lineTo(cx - R_cross, cy);
+    ctx.lineTo(cx - h, cy - v);
+    ctx.lineTo(cx - h, cy - h);
+  }
+  ctx.closePath();
+};
+
+const drawFishScalePath = (
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+) => {
+  const r = size / 2;
+  ctx.beginPath();
+  // Draw the full circle; overlap handles the visual "scallop" in grid mode
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.closePath();
+};
+
+const drawTrapezoidPath = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  slant: number,
+  xIndex: number,
+) => {
+  const deltaX = xIndex % 2 === 0 ? 0 : slant;
+  const deltaX1 = (xIndex + 1) % 2 === 0 ? 0 : slant;
+
+  ctx.beginPath();
+  ctx.moveTo(x, y + deltaX);
+  ctx.lineTo(x + w, y + deltaX1);
+  ctx.lineTo(x + w, y + h + deltaX1);
+  ctx.lineTo(x, y + h + deltaX);
+  ctx.closePath();
+};
+
 /** Draw shape-matched swatch */
 const drawPalSwatch = (
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   size: number,
-  shape: "circle" | "diamond" | "square" | "pentagon",
+  shape:
+    | "circle"
+    | "diamond"
+    | "square"
+    | "pentagon"
+    | "puzzle"
+    | "islamic"
+    | "fish-scale"
+    | "trapezoid",
   fillColor: string,
 ) => {
   const half = size / 2;
@@ -464,12 +685,44 @@ const drawPalSwatch = (
   } else if (shape === "pentagon") {
     // Pentagon -> Renders as Hexagon to minimize gaps
     // Point up: -90, -30, 30, 90, 150, 210
-    const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
+    const angles = [-90, -30, 30, 90, 150, 210].map(
+      (deg) => (deg * Math.PI) / 180,
+    );
     const points = angles.map((angle) => ({
       x: cx + half * Math.cos(angle),
       y: cy + half * Math.sin(angle),
     }));
     getRoundedPolygonPath(ctx, points, half * 0.15);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.stroke();
+  } else if (shape === "puzzle") {
+    drawPuzzlePiecePath(ctx, cx, cy, size, 0, 2, 3, 3);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.stroke();
+  } else if (shape === "fish-scale") {
+    drawFishScalePath(ctx, cx, cy, size);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.stroke();
+  } else if (shape === "trapezoid") {
+    const slant = size * TRAPEZOID_SLANT_FACTOR;
+    // For palette, we show a standard trapezoid (representative) centered vertically and shifted up
+    drawTrapezoidPath(
+      ctx,
+      cx - half,
+      cy - (size + slant) / 2 - 10,
+      size,
+      size,
+      slant,
+      0,
+    );
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.stroke();
+  } else if (shape === "islamic") {
+    drawIslamicTilePath(ctx, cx, cy, size * 0.7, 0, 0);
     ctx.fillStyle = fillColor;
     ctx.fill();
     ctx.stroke();
@@ -505,7 +758,6 @@ const renderPaletteColumnCBN = (
     codeToColor,
     codeToCount,
     maxCount,
-    sRH, // using item height basically
     sSW,
     sGap,
     sLbl,
@@ -528,14 +780,30 @@ const renderPaletteColumnCBN = (
     verticalGap,
   } = layout;
 
-  const shape: "circle" | "diamond" | "square" | "pentagon" =
+  const shape:
+    | "circle"
+    | "diamond"
+    | "square"
+    | "pentagon"
+    | "puzzle"
+    | "islamic"
+    | "fish-scale"
+    | "trapezoid" =
     data.gridType === "honeycomb"
       ? "circle"
       : data.gridType === "diamond"
         ? "diamond"
         : data.gridType === "pentagon"
           ? "pentagon"
-          : "square";
+          : data.gridType === "puzzle"
+            ? "puzzle"
+            : data.gridType === "islamic"
+              ? "islamic"
+              : data.gridType === "fish-scale"
+                ? "fish-scale"
+                : data.gridType === "trapezoid"
+                  ? "trapezoid"
+                  : "square";
 
   codes.forEach((code, i) => {
     // Calculate row and column index
@@ -550,7 +818,6 @@ const renderPaletteColumnCBN = (
     const color = codeToColor.get(code) ?? "#999";
     const swCY = yPos + sSW / 2;
 
-
     // Swatch
     drawPalSwatch(ctx, cx, swCY, sSW, shape, color);
 
@@ -561,8 +828,8 @@ const renderPaletteColumnCBN = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(0,0,0,0.5)";
     ctx.lineWidth = 3;
-    ctx.strokeText(code, cx, swCY);
-    ctx.fillText(code, cx, swCY);
+    ctx.strokeText(code, cx, shape === "trapezoid" ? swCY - 10 : swCY);
+    ctx.fillText(code, cx, shape === "trapezoid" ? swCY - 10 : swCY);
 
     // 5 droplet icons
     const dropTop = yPos + sSW + sGap;
@@ -583,72 +850,95 @@ const renderPaletteColumnCBN = (
 
     for (let d = 0; d < PAL_DROPLET_COUNT; d++) {
       const dx = dropStartX + d * (sDW + sDGap);
-      
+
       let fillType = 0; // 0=none, 0.5=half, 1=full
       if (d + 1 <= displayDroplets) {
         fillType = 1;
       } else if (d + 0.5 <= displayDroplets) {
         fillType = 0.5;
       }
-      
+
       drawDropletShape(ctx, dx, dropTop, sDW, sDH, fillType, color);
     }
 
     // 3 shapes in arc to the right of swatch (top → bottom), outline only; shape follows pattern. Square uses inscribed size so they don't overlap.
     const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
     const arcCenterY = swCY;
-    const arcAngles = [-80, 0, 80].map((deg) => (deg * Math.PI) / 180);
+    // We reuse the arcAngles array from earlier if possible, but let's redefine it to be safe
+    const localArcAngles = [-80, 0, 80].map((deg) => (deg * Math.PI) / 180);
     const r = sArcCircleR;
     const rSquare = r / Math.SQRT2;
+
+    ctx.save();
     ctx.fillStyle = "transparent";
     ctx.strokeStyle = "#555555";
     ctx.lineWidth = 1.5;
-    arcAngles.forEach((angle) => {
+
+    localArcAngles.forEach((angle, i) => {
       const shapeX = arcCenterX + sArcRadius * Math.cos(angle);
-      const shapeY = arcCenterY + sArcRadius * Math.sin(angle);
-      ctx.beginPath();
+      let shapeY = arcCenterY + sArcRadius * Math.sin(angle);
       if (shape === "circle") {
+        ctx.beginPath();
         ctx.arc(shapeX, shapeY, r, 0, Math.PI * 2);
+        ctx.stroke();
       } else if (shape === "square") {
         const half = rSquare;
         const rx = half * 0.12;
         const x = shapeX - half;
         const y = shapeY - half;
         const size = half * 2;
-        ctx.moveTo(x + rx, y);
-        ctx.lineTo(x + size - rx, y);
-        ctx.quadraticCurveTo(x + size, y, x + size, y + rx);
-        ctx.lineTo(x + size, y + size - rx);
-        ctx.quadraticCurveTo(x + size, y + size, x + size - rx, y + size);
-        ctx.lineTo(x + rx, y + size);
-        ctx.quadraticCurveTo(x, y + size, x, y + size - rx);
-        ctx.lineTo(x, y + rx);
-        ctx.quadraticCurveTo(x, y, x + rx, y);
-        ctx.closePath();
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(x, y, size, size, rx);
+        } else {
+          ctx.rect(x, y, size, size);
+        }
+        ctx.stroke();
       } else if (shape === "diamond") {
         const side = r * 2 * 0.707 * 0.9;
         ctx.save();
         ctx.translate(shapeX, shapeY);
         ctx.rotate((45 * Math.PI) / 180);
-        ctx.beginPath();
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(-side / 2, -side / 2, side, side, side * 0.15);
-        } else {
-          ctx.rect(-side / 2, -side / 2, side, side);
-        }
+        ctx.strokeRect(-side / 2, -side / 2, side, side);
         ctx.restore();
+      } else if (shape === "puzzle") {
+        drawPuzzlePiecePath(ctx, shapeX, shapeY, r * 1.4, 0, 2, 3, 3);
+        ctx.stroke();
+      } else if (shape === "islamic") {
+        drawIslamicTilePath(ctx, shapeX, shapeY, r * 1.4, 0, 0);
+        ctx.stroke();
+      } else if (shape === "fish-scale") {
+        drawFishScalePath(ctx, shapeX, shapeY, r * 2);
+        ctx.stroke();
+      } else if (shape === "trapezoid") {
+        if (i === 1) shapeY += r * 0.2; // Shift middle shape down
+        const rSquare = r / Math.SQRT2;
+        const size = rSquare * 2;
+        const slant = size * TRAPEZOID_SLANT_FACTOR;
+        drawTrapezoidPath(
+          ctx,
+          shapeX - rSquare,
+          shapeY - (size + slant) / 2,
+          size,
+          size,
+          slant,
+          0,
+        );
+        ctx.stroke();
       } else {
         // Pentagon
-        const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
-        const points = angles.map((a) => ({
+        const pAngles = [-90, -30, 30, 90, 150, 210].map(
+          (deg) => (deg * Math.PI) / 180,
+        );
+        const points = pAngles.map((a) => ({
           x: shapeX + r * Math.cos(a),
           y: shapeY + r * Math.sin(a),
         }));
         getRoundedPolygonPath(ctx, points, r * 0.15);
+        ctx.stroke();
       }
-      ctx.fill();
-      ctx.stroke();
     });
+    ctx.restore();
 
     // Input box below droplets: white rounded rect, pencil icon, dotted placeholder
     const inputTop = dropTop + sDH + sInputGap;
@@ -666,54 +956,7 @@ const renderPaletteColumnCBN = (
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Pencil icon (simplified) on the left, inset by padding, larger size
-    const penX = inputLeft + sInputPad + sInputH * 0.3;
-    const penY = inputTop + sInputH * 0.62;
-    const penS = sInputH * 0.32;
-    
-    // Draw SVG-like pencil icon
-    // ViewBox 24x24 -> scale to penS
-    const scale =  penS / 24;
-    
-    ctx.save();
-    ctx.translate(penX, penY);
-    ctx.rotate(-20 * Math.PI / 180); // rotate -20deg
-    ctx.scale(scale, scale);
-    ctx.translate(-12, -12); // center on 24x24 box
-    
-    ctx.lineWidth = 1.5 / scale; // constant line width visually? Or scale with it? SVG uses strokeWidth="2" on 24x24. So 2 is good.
-    ctx.strokeStyle = "#333333";
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    
-    // Path 1: M12 19l7-7 3 3-7 7-3-3z
-    ctx.beginPath();
-    ctx.moveTo(12, 19);
-    ctx.lineTo(19, 12);
-    ctx.lineTo(22, 15);
-    ctx.lineTo(15, 22);
-    ctx.lineTo(12, 19);
-    ctx.closePath();
-    ctx.stroke();
-    
-    // Path 2: M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z
-    ctx.beginPath();
-    ctx.moveTo(18, 13);
-    ctx.lineTo(16.5, 5.5);
-    ctx.lineTo(2, 2);
-    ctx.lineTo(5.5, 16.5);
-    ctx.lineTo(13, 18);
-    ctx.lineTo(18, 13);
-    ctx.closePath();
-    ctx.stroke();
-    
-    // Path 3: M2 2l7.586 7.586
-    ctx.beginPath();
-    ctx.moveTo(2, 2);
-    ctx.lineTo(9.586, 9.586);
-    ctx.stroke();
-    
-    ctx.restore();
+    // Pencil icon (removed)
 
     // Dotted placeholder line (longer, positioned lower for more space above)
     const dotCount = 13;
@@ -746,7 +989,7 @@ export const exportToCanvas = (
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
   const showPalette = options.showPalette ?? true;
-  const partialColorMode = options.partialColorMode ?? 'none';
+  const partialColorMode = options.partialColorMode ?? "none";
 
   // Page dimensions: strict 8.5x11 @ 300DPI
   const pageW = EXPORT_PAGE_W;
@@ -754,7 +997,7 @@ export const exportToCanvas = (
 
   // For uncolored mode (OR colored mode now per request), add palette on the LEFT if enabled
   const needsPalette = showPalette;
-  
+
   // 1. Determine "Safe Area" based on fixed margins
   const padX = showPalette ? PAGE_PADDING_X : 0;
   const padY = PAGE_PADDING_Y;
@@ -765,32 +1008,42 @@ export const exportToCanvas = (
   // 2. Calculate palette layout (vertical)
   let layout: PaletteLayout | null = null;
   if (needsPalette) {
-      layout = calculatePaletteLayout(data, safeW, { vertical: true });
+    layout = calculatePaletteLayout(data, safeW, { vertical: true });
   }
-  
+
   const PALETTE_GAP = 30; // ~10px visual
   const paletteWidth = layout ? layout.palColW : 0;
-  
+
   // 3. Grid available width = SafeW - PaletteW - Gap
   // Gain 50px from palette shift!
   const PALETTE_X_OFFSET = showPalette ? -40 : 0; // Shift palette left into margin (was -50)
-  const gridAvailableW = Math.max(0, safeW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - PALETTE_X_OFFSET);
+  const gridAvailableW = Math.max(
+    0,
+    safeW -
+      paletteWidth -
+      (paletteWidth > 0 ? PALETTE_GAP : 0) -
+      PALETTE_X_OFFSET,
+  );
   const gridAvailableH = safeH;
 
   // 4. Fit grid into gridAvailableH/W
   const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
 
   // 5. Calculate vertical centering
-  const paletteVisualH = layout ? layout.totalHeight : 0;
-  const gridVisualH = gridLayout.gridDims.height * gridLayout.scale;
-  
+
   // Anchor to TOP padding (0.4 inch) instead of centering vertically
-  const paletteY = padY;
-  const gridY = padY + (showPalette ? 0 : gridLayout.offsetY);
-  
+  // Vertical positioning: align palette swatches with grid rows
+  const firstCell = getCellLayout(0, 0, data);
+  const gridVisualTop = padY;
+  const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
+
+  // Swatch center in palette coordinate space is sTop + sSW/2
+  const paletteFirstSwatchCenterY = layout ? layout.sTop + layout.sSW / 2 : 0;
+  const paletteY = gridFirstRowCenterY - paletteFirstSwatchCenterY;
+
   // Grid Top is just gridY
-  const gridVisualTop = gridY;
-  const paletteVisualTop = paletteY;
+  // Grid visual top remains padY (it was gridY which was padY)
+  const gridVisualTopPos = gridVisualTop;
 
   const canvas = document.createElement("canvas");
   canvas.width = pageW;
@@ -807,7 +1060,7 @@ export const exportToCanvas = (
     ctx.save();
     // Palette is positioned at Left Padding - 50px offset per user request
     const paletteX = padX + PALETTE_X_OFFSET;
-    
+
     ctx.translate(paletteX, paletteY);
     renderPaletteColumnCBN(ctx, data, layout);
     ctx.restore();
@@ -816,12 +1069,15 @@ export const exportToCanvas = (
   // ── Grid (Right) ──
   ctx.save();
   // Grid starts after Palette + Gap
-  const gridStartX = padX + PALETTE_X_OFFSET + paletteWidth + (paletteWidth > 0 ? PALETTE_GAP : 0) + gridLayout.offsetX;
-  
-  ctx.translate(gridStartX, gridVisualTop);
+  const gridStartX =
+    padX +
+    PALETTE_X_OFFSET +
+    paletteWidth +
+    (paletteWidth > 0 ? PALETTE_GAP : 0) +
+    gridLayout.offsetX;
+
+  ctx.translate(gridStartX, gridVisualTopPos);
   ctx.scale(gridLayout.scale, gridLayout.scale);
-
-
 
   const strokeColor = "#000000";
   ctx.strokeStyle = strokeColor;
@@ -836,22 +1092,22 @@ export const exportToCanvas = (
     const cl = getCellLayout(cell.x, cell.y, data);
     // When partialColorMode is active, determine which cells are colored
     let isCellColored = colored;
-    if (colored && partialColorMode !== 'none') {
-      const nx = cl.cx / gridDims.width;  // 0..1 horizontal
+    if (colored && partialColorMode !== "none") {
+      const nx = cl.cx / gridDims.width; // 0..1 horizontal
       const ny = cl.cy / gridDims.height; // 0..1 vertical
-      
-      if (partialColorMode === 'diagonal-bl-tr') {
+
+      if (partialColorMode === "diagonal-bl-tr") {
         // Diagonal from bottom-left to top-right: colored above the line
         // Line: y = 1 - x (in normalized coords)
-        isCellColored = ny <= (1 - nx);
-      } else if (partialColorMode === 'diagonal-tl-br') {
+        isCellColored = ny <= 1 - nx;
+      } else if (partialColorMode === "diagonal-tl-br") {
         // Diagonal from top-left to bottom-right: colored above the line
         // Line: y = x
         isCellColored = ny <= nx;
-      } else if (partialColorMode === 'horizontal-middle') {
+      } else if (partialColorMode === "horizontal-middle") {
         // Horizontal cut: top half colored, bottom half uncolored
         isCellColored = ny <= 0.5;
-      } else if (partialColorMode === 'horizontal-sides') {
+      } else if (partialColorMode === "horizontal-sides") {
         // Horizontal cut inverted: bottom half colored, top half uncolored
         isCellColored = ny > 0.5;
       }
@@ -870,7 +1126,7 @@ export const exportToCanvas = (
       const side = cl.r * Math.sqrt(2);
       ctx.save();
       ctx.translate(cl.cx, cl.cy);
-      ctx.rotate(45 * Math.PI / 180);
+      ctx.rotate((45 * Math.PI) / 180);
       ctx.beginPath();
       if (typeof ctx.roundRect === "function") {
         ctx.roundRect(-side / 2, -side / 2, side, side, side * 0.15);
@@ -883,7 +1139,9 @@ export const exportToCanvas = (
       ctx.restore();
     } else if (data.gridType === "pentagon") {
       // Hexagon angles
-      const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
+      const angles = [-90, -30, 30, 90, 150, 210].map(
+        (deg) => (deg * Math.PI) / 180,
+      );
       const points = angles.map((a) => ({
         x: cl.cx + cl.r * Math.cos(a),
         y: cl.cy + cl.r * Math.sin(a),
@@ -892,13 +1150,52 @@ export const exportToCanvas = (
       ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
+    } else if (data.gridType === "puzzle") {
+      // Puzzle piece
+      drawPuzzlePiecePath(
+        ctx,
+        cl.cx,
+        cl.cy,
+        data.cellSize,
+        cell.x,
+        cell.y,
+        data.width,
+        data.height,
+      );
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.stroke();
+    } else if (data.gridType === "islamic") {
+      drawIslamicTilePath(ctx, cl.cx, cl.cy, data.cellSize, cell.x, cell.y);
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.stroke();
+    } else if (data.gridType === "fish-scale") {
+      drawFishScalePath(ctx, cl.cx, cl.cy, data.cellSize);
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.stroke();
+    } else if (data.gridType === "trapezoid") {
+      const slant = data.cellSize * TRAPEZOID_SLANT_FACTOR;
+      drawTrapezoidPath(
+        ctx,
+        cell.x * data.cellSize,
+        cell.y * data.cellSize,
+        data.cellSize,
+        data.cellSize,
+        slant,
+        cell.x,
+      );
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.stroke();
     } else {
       const s = data.cellSize;
       ctx.beginPath();
       if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(cell.x * s, cell.y * s, s, s, s * 0.15);
+        ctx.roundRect(cell.x * s, cell.y * s, s, s, s * 0.15);
       } else {
-          ctx.rect(cell.x * s, cell.y * s, s, s);
+        ctx.rect(cell.x * s, cell.y * s, s, s);
       }
       ctx.fillStyle = fillColor;
       ctx.fill();
@@ -915,7 +1212,8 @@ export const exportToCanvas = (
 
       // Add stroke outline in colored mode so numbers are always readable
       if (isCellColored) {
-        ctx.strokeStyle = brightness < 128 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)";
+        ctx.strokeStyle =
+          brightness < 128 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)";
         ctx.lineWidth = cl.r * 0.15;
         ctx.lineJoin = "round";
         ctx.strokeText(cell.code, cl.cx, cl.cy);
@@ -987,7 +1285,6 @@ export const exportPaletteToCanvas = (
   const startX = 360; // leave room for color names on the left
 
   codes.forEach((code, i) => {
-    const color = codeToColor.get(code) ?? "#999";
     const y = startY + i * rowHeight;
     const swatchY = y + (rowHeight - swatchSize) / 2;
 
@@ -1000,7 +1297,13 @@ export const exportPaletteToCanvas = (
     ctx.font = "500 28px sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    ctx.fillText(colorName, startX - 12, y + rowHeight / 2);
+    ctx.fillText(
+      colorName,
+      startX - 12,
+      data.gridType === "trapezoid"
+        ? y + rowHeight / 2 - 10
+        : y + rowHeight / 2,
+    );
 
     // White box with border
     ctx.fillStyle = "#ffffff";
