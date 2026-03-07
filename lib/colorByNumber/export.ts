@@ -175,7 +175,7 @@ export const PAL_DROPLET_W = Math.round(0.07 * EXPORT_DPI); // ~21px per mini dr
 export const PAL_DROPLET_COUNT = 5; // 5 droplet icons
 export const PAL_DROPLET_GAP = Math.round(0.01 * EXPORT_DPI); // ~3px gap between droplets
 export const PAL_ROW_GAP = Math.round(0.06 * EXPORT_DPI); // ~18px gap between rows
-export const PAL_SWD_GAP = Math.round(0.02 * EXPORT_DPI); // gap swatch→droplets
+export const PAL_SWD_GAP = Math.round(0.08 * EXPORT_DPI); // gap swatch→droplets (~11px)
 export const PAL_TOP_PAD = Math.round(0.35 * EXPORT_DPI);
 export const PAL_LABEL_FS = Math.round(0.11 * EXPORT_DPI); // ~33px
 export const PAL_SIDE_PAD = Math.round(0.05 * EXPORT_DPI); // ~15px side padding (was 0.08 / 24px)
@@ -184,7 +184,7 @@ export const PAL_ARC_CIRCLE_R = Math.round(0.065 * EXPORT_DPI); // ~19.5px radiu
 export const PAL_ARC_GAP = Math.round(0.02 * EXPORT_DPI); // gap swatch→arc
 export const PAL_ARC_RADIUS = Math.round(0.12 * EXPORT_DPI); // arc curve radius (wider spread)
 /** Input box below droplets (larger, with inner padding) */
-export const PAL_INPUT_GAP = Math.round(0.015 * EXPORT_DPI); // gap droplets→input
+export const PAL_INPUT_GAP = Math.round(0.08 * EXPORT_DPI); // gap droplets→input (~9px)
 export const PAL_INPUT_H = Math.round(0.18 * EXPORT_DPI); // ~54px input height
 export const PAL_INPUT_W = Math.round(0.55 * EXPORT_DPI); // ~165px width (wider than droplet row)
 export const PAL_INPUT_PAD = Math.round(0.02 * EXPORT_DPI); // ~6px inner padding
@@ -400,6 +400,10 @@ const drawDropletShape = (
     );
     ctx.closePath();
   };
+
+  buildPath();
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
 
   if (fillRatio > 0) {
     ctx.save();
@@ -657,7 +661,16 @@ const drawPalSwatch = (
     | "trapezoid",
   fillColor: string,
 ) => {
-  const half = size / 2;
+  let s = size;
+  if (shape === "circle") s = size * 1.35;
+  else if (shape === "diamond") s = size * 1.5;
+  else if (shape === "square") s = size * 1.25;
+  else if (shape === "pentagon") s = size * 1.35;
+  else if (shape === "islamic") s = size * 1.7;
+  else if (shape === "fish-scale") s = size * 1.35;
+  else if (shape === "trapezoid") s = size * 1.25;
+
+  const half = s / 2;
   ctx.fillStyle = fillColor;
   ctx.strokeStyle = "#333333";
   ctx.lineWidth = 2;
@@ -668,7 +681,7 @@ const drawPalSwatch = (
     ctx.fill();
     ctx.stroke();
   } else if (shape === "diamond") {
-    const side = size * 0.6;
+    const side = s * 0.6;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate((45 * Math.PI) / 180);
@@ -697,24 +710,24 @@ const drawPalSwatch = (
     ctx.fill();
     ctx.stroke();
   } else if (shape === "puzzle") {
-    drawPuzzlePiecePath(ctx, cx, cy, size, 0, 2, 3, 3);
+    drawPuzzlePiecePath(ctx, cx, cy, s, 0, 2, 3, 3);
     ctx.fillStyle = fillColor;
     ctx.fill();
     ctx.stroke();
   } else if (shape === "fish-scale") {
-    drawFishScalePath(ctx, cx, cy, size);
+    drawFishScalePath(ctx, cx, cy, s);
     ctx.fillStyle = fillColor;
     ctx.fill();
     ctx.stroke();
   } else if (shape === "trapezoid") {
-    const slant = size * TRAPEZOID_SLANT_FACTOR;
+    const slant = s * TRAPEZOID_SLANT_FACTOR;
     // For palette, we show a standard trapezoid (representative) centered vertically and shifted up
     drawTrapezoidPath(
       ctx,
       cx - half,
-      cy - (size + slant) / 2 - 10,
-      size,
-      size,
+      cy - (s + slant) / 2 - 10,
+      s,
+      s,
       slant,
       0,
     );
@@ -722,23 +735,23 @@ const drawPalSwatch = (
     ctx.fill();
     ctx.stroke();
   } else if (shape === "islamic") {
-    drawIslamicTilePath(ctx, cx, cy, size * 0.7, 0, 0);
+    drawIslamicTilePath(ctx, cx, cy, s * 0.7, 0, 0);
     ctx.fillStyle = fillColor;
     ctx.fill();
     ctx.stroke();
   } else {
     // rounded square
-    const r = size * 0.12;
+    const r = s * 0.12;
     const x = cx - half,
       y = cy - half;
     ctx.beginPath();
     ctx.moveTo(x + r, y);
-    ctx.lineTo(x + size - r, y);
-    ctx.quadraticCurveTo(x + size, y, x + size, y + r);
-    ctx.lineTo(x + size, y + size - r);
-    ctx.quadraticCurveTo(x + size, y + size, x + size - r, y + size);
-    ctx.lineTo(x + r, y + size);
-    ctx.quadraticCurveTo(x, y + size, x, y + size - r);
+    ctx.lineTo(x + s - r, y);
+    ctx.quadraticCurveTo(x + s, y, x + s, y + r);
+    ctx.lineTo(x + s, y + s - r);
+    ctx.quadraticCurveTo(x + s, y + s, x + s - r, y + s);
+    ctx.lineTo(x + r, y + s);
+    ctx.quadraticCurveTo(x, y + s, x, y + s - r);
     ctx.lineTo(x, y + r);
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
@@ -870,7 +883,7 @@ const renderPaletteColumnCBN = (
     const rSquare = r / Math.SQRT2;
 
     ctx.save();
-    ctx.fillStyle = "transparent";
+    ctx.fillStyle = "#ffffff";
     ctx.strokeStyle = "#555555";
     ctx.lineWidth = 1.5;
 
@@ -880,6 +893,7 @@ const renderPaletteColumnCBN = (
       if (shape === "circle") {
         ctx.beginPath();
         ctx.arc(shapeX, shapeY, r, 0, Math.PI * 2);
+        ctx.fill();
         ctx.stroke();
       } else if (shape === "square") {
         const half = rSquare;
@@ -893,22 +907,27 @@ const renderPaletteColumnCBN = (
         } else {
           ctx.rect(x, y, size, size);
         }
+        ctx.fill();
         ctx.stroke();
       } else if (shape === "diamond") {
         const side = r * 2 * 0.707 * 0.9;
         ctx.save();
         ctx.translate(shapeX, shapeY);
         ctx.rotate((45 * Math.PI) / 180);
+        ctx.fillRect(-side / 2, -side / 2, side, side);
         ctx.strokeRect(-side / 2, -side / 2, side, side);
         ctx.restore();
       } else if (shape === "puzzle") {
         drawPuzzlePiecePath(ctx, shapeX, shapeY, r * 1.4, 0, 2, 3, 3);
+        ctx.fill();
         ctx.stroke();
       } else if (shape === "islamic") {
         drawIslamicTilePath(ctx, shapeX, shapeY, r * 1.4, 0, 0);
+        ctx.fill();
         ctx.stroke();
       } else if (shape === "fish-scale") {
         drawFishScalePath(ctx, shapeX, shapeY, r * 2);
+        ctx.fill();
         ctx.stroke();
       } else if (shape === "trapezoid") {
         if (i === 1) shapeY += r * 0.2; // Shift middle shape down
@@ -924,6 +943,7 @@ const renderPaletteColumnCBN = (
           slant,
           0,
         );
+        ctx.fill();
         ctx.stroke();
       } else {
         // Pentagon
@@ -935,6 +955,7 @@ const renderPaletteColumnCBN = (
           y: shapeY + r * Math.sin(a),
         }));
         getRoundedPolygonPath(ctx, points, r * 0.15);
+        ctx.fill();
         ctx.stroke();
       }
     });
@@ -984,12 +1005,15 @@ export const exportToCanvas = (
     showPalette?: boolean;
     /** Split color mode for partial coloring */
     partialColorMode?: PartialColorMode;
+    /** Background color for the page (default: '#ffffff') */
+    bgColor?: string;
   },
 ): HTMLCanvasElement => {
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
   const showPalette = options.showPalette ?? true;
   const partialColorMode = options.partialColorMode ?? "none";
+  const bgColor = options.bgColor ?? "#ffffff";
 
   // Page dimensions: strict 8.5x11 @ 300DPI
   const pageW = EXPORT_PAGE_W;
@@ -1051,8 +1075,8 @@ export const exportToCanvas = (
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
-  // White background
-  ctx.fillStyle = "#ffffff";
+  // Page background
+  ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, pageW, pageH);
 
   // ── Palette column (Left) ──
@@ -1239,6 +1263,7 @@ export const exportToCanvas = (
  */
 export const exportPaletteToCanvas = (
   data: ColorByNumberData,
+  options?: { bgColor?: string },
 ): HTMLCanvasElement => {
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
@@ -1270,8 +1295,8 @@ export const exportPaletteToCanvas = (
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
-  // White background
-  ctx.fillStyle = "#ffffff";
+  // Page background
+  ctx.fillStyle = options?.bgColor ?? "#ffffff";
   ctx.fillRect(0, 0, pageW, pageH);
 
   // Layout constants (scaled for 300 DPI)

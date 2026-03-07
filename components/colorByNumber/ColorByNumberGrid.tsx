@@ -9,7 +9,7 @@
  *   - Imported image thumbnail in top-right corner
  */
 
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import {
   getCellLayout,
@@ -30,7 +30,8 @@ import type { ColorByNumberData, ColorByNumberCell } from "@/lib/colorByNumber";
 import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
 
 const STROKE_COLOR = "#000000";
-const DEFAULT_FILL = "#ffffff";
+const DEFAULT_FILL_LIGHT = "#ffffff";
+const DEFAULT_FILL_DARK = "#1a1a1a";
 const TEXT_COLOR_ON_DARK = "#ffffff";
 // const PAGE_PADDING = 20; // Removed in favor of imports
 const PAGE_GAP = 30; // gap between the two pages in the viewport
@@ -49,7 +50,7 @@ const isWhiteColor = (hex: string): boolean => {
 
 const getCellFillColor = (cellColor: string, filled: boolean): string => {
   if (filled || !isWhiteColor(cellColor)) return cellColor;
-  return DEFAULT_FILL;
+  return DEFAULT_FILL_LIGHT;
 };
 
 const getTextColor = (fillColor: string): string => {
@@ -179,6 +180,15 @@ const PaletteColumnSVG = ({
         const color = codeToColor.get(code) ?? "#999";
         const swCY = yPos + sSW / 2;
 
+        let s = sSW;
+        if (shape === "circle") s = sSW * 1.35;
+        else if (shape === "diamond") s = sSW * 1.5;
+        else if (shape === "square") s = sSW * 1.25;
+        else if (shape === "pentagon") s = sSW * 1.35;
+        else if (shape === "islamic") s = sSW * 1.7;
+        else if (shape === "fish-scale") s = sSW * 1.35;
+        else if (shape === "trapezoid") s = sSW * 1.25;
+
         // Droplet calculations
         const dropTop = yPos + sSW + sGap;
         const totalDropW =
@@ -192,7 +202,7 @@ const PaletteColumnSVG = ({
               <circle
                 cx={cx}
                 cy={swCY}
-                r={sSW / 2}
+                r={s / 2}
                 fill={color}
                 stroke="#333"
                 strokeWidth={2}
@@ -201,11 +211,11 @@ const PaletteColumnSVG = ({
             {shape === "square" && (
               <g>
                 <rect
-                  x={cx - sSW / 2}
-                  y={swCY - sSW / 2}
-                  width={sSW}
-                  height={sSW}
-                  rx={sSW * 0.15}
+                  x={cx - s / 2}
+                  y={swCY - s / 2}
+                  width={s}
+                  height={s}
+                  rx={s * 0.15}
                   fill={color}
                   stroke="#333"
                   strokeWidth={2}
@@ -215,11 +225,11 @@ const PaletteColumnSVG = ({
             {shape === "diamond" && (
               <g transform={`rotate(45, ${cx}, ${swCY})`}>
                 <rect
-                  x={cx - (sSW * 0.6) / 2}
-                  y={swCY - (sSW * 0.6) / 2}
-                  width={sSW * 0.6}
-                  height={sSW * 0.6}
-                  rx={(sSW * 0.6) * 0.15}
+                  x={cx - (s * 0.6) / 2}
+                  y={swCY - (s * 0.6) / 2}
+                  width={s * 0.6}
+                  height={s * 0.6}
+                  rx={(s * 0.6) * 0.15}
                   fill={color}
                   stroke="#333"
                   strokeWidth={2}
@@ -232,7 +242,7 @@ const PaletteColumnSVG = ({
                   const angles = [-90, -30, 30, 90, 150, 210].map(
                     (deg) => (deg * Math.PI) / 180,
                   );
-                  const r = sSW / 2;
+                  const r = s / 2;
                   const points = angles.map((angle) => ({
                     x: cx + r * Math.cos(angle),
                     y: swCY + r * Math.sin(angle),
@@ -245,16 +255,16 @@ const PaletteColumnSVG = ({
               />
             )}
             {shape === "trapezoid" && (() => {
-              const slant = sSW * TRAPEZOID_SLANT_FACTOR;
-              const startY = swCY - (sSW + slant) / 2 - 10;
-              const half = sSW / 2;
+              const slant = s * TRAPEZOID_SLANT_FACTOR;
+              const startY = swCY - (s + slant) / 2 - 10;
+              const half = s / 2;
               return (
                 <polygon
                   points={[
                     `${cx - half},${startY}`,
                     `${cx + half},${startY + slant}`,
-                    `${cx + half},${startY + sSW + slant}`,
-                    `${cx - half},${startY + sSW}`,
+                    `${cx + half},${startY + s + slant}`,
+                    `${cx - half},${startY + s}`,
                   ].join(" ")}
                   fill={color}
                   stroke="#333"
@@ -264,7 +274,7 @@ const PaletteColumnSVG = ({
             })()}
             {shape === "puzzle" && (
               <path
-                d={getPuzzlePiecePath(cx, swCY, sSW, 0, 2, 3, 3)}
+                d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)}
                 fill={color}
                 stroke="#333"
                 strokeWidth={2}
@@ -272,7 +282,7 @@ const PaletteColumnSVG = ({
             )}
             {shape === "islamic" && (
               <path
-                d={getIslamicTilePath(cx, swCY, sSW * 0.7, 0, 0)}
+                d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)}
                 fill={color}
                 stroke="#333"
                 strokeWidth={2}
@@ -282,7 +292,7 @@ const PaletteColumnSVG = ({
               <circle
                 cx={cx}
                 cy={swCY}
-                r={sSW / 2}
+                r={s / 2}
                 fill={color}
                 stroke="#333"
                 strokeWidth={2}
@@ -354,6 +364,9 @@ const PaletteColumnSVG = ({
                     </defs>
                   )}
 
+                  {/* Base white background so uncolored portion is white */}
+                  <path d={pathData} fill="#ffffff" />
+
                   {/* Fill */}
                   {isFull && <path d={pathData} fill={color} />}
                   {isHalf && (
@@ -390,7 +403,7 @@ const PaletteColumnSVG = ({
                       cx={shapeX}
                       cy={shapeY}
                       r={r}
-                      fill="none"
+                      fill="#ffffff"
                       stroke="#555"
                       strokeWidth={1.5}
                     />
@@ -405,7 +418,7 @@ const PaletteColumnSVG = ({
                       width={rSquare * 2}
                       height={rSquare * 2}
                       rx={rSquare * 2 * 0.15}
-                      fill="none"
+                      fill="#ffffff"
                       stroke="#555"
                       strokeWidth={1.5}
                     />
@@ -422,7 +435,7 @@ const PaletteColumnSVG = ({
                         width={side}
                         height={side}
                         rx={side * 0.15}
-                        fill="none"
+                        fill="#ffffff"
                         stroke="#555"
                         strokeWidth={1.5}
                       />
@@ -434,7 +447,7 @@ const PaletteColumnSVG = ({
                     <path
                       key={i}
                       d={getPuzzlePiecePath(shapeX, shapeY, r * 1.4, 0, 2, 3, 3)}
-                      fill="none"
+                      fill="#ffffff"
                       stroke="#555"
                       strokeWidth={1.5}
                     />
@@ -445,7 +458,7 @@ const PaletteColumnSVG = ({
                     <path
                       key={i}
                       d={getIslamicTilePath(shapeX, shapeY, r * 1.4, 0, 0)}
-                      fill="none"
+                      fill="#ffffff"
                       stroke="#555"
                       strokeWidth={1.5}
                     />
@@ -456,7 +469,7 @@ const PaletteColumnSVG = ({
                     <path
                       key={i}
                       d={getFishScalePath(shapeX, shapeY, r * 2)}
-                      fill="none"
+                      fill="#ffffff"
                       stroke="#555"
                       strokeWidth={1.5}
                     />
@@ -474,7 +487,7 @@ const PaletteColumnSVG = ({
                   <path
                     key={i}
                     d={getRoundedPolygonPath(points, r * 0.15)}
-                    fill="none"
+                    fill="#ffffff"
                     stroke="#555"
                     strokeWidth={1.5}
                   />
@@ -504,7 +517,7 @@ const PaletteColumnSVG = ({
                       `${shapeX + rSquare},${startY + size + slant}`,
                       `${shapeX - rSquare},${startY + size}`,
                     ].join(" ")}
-                    fill="none"
+                    fill="#ffffff"
                     stroke="#555"
                     strokeWidth={1.5}
                   />
@@ -710,6 +723,7 @@ const CellTrapezoid = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -718,6 +732,7 @@ const CellTrapezoid = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -736,7 +751,7 @@ const CellTrapezoid = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
 
   const W = data.cellSize;
@@ -800,6 +815,7 @@ const CellFishScale = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -808,6 +824,7 @@ const CellFishScale = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -826,7 +843,7 @@ const CellFishScale = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
   const r = layout.r;
 
@@ -870,6 +887,7 @@ const CellIslamic = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -878,6 +896,7 @@ const CellIslamic = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -896,7 +915,7 @@ const CellIslamic = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
   const s = data.cellSize;
 
@@ -938,6 +957,7 @@ const CellPuzzle = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -946,6 +966,7 @@ const CellPuzzle = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -964,7 +985,7 @@ const CellPuzzle = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
   const s = data.cellSize;
 
@@ -1006,6 +1027,7 @@ const CellPentagon = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1014,6 +1036,7 @@ const CellPentagon = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1032,7 +1055,7 @@ const CellPentagon = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
   const r = layout.r;
   const cx = layout.cx;
@@ -1083,6 +1106,7 @@ const CellCircle = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1091,6 +1115,7 @@ const CellCircle = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1109,7 +1134,7 @@ const CellCircle = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
 
   return (
@@ -1153,6 +1178,7 @@ const CellSquare = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1161,6 +1187,7 @@ const CellSquare = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1179,7 +1206,7 @@ const CellSquare = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
   const s = data.cellSize;
 
@@ -1226,6 +1253,7 @@ const CellDiamond = ({
   colored,
   partialColorMode,
   gridDims,
+  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1234,6 +1262,7 @@ const CellDiamond = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1252,7 +1281,7 @@ const CellDiamond = ({
   }
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
-    : DEFAULT_FILL;
+    : DEFAULT_FILL_LIGHT;
   const textColor = getTextColor(fillColor);
   const half = layout.r;
   const side = half * Math.sqrt(2);
@@ -1310,6 +1339,7 @@ const PageGrid = ({
   colored,
   layout,
   partialColorMode,
+  bgColor,
 }: {
   data: ColorByNumberData;
   filled: Record<string, boolean>;
@@ -1317,6 +1347,7 @@ const PageGrid = ({
   colored: boolean;
   layout: PageGridLayout;
   partialColorMode?: PartialColorMode;
+  bgColor?: string;
 }) => {
   const {
     gridLayout,
@@ -1352,7 +1383,7 @@ const PageGrid = ({
         y={0}
         width={LETTER_OUTPUT_WIDTH}
         height={LETTER_OUTPUT_HEIGHT}
-        fill="#ffffff"
+        fill={bgColor ?? "#ffffff"}
         stroke="#d4d4d8"
         strokeWidth={2}
       />
@@ -1380,6 +1411,7 @@ const PageGrid = ({
               colored={colored}
               partialColorMode={partialColorMode}
               gridDims={gridDims}
+              bgColor={bgColor}
             />
           ))}
         </g>
@@ -1403,6 +1435,7 @@ export default function ColorByNumberGrid({
     updateActiveProject, // To update zoom/pan/filled
     globalShowNumbers,
     globalShowPalette,
+    globalTheme,
   } = useColorByNumberStore();
 
   // Helper to get active project data safely
@@ -1415,6 +1448,7 @@ export default function ColorByNumberGrid({
   const showNumbers = globalShowNumbers;
   const showPalette = globalShowPalette;
   const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
+  const bgColor = globalTheme === 'dark' ? '#1a1a1a' : '#ffffff';
 
   // Actions wrapper
   const setPan = (x: number, y: number) => updateActiveProject({ panX: x, panY: y });
@@ -1435,6 +1469,17 @@ export default function ColorByNumberGrid({
     x: number;
     y: number;
   } | null>(null);
+
+  // Prevent default scroll behavior on wheel
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const preventScroll = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', preventScroll, { passive: false });
+    return () => el.removeEventListener('wheel', preventScroll);
+  }, []);
 
   // Determine layout based on data (shared for both pages and hit testing)
   const pageLayout = useMemo<PageGridLayout | null>(() => {
@@ -1599,6 +1644,47 @@ export default function ColorByNumberGrid({
     }
   };
 
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!activeProject) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom
+      const zoomSensitivity = 0.01;
+      const zoomDelta = -e.deltaY * zoomSensitivity;
+
+      let newZoom = activeProject.zoom * (1 + zoomDelta);
+      newZoom = Math.max(0.05, Math.min(20, newZoom));
+
+      if (newZoom !== activeProject.zoom) {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) {
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+
+          const currentScale = pageScale * activeProject.zoom;
+          const localX = (mouseX - (centerX + panX)) / currentScale;
+          const localY = (mouseY - (centerY + panY)) / currentScale;
+
+          const newScale = pageScale * newZoom;
+          const newPanX = mouseX - centerX - localX * newScale;
+          const newPanY = mouseY - centerY - localY * newScale;
+
+          updateActiveProject({
+            zoom: newZoom,
+            panX: newPanX,
+            panY: newPanY
+          });
+        }
+      }
+    } else {
+      // Pan
+      updateActiveProject({
+        panX: panX - e.deltaX,
+        panY: panY - e.deltaY
+      });
+    }
+  };
+
   if (!data || !pageLayout) {
     return (
       <div className="flex h-full w-full items-center justify-center text-[var(--text-secondary)]">
@@ -1620,6 +1706,7 @@ export default function ColorByNumberGrid({
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
       onClick={handleClick}
+      onWheel={handleWheel}
     >
       <svg
         width={width}
@@ -1636,6 +1723,7 @@ export default function ColorByNumberGrid({
               colored={true}
               layout={pageLayout}
               partialColorMode={partialColorMode}
+              bgColor={bgColor}
             />
             {/* Page Border/Shadow for realism */}
             <rect
@@ -1653,6 +1741,7 @@ export default function ColorByNumberGrid({
               showNumbers={showNumbers}
               colored={false}
               layout={pageLayout}
+              bgColor={bgColor}
             />
             <rect
               x={0} y={0}

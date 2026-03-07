@@ -5,7 +5,6 @@
 import { create } from "zustand";
 import type {
   ColorByNumberData,
-  ColorByNumberCell,
   ColorByNumberGridType,
   FilledMap,
 } from "@/lib/colorByNumber";
@@ -19,14 +18,19 @@ export interface Project {
   data: ColorByNumberData | null;
   filled: FilledMap;
   selectedCode: string | null;
-  
-  status: 'idle' | 'processing' | 'completed' | 'error'; // Added status
+
+  status: "idle" | "processing" | "completed" | "error"; // Added status
 
   // Independent settings
   gridType: ColorByNumberGridType;
   useDithering: boolean;
   /** Partial color split mode: 'none' | 'diagonal-bl-tr' | 'diagonal-tl-br' | 'horizontal-middle' | 'horizontal-sides' */
-  partialColorMode: 'none' | 'diagonal-bl-tr' | 'diagonal-tl-br' | 'horizontal-middle' | 'horizontal-sides';
+  partialColorMode:
+    | "none"
+    | "diagonal-bl-tr"
+    | "diagonal-tl-br"
+    | "horizontal-middle"
+    | "horizontal-sides";
 
   // Viewport
   zoom: number;
@@ -37,12 +41,13 @@ export interface Project {
 export interface ColorByNumberState {
   // Global / UI state
   isPaletteVisible: boolean;
-  
+
   // Global settings (shared across all projects)
   globalCellSize: number;
   globalShowNumbers: boolean;
   globalShowPalette: boolean;
-  
+  globalTheme: "light" | "dark";
+
   // Projects
   projects: Project[];
   activeProjectId: string | null;
@@ -54,6 +59,7 @@ export interface ColorByNumberState {
   setGlobalCellSize: (size: number) => void;
   toggleGlobalShowNumbers: () => void;
   toggleGlobalShowPalette: () => void;
+  setGlobalTheme: (theme: "light" | "dark") => void;
 
   // Project Management
   addProject: (file: File, dataUrl: string, options?: Partial<Project>) => void;
@@ -61,9 +67,9 @@ export interface ColorByNumberState {
   removeProject: (id: string) => void;
   updateActiveProject: (updates: Partial<Project>) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
-  
+
   // Batch Actions
-  convertAllIdleProjects: () => Promise<void>; 
+  convertAllIdleProjects: () => Promise<void>;
 
   // Actions that modify the ACTIVE project
   setZoom: (zoom: number) => void;
@@ -71,7 +77,7 @@ export interface ColorByNumberState {
   fillCell: (x: number, y: number) => void;
   setSelectedCode: (code: string | null) => void;
   resetFill: () => void;
-  
+
   // Async actions
   updateActiveProjectData: (data: ColorByNumberData) => void;
 }
@@ -81,24 +87,29 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   globalCellSize: 29,
   globalShowNumbers: true,
   globalShowPalette: true,
+  globalTheme: "light",
   projects: [],
   activeProjectId: null,
 
-  togglePaletteGlobal: () => set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),
+  togglePaletteGlobal: () =>
+    set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),
 
   // Global settings actions
   setGlobalCellSize: (size) => {
     set((state) => ({
       globalCellSize: size,
       // Reset all completed projects to idle so they re-convert with new cell size
-      projects: state.projects.map(p => 
-        p.status === 'completed' ? { ...p, status: 'idle' as const } : p
+      projects: state.projects.map((p) =>
+        p.status === "completed" ? { ...p, status: "idle" as const } : p,
       ),
     }));
   },
 
-  toggleGlobalShowNumbers: () => set((state) => ({ globalShowNumbers: !state.globalShowNumbers })),
-  toggleGlobalShowPalette: () => set((state) => ({ globalShowPalette: !state.globalShowPalette })),
+  toggleGlobalShowNumbers: () =>
+    set((state) => ({ globalShowNumbers: !state.globalShowNumbers })),
+  toggleGlobalShowPalette: () =>
+    set((state) => ({ globalShowPalette: !state.globalShowPalette })),
+  setGlobalTheme: (theme) => set({ globalTheme: theme }),
 
   addProject: (file, dataUrl, options = {}) => {
     const newProject: Project = {
@@ -107,12 +118,12 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       originalFile: file,
       thumbnailDataUrl: dataUrl,
       data: null,
-      status: 'idle',
+      status: "idle",
       filled: {},
       selectedCode: null,
       gridType: "standard",
       useDithering: true,
-      partialColorMode: 'none',
+      partialColorMode: "none",
       zoom: 1,
       panX: 0,
       panY: 0,
@@ -120,70 +131,75 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     };
 
     set((state) => ({
-        projects: [...state.projects, newProject],
+      projects: [...state.projects, newProject],
     }));
   },
 
   setActiveProject: (id) => set({ activeProjectId: id }),
 
-  removeProject: (id) => set((state) => {
-    const newProjects = state.projects.filter(p => p.id !== id);
-    let newActiveId = state.activeProjectId;
-    if (state.activeProjectId === id) {
+  removeProject: (id) =>
+    set((state) => {
+      const newProjects = state.projects.filter((p) => p.id !== id);
+      let newActiveId = state.activeProjectId;
+      if (state.activeProjectId === id) {
         newActiveId = null; // Close modal/preview if deleted
-    }
-    return { projects: newProjects, activeProjectId: newActiveId };
-  }),
+      }
+      return { projects: newProjects, activeProjectId: newActiveId };
+    }),
 
-  updateActiveProject: (updates) => set((state) => {
-    if (!state.activeProjectId) return {};
-    return {
-        projects: state.projects.map(p => 
-            p.id === state.activeProjectId ? { ...p, ...updates } : p
-        )
-    };
-  }),
+  updateActiveProject: (updates) =>
+    set((state) => {
+      if (!state.activeProjectId) return {};
+      return {
+        projects: state.projects.map((p) =>
+          p.id === state.activeProjectId ? { ...p, ...updates } : p,
+        ),
+      };
+    }),
 
-  updateProject: (id, updates) => set((state) => ({
-    projects: state.projects.map(p => 
-        p.id === id ? { ...p, ...updates } : p
-    )
-  })),
+  updateProject: (id, updates) =>
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === id ? { ...p, ...updates } : p,
+      ),
+    })),
 
   convertAllIdleProjects: async () => {
-      const { projects, updateProject } = get();
-      
-      // Filter projects that need processing
-      const idleProjects = projects.filter(p => p.status === 'idle' || p.status === 'error');
-      if (idleProjects.length === 0) return;
+    const { projects, updateProject } = get();
 
-      // Mark as processing
-      idleProjects.forEach(p => updateProject(p.id, { status: 'processing' }));
+    // Filter projects that need processing
+    const idleProjects = projects.filter(
+      (p) => p.status === "idle" || p.status === "error",
+    );
+    if (idleProjects.length === 0) return;
 
-      // Process sequentially to prevent UI freezing
-      const { globalCellSize } = get();
-      for (const p of idleProjects) {
-          try {
-              // Yield to main thread to allow UI updates
-              await new Promise(resolve => setTimeout(resolve, 50));
+    // Mark as processing
+    idleProjects.forEach((p) => updateProject(p.id, { status: "processing" }));
 
-              const result = await imageToColorByNumber(p.originalFile, {
-                  gridType: p.gridType,
-                  cellSize: globalCellSize,
-                  useDithering: p.useDithering,
-              });
-              updateProject(p.id, { data: result, status: 'completed' });
-          } catch (e) {
-              console.error(`Failed to convert project ${p.id}`, e);
-              updateProject(p.id, { status: 'error' });
-          }
+    // Process sequentially to prevent UI freezing
+    const { globalCellSize } = get();
+    for (const p of idleProjects) {
+      try {
+        // Yield to main thread to allow UI updates
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const result = await imageToColorByNumber(p.originalFile, {
+          gridType: p.gridType,
+          cellSize: globalCellSize,
+          useDithering: p.useDithering,
+        });
+        updateProject(p.id, { data: result, status: "completed" });
+      } catch (e) {
+        console.error(`Failed to convert project ${p.id}`, e);
+        updateProject(p.id, { status: "error" });
       }
+    }
   },
 
   // --- Actions working on Active Project ---
 
   setZoom: (zoom) => {
-    const z = Math.max(0.25, Math.min(4, zoom));
+    const z = Math.max(0.05, Math.min(20, zoom));
     get().updateActiveProject({ zoom: z });
   },
 
@@ -193,8 +209,9 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
 
   fillCell: (x, y) => {
     const { projects, activeProjectId } = get();
-    const activeProject = projects.find(p => p.id === activeProjectId);
-    if (!activeProject || !activeProject.data || !activeProject.selectedCode) return;
+    const activeProject = projects.find((p) => p.id === activeProjectId);
+    if (!activeProject || !activeProject.data || !activeProject.selectedCode)
+      return;
 
     const cell = activeProject.data.cells.find((c) => c.x === x && c.y === y);
     if (!cell || cell.code !== activeProject.selectedCode) return;
@@ -212,20 +229,17 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     get().updateActiveProject({ filled: {} });
   },
 
-
-
   setUseDithering: (use: boolean) => {
-      get().updateActiveProject({ useDithering: use });
+    get().updateActiveProject({ useDithering: use });
   },
-  
-  updateActiveProjectData: (data) => {
-      get().updateActiveProject({ data, filled: {} }); 
-  }
 
+  updateActiveProjectData: (data) => {
+    get().updateActiveProject({ data, filled: {} });
+  },
 }));
 
 // Selectors
 export const useActiveProject = () => {
-    const store = useColorByNumberStore();
-    return store.projects.find(p => p.id === store.activeProjectId) || null;
+  const store = useColorByNumberStore();
+  return store.projects.find((p) => p.id === store.activeProjectId) || null;
 };

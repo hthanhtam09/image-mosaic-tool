@@ -18,9 +18,11 @@ export default function Dashboard() {
         globalCellSize,
         globalShowNumbers,
         globalShowPalette,
+        globalTheme,
         setGlobalCellSize,
         toggleGlobalShowNumbers,
         toggleGlobalShowPalette,
+        setGlobalTheme,
     } = useColorByNumberStore();
 
     const [showSettings, setShowSettings] = useState(false);
@@ -39,7 +41,6 @@ export default function Dashboard() {
 
     const [previewProjectId, setPreviewProjectId] = useState<string | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
-    const [isImporting, setIsImporting] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
     const [splitColorDropdownId, setSplitColorDropdownId] = useState<string | null>(null);
     const splitColorRef = useRef<HTMLDivElement>(null);
@@ -64,7 +65,6 @@ export default function Dashboard() {
         async (e: React.ChangeEvent<HTMLInputElement>) => {
             const files = e.target.files;
             if (!files || files.length === 0) return;
-            setIsImporting(true);
 
             try {
                 // 1. Convert to array and Sort naturally (1, 2, 10...)
@@ -104,7 +104,6 @@ export default function Dashboard() {
             } catch (err) {
                 console.error("Failed to import images:", err);
             } finally {
-                setIsImporting(false);
                 e.target.value = "";
             }
         },
@@ -184,115 +183,6 @@ export default function Dashboard() {
         }
     };
 
-    /* ── Download Color Palette Chart ── */
-    const handleDownloadPalette = async () => {
-        const completedProjects = projects.filter(p => p.status === 'completed');
-        if (completedProjects.length === 0) return;
-
-        // We use a Set to keep only ONE representative per exact hex color
-        const uniqueColors = new Set<string>();
-
-        for (const project of completedProjects) {
-            if (!project.data) continue;
-            for (const cell of project.data.cells) {
-                const hex = cell.color.toLowerCase();
-
-                const r = parseInt(hex.slice(1, 3), 16);
-                const g = parseInt(hex.slice(3, 5), 16);
-                const b = parseInt(hex.slice(5, 7), 16);
-                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-
-                // Skip white / near-white
-                if (brightness >= 250) continue;
-
-                // Store exact unique hex
-                uniqueColors.add(hex);
-            }
-        }
-
-        const colors = Array.from(uniqueColors);
-        const totalColors = colors.length;
-        if (totalColors === 0) return;
-
-        // --- 300 DPI letter page (8.5" × 11") ---
-        const DPI = 300;
-        const PAGE_W = Math.round(8.5 * DPI); // 2550
-        const PAGE_H = Math.round(11 * DPI);  // 3300
-        const MARGIN = Math.round(0.5 * DPI); // 0.5" margin = 150px
-
-        const availW = PAGE_W - MARGIN * 2;
-        const availH = PAGE_H - MARGIN * 2;
-
-        // Auto-calculate columns and hexagon size to fit all colors
-        const COLS = Math.min(10, totalColors);
-        const ROWS = Math.ceil(totalColors / COLS);
-        const GAP_RATIO = 0.3; // gap as fraction of radius
-
-        // Max hex size that fits within available space
-        // Pointy-topped hexagon: width = sqrt(3) * R, height = 2 * R
-        const maxR_W = availW / (COLS * Math.sqrt(3) + (COLS - 1) * GAP_RATIO);
-        const maxR_H = availH / (ROWS * 2 + (ROWS - 1) * GAP_RATIO);
-        const HEX_RADIUS = Math.min(maxR_W, maxR_H) * 0.95;
-
-        // Correct dimensions for pointy-topped hexagon
-        const HEX_W = Math.sqrt(3) * HEX_RADIUS;
-        const HEX_H = 2 * HEX_RADIUS;
-        const GAP = Math.round(HEX_RADIUS * GAP_RATIO);
-        const CELL_W = HEX_W + GAP;
-        const CELL_H = HEX_H + GAP;
-
-        // Center the grid on the page
-        const gridW = COLS * CELL_W - GAP;
-        const gridH = ROWS * CELL_H - GAP;
-        const offsetX = (PAGE_W - gridW) / 2;
-        const offsetY = (PAGE_H - gridH) / 2;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = PAGE_W;
-        canvas.height = PAGE_H;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        // White background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, PAGE_W, PAGE_H);
-
-        // Helper: draw hexagon
-        const drawHexagon = (cx: number, cy: number, r: number) => {
-            ctx.beginPath();
-            for (let i = 0; i < 6; i++) {
-                const angle = (Math.PI / 3) * i - Math.PI / 6;
-                const x = cx + r * Math.cos(angle);
-                const y = cy + r * Math.sin(angle);
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.closePath();
-        };
-
-        // Draw each color (hexagon only)
-        colors.forEach((hex, idx) => {
-            const col = idx % COLS;
-            const row = Math.floor(idx / COLS);
-            const cx = offsetX + col * CELL_W + HEX_W / 2;
-            const cy = offsetY + row * CELL_H + HEX_H / 2;
-
-            drawHexagon(cx, cy, HEX_RADIUS - 1);
-            ctx.fillStyle = hex;
-            ctx.fill();
-
-            drawHexagon(cx, cy, HEX_RADIUS - 1);
-            ctx.strokeStyle = '#cccccc';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        });
-
-        // Download
-        const link = document.createElement('a');
-        link.download = `color-palette-${totalColors}-colors.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-    };
 
     const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [
         { value: "standard", label: "Square" },
@@ -304,10 +194,6 @@ export default function Dashboard() {
         { value: "fish-scale", label: "Fish Scale" },
         { value: "trapezoid", label: "Trapezoid" },
     ];
-
-    // Logic: 
-    // If no projects -> Show Big Central Import Button
-    // If projects -> Show Grid of Cards + Top/Bottom Actions
 
     if (projects.length === 0) {
         return (
@@ -412,6 +298,30 @@ export default function Dashboard() {
                                                 }`} />
                                         </div>
                                     </label>
+
+                                    <div className="flex items-center justify-between pt-2 border-t border-[var(--border-subtle)]">
+                                        <span className="text-xs text-[var(--text-secondary)] font-medium">Theme</span>
+                                        <div className="flex items-center gap-1 bg-[var(--bg-primary)] p-1 border border-[var(--border-default)] rounded-lg">
+                                            <button
+                                                onClick={() => setGlobalTheme('light')}
+                                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${globalTheme === 'light'
+                                                        ? 'bg-white text-black shadow-sm'
+                                                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+                                                    }`}
+                                            >
+                                                Light
+                                            </button>
+                                            <button
+                                                onClick={() => setGlobalTheme('dark')}
+                                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${globalTheme === 'dark'
+                                                        ? 'bg-zinc-800 text-white shadow-sm'
+                                                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+                                                    }`}
+                                            >
+                                                Dark
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -433,23 +343,13 @@ export default function Dashboard() {
                         </button>
                     )}
                     {projects.some(p => p.status === 'completed') && (
-                        <>
-                            <button
-                                onClick={handleDownloadAll}
-                                disabled={isConverting}
-                                className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-green-600 hover:bg-green-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isConverting ? "Processing..." : "Download All"}
-                            </button>
-                            <button
-                                onClick={handleDownloadPalette}
-                                disabled={isConverting}
-                                className="px-6 py-2 text-sm font-medium text-white rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Download a chart of all colors used across all images"
-                            >
-                                🎨 Download Palette
-                            </button>
-                        </>
+                        <button
+                            onClick={handleDownloadAll}
+                            disabled={isConverting}
+                            className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-green-600 hover:bg-green-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isConverting ? "Processing..." : "Download All"}
+                        </button>
                     )}
                     <input
                         ref={imageInputRef}
