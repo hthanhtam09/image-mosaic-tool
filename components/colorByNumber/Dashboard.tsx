@@ -42,6 +42,7 @@ export default function Dashboard() {
     const [previewProjectId, setPreviewProjectId] = useState<string | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [isConverting, setIsConverting] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
     const [splitColorDropdownId, setSplitColorDropdownId] = useState<string | null>(null);
     const splitColorRef = useRef<HTMLDivElement>(null);
 
@@ -126,13 +127,14 @@ export default function Dashboard() {
     };
 
     const handleDownloadAll = async () => {
-        const completedProjects = projects.filter(p => p.status === 'completed');
-        const zip = new JSZip();
-
-        // Helper to get filename without extension
-        const getBaseName = (name: string) => name.replace(/\.[^/.]+$/, "");
-
+        setIsDownloading(true);
         try {
+            const completedProjects = projects.filter(p => p.status === 'completed');
+            const zip = new JSZip();
+
+            // Helper to get filename without extension
+            const getBaseName = (name: string) => name.replace(/\.[^/.]+$/, "");
+
             await Promise.all(completedProjects.map(async (project) => {
                 if (!project.data) return;
 
@@ -181,6 +183,8 @@ export default function Dashboard() {
         } catch (error) {
             console.error("Failed to zip and download:", error);
             alert("Failed to generate zip file.");
+        } finally {
+            setIsDownloading(false);
         }
     };
 
@@ -346,10 +350,15 @@ export default function Dashboard() {
                     {projects.some(p => p.status === 'completed') && (
                         <button
                             onClick={handleDownloadAll}
-                            disabled={isConverting}
-                            className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-green-600 hover:bg-green-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={isConverting || isDownloading}
+                            className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-green-600 hover:bg-green-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[140px]"
                         >
-                            {isConverting ? "Processing..." : "Download All"}
+                            {isDownloading ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-[var(--bg-primary)] border-t-transparent rounded-full animate-spin"></div>
+                                    Downloading...
+                                </div>
+                            ) : isConverting ? "Processing..." : "Download All"}
                         </button>
                     )}
                     <input

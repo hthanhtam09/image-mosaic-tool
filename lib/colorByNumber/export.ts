@@ -173,7 +173,7 @@ export const PAL_SWATCH = Math.round(0.267 * EXPORT_DPI); // ~80px swatch (was 0
 export const PAL_DROPLET_H = Math.round(0.1 * EXPORT_DPI); // ~30px per mini droplet
 export const PAL_DROPLET_W = Math.round(0.07 * EXPORT_DPI); // ~21px per mini droplet
 export const PAL_DROPLET_COUNT = 5; // 5 droplet icons
-export const PAL_DROPLET_GAP = Math.round(0.01 * EXPORT_DPI); // ~3px gap between droplets
+export const PAL_DROPLET_GAP = Math.round(0.025 * EXPORT_DPI); // ~7.5px gap between droplets
 export const PAL_ROW_GAP = Math.round(0.06 * EXPORT_DPI); // ~18px gap between rows
 export const PAL_SWD_GAP = Math.round(0.08 * EXPORT_DPI); // gap swatch→droplets (~11px)
 export const PAL_TOP_PAD = Math.round(0.35 * EXPORT_DPI);
@@ -402,6 +402,12 @@ const drawDropletShape = (
   };
 
   buildPath();
+
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+
   ctx.fillStyle = "#ffffff";
   ctx.fill();
 
@@ -671,15 +677,24 @@ const drawPalSwatch = (
   else if (shape === "trapezoid") s = size * 1.25;
 
   const half = s / 2;
-  ctx.fillStyle = fillColor;
-  ctx.strokeStyle = "#333333";
-  ctx.lineWidth = 2;
+
+  const performFillAndStroke = () => {
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#333333";
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.stroke();
+  };
 
   if (shape === "circle") {
     ctx.beginPath();
     ctx.arc(cx, cy, half, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
   } else if (shape === "diamond") {
     const side = s * 0.6;
     ctx.save();
@@ -691,9 +706,7 @@ const drawPalSwatch = (
     } else {
       ctx.rect(-side / 2, -side / 2, side, side);
     }
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
     ctx.restore();
   } else if (shape === "pentagon") {
     // Pentagon -> Renders as Hexagon to minimize gaps
@@ -706,19 +719,13 @@ const drawPalSwatch = (
       y: cy + half * Math.sin(angle),
     }));
     getRoundedPolygonPath(ctx, points, half * 0.15);
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
   } else if (shape === "puzzle") {
     drawPuzzlePiecePath(ctx, cx, cy, s, 0, 2, 3, 3);
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
   } else if (shape === "fish-scale") {
     drawFishScalePath(ctx, cx, cy, s);
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
   } else if (shape === "trapezoid") {
     const slant = s * TRAPEZOID_SLANT_FACTOR;
     // For palette, we show a standard trapezoid (representative) centered vertically and shifted up
@@ -731,14 +738,10 @@ const drawPalSwatch = (
       slant,
       0,
     );
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
   } else if (shape === "islamic") {
     drawIslamicTilePath(ctx, cx, cy, s * 0.7, 0, 0);
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
   } else {
     // rounded square
     const r = s * 0.12;
@@ -755,8 +758,7 @@ const drawPalSwatch = (
     ctx.lineTo(x, y + r);
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+    performFillAndStroke();
   }
 };
 

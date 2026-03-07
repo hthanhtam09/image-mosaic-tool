@@ -14,7 +14,6 @@ import {
   rgbToHex,
   paletteIndexToLabel,
   isWhite,
-  BASIC_COLORS_EN,
   type RGB,
 } from "@/lib/utils";
 import { FIXED_PALETTE } from "@/lib/palette";
@@ -241,7 +240,11 @@ export const imageToColorByNumber = async (
 
   // 5. EXTRACT DYNAMIC PALETTE
   // Instead of FIXED_PALETTE, we generate a palette from the image itself.
-  const { palette: initialPalette } = quantizeImage(imageData, maxColors);
+  // We extract more colors initially to capture detail, then iteratively reduce to maxColors.
+  const { palette: initialPalette } = quantizeImage(
+    imageData,
+    Math.max(24, maxColors),
+  );
 
   // DEBUG: Log the quantized palette to understand what colors the quantizer produces
   console.log(
@@ -269,34 +272,27 @@ export const imageToColorByNumber = async (
   if (!hasWhite) {
     // No white-ish color was found in the quantized palette — force-add one.
     // This is critical for images with white areas that the quantizer missed.
-    if (initialPalette.length >= maxColors) {
-      let lightestIdx = 0;
-      let maxLightness = -1;
-      for (let i = 0; i < initialPalette.length; i++) {
-        const c = initialPalette[i];
-        const lightness = (c.r + c.g + c.b) / 3;
-        if (lightness > maxLightness) {
-          maxLightness = lightness;
-          lightestIdx = i;
-        }
-      }
-      initialPalette[lightestIdx] = { r: 255, g: 255, b: 255 };
-      console.log(
-        `[CBN] Replaced lightest color (idx ${lightestIdx}) with pure white to maintain max ${maxColors} colors`,
-      );
-    } else {
-      initialPalette.push({ r: 255, g: 255, b: 255 });
-      console.log("[CBN] Force-added pure white to palette (was missing)");
-    }
+    // We just push it; we will enforce maxColors later during deduplication.
+    initialPalette.push({ r: 255, g: 255, b: 255 });
+    console.log("[CBN] Force-added pure white to palette (was missing)");
   }
 
   // 5b. DEDUPLICATE Dynamic Palette
   // Merge colors that are perceptually very close (e.g. 2 shades of orange).
   // Threshold 12.0 is generous enough to merge subtle variations.
-  const { palette: dynamicPalette } = deduplicatePaletteDynamic(
+  let { palette: dynamicPalette } = deduplicatePaletteDynamic(
     initialPalette,
     12.0,
   );
+
+  // 5c. ENFORCE MAX COLORS LIMIT
+  // If we still have more colors than allowed, progressively merge the most similar ones.
+  let limitThreshold = 13.0;
+  while (dynamicPalette.length > maxColors && limitThreshold < 100.0) {
+    const nextRes = deduplicatePaletteDynamic(dynamicPalette, limitThreshold);
+    dynamicPalette = nextRes.palette;
+    limitThreshold += 2.0;
+  }
 
   console.log("[CBN] After dedup (" + dynamicPalette.length + " colors):");
   dynamicPalette.forEach((c, i) => {
@@ -311,7 +307,7 @@ export const imageToColorByNumber = async (
     imageData,
     dynamicPalette,
     cellSize,
-    false, // dithering off for block creation usually looks cleaner for paint-by-number
+    useDithering, // user option for dithering
     true, // useBlockAverage = true gives better perceptual matches for blocks
   );
 

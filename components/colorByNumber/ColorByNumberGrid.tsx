@@ -199,104 +199,69 @@ const PaletteColumnSVG = ({
           <g key={code}>
             {/* Swatch Shape */}
             {shape === "circle" && (
-              <circle
-                cx={cx}
-                cy={swCY}
-                r={s / 2}
-                fill={color}
-                stroke="#333"
-                strokeWidth={2}
-              />
+              <g>
+                <circle cx={cx} cy={swCY} r={s / 2} fill="none" stroke="#ffffff" strokeWidth={4} />
+                <circle cx={cx} cy={swCY} r={s / 2} fill={color} stroke="#333" strokeWidth={2} />
+              </g>
             )}
             {shape === "square" && (
               <g>
-                <rect
-                  x={cx - s / 2}
-                  y={swCY - s / 2}
-                  width={s}
-                  height={s}
-                  rx={s * 0.15}
-                  fill={color}
-                  stroke="#333"
-                  strokeWidth={2}
-                />
+                <rect x={cx - s / 2} y={swCY - s / 2} width={s} height={s} rx={s * 0.15} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
+                <rect x={cx - s / 2} y={swCY - s / 2} width={s} height={s} rx={s * 0.15} fill={color} stroke="#333" strokeWidth={2} />
               </g>
             )}
             {shape === "diamond" && (
               <g transform={`rotate(45, ${cx}, ${swCY})`}>
-                <rect
-                  x={cx - (s * 0.6) / 2}
-                  y={swCY - (s * 0.6) / 2}
-                  width={s * 0.6}
-                  height={s * 0.6}
-                  rx={(s * 0.6) * 0.15}
-                  fill={color}
-                  stroke="#333"
-                  strokeWidth={2}
-                />
+                <rect x={cx - (s * 0.6) / 2} y={swCY - (s * 0.6) / 2} width={s * 0.6} height={s * 0.6} rx={(s * 0.6) * 0.15} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
+                <rect x={cx - (s * 0.6) / 2} y={swCY - (s * 0.6) / 2} width={s * 0.6} height={s * 0.6} rx={(s * 0.6) * 0.15} fill={color} stroke="#333" strokeWidth={2} />
               </g>
             )}
-            {shape === "pentagon" && (
-              <path
-                d={(() => {
-                  const angles = [-90, -30, 30, 90, 150, 210].map(
-                    (deg) => (deg * Math.PI) / 180,
-                  );
-                  const r = s / 2;
-                  const points = angles.map((angle) => ({
-                    x: cx + r * Math.cos(angle),
-                    y: swCY + r * Math.sin(angle),
-                  }));
-                  return getRoundedPolygonPath(points, r * 0.15);
-                })()}
-                fill={color}
-                stroke="#333"
-                strokeWidth={2}
-              />
-            )}
+            {shape === "pentagon" && (() => {
+              const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
+              const r = s / 2;
+              const points = angles.map((angle) => ({ x: cx + r * Math.cos(angle), y: swCY + r * Math.sin(angle) }));
+              const d = getRoundedPolygonPath(points, r * 0.15);
+              return (
+                <g>
+                  <path d={d} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
+                  <path d={d} fill={color} stroke="#333" strokeWidth={2} />
+                </g>
+              );
+            })()}
             {shape === "trapezoid" && (() => {
               const slant = s * TRAPEZOID_SLANT_FACTOR;
               const startY = swCY - (s + slant) / 2 - 10;
               const half = s / 2;
+              const pts = [
+                `${cx - half},${startY}`,
+                `${cx + half},${startY + slant}`,
+                `${cx + half},${startY + s + slant}`,
+                `${cx - half},${startY + s}`,
+              ].join(" ");
               return (
-                <polygon
-                  points={[
-                    `${cx - half},${startY}`,
-                    `${cx + half},${startY + slant}`,
-                    `${cx + half},${startY + s + slant}`,
-                    `${cx - half},${startY + s}`,
-                  ].join(" ")}
-                  fill={color}
-                  stroke="#333"
-                  strokeWidth={2}
-                />
+                <g>
+                  <polygon points={pts} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
+                  <polygon points={pts} fill={color} stroke="#333" strokeWidth={2} />
+                </g>
               );
             })()}
             {shape === "puzzle" && (
-              <path
-                d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)}
-                fill={color}
-                stroke="#333"
-                strokeWidth={2}
-              />
+              <g>
+                <path d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
+                <path d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)} fill={color} stroke="#333" strokeWidth={2} />
+              </g>
             )}
             {shape === "islamic" && (
-              <path
-                d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)}
-                fill={color}
-                stroke="#333"
-                strokeWidth={2}
-              />
+              <g>
+                <path d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
+                <path d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)} fill={color} stroke="#333" strokeWidth={2} />
+              </g>
             )}
             {shape === "fish-scale" && (
-              <circle
-                cx={cx}
-                cy={swCY}
-                r={s / 2}
-                fill={color}
-                stroke="#333"
-                strokeWidth={2}
-              />
+              <g>
+                <circle cx={cx} cy={swCY} r={s / 2} fill="none" stroke="#ffffff" strokeWidth={4} />
+                <circle cx={cx} cy={swCY} r={s / 2} fill={color} stroke="#333" strokeWidth={2} />
+              </g>
             )}
 
             <text
@@ -363,6 +328,16 @@ const PaletteColumnSVG = ({
                       </clipPath>
                     </defs>
                   )}
+
+                  {/* Outer base white border */}
+                  <path
+                    d={pathData}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth={3}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
 
                   {/* Base white background so uncolored portion is white */}
                   <path d={pathData} fill="#ffffff" />

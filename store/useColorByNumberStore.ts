@@ -106,10 +106,26 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   },
 
   toggleGlobalShowNumbers: () =>
-    set((state) => ({ globalShowNumbers: !state.globalShowNumbers })),
+    set((state) => ({
+      globalShowNumbers: !state.globalShowNumbers,
+      projects: state.projects.map((p) =>
+        p.status === "completed" ? { ...p, status: "idle" as const } : p,
+      ),
+    })),
   toggleGlobalShowPalette: () =>
-    set((state) => ({ globalShowPalette: !state.globalShowPalette })),
-  setGlobalTheme: (theme) => set({ globalTheme: theme }),
+    set((state) => ({
+      globalShowPalette: !state.globalShowPalette,
+      projects: state.projects.map((p) =>
+        p.status === "completed" ? { ...p, status: "idle" as const } : p,
+      ),
+    })),
+  setGlobalTheme: (theme) =>
+    set((state) => ({
+      globalTheme: theme,
+      projects: state.projects.map((p) =>
+        p.status === "completed" ? { ...p, status: "idle" as const } : p,
+      ),
+    })),
 
   addProject: (file, dataUrl, options = {}) => {
     const newProject: Project = {
