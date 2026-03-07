@@ -145,9 +145,9 @@ export default function Dashboard() {
                 // 1. Colored
                 const canvasColored = exportToCanvas(project.data, project.filled, {
                     showCodes: globalShowNumbers,
-                    colored: true,
                     showPalette: globalShowPalette,
                     partialColorMode: project.partialColorMode,
+                    bgColor: globalTheme === 'dark' ? '#1a1a1a' : '#ffffff',
                 });
 
                 const blobColored = await new Promise<Blob | null>(resolve => canvasColored.toBlob(resolve, 'image/png'));
@@ -165,6 +165,7 @@ export default function Dashboard() {
                         showCodes: globalShowNumbers,
                         colored: false,
                         showPalette: globalShowPalette,
+                        bgColor: globalTheme === 'dark' ? '#1a1a1a' : '#ffffff',
                     });
 
                     const blobUncolored = await new Promise<Blob | null>(resolve => canvasUncolored.toBlob(resolve, 'image/png'));
@@ -305,8 +306,8 @@ export default function Dashboard() {
                                             <button
                                                 onClick={() => setGlobalTheme('light')}
                                                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${globalTheme === 'light'
-                                                        ? 'bg-white text-black shadow-sm'
-                                                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+                                                    ? 'bg-white text-black shadow-sm'
+                                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
                                                     }`}
                                             >
                                                 Light
@@ -314,8 +315,8 @@ export default function Dashboard() {
                                             <button
                                                 onClick={() => setGlobalTheme('dark')}
                                                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${globalTheme === 'dark'
-                                                        ? 'bg-zinc-800 text-white shadow-sm'
-                                                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+                                                    ? 'bg-zinc-800 text-white shadow-sm'
+                                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
                                                     }`}
                                             >
                                                 Dark
