@@ -134,6 +134,8 @@ export interface ImageToColorByNumberOptions {
   maxWidth?: number;
   /** Use Floyd–Steinberg dithering for better gradients (default: true). */
   useDithering?: boolean;
+  /** Maximum number of colors to use (default: 16). */
+  maxColors?: number;
 }
 
 /**
@@ -172,6 +174,7 @@ export const imageToColorByNumber = async (
     cellSize = 25,
     maxWidth = 1800,
     useDithering = true,
+    maxColors = 16,
   } = options;
 
   // 1. Load + initial resize (cap width)
@@ -238,8 +241,7 @@ export const imageToColorByNumber = async (
 
   // 5. EXTRACT DYNAMIC PALETTE
   // Instead of FIXED_PALETTE, we generate a palette from the image itself.
-  // 24 colors is a good balance: enough for detail, small enough for labeling.
-  const { palette: initialPalette } = quantizeImage(imageData, 24);
+  const { palette: initialPalette } = quantizeImage(imageData, maxColors);
 
   // DEBUG: Log the quantized palette to understand what colors the quantizer produces
   console.log(
@@ -267,8 +269,25 @@ export const imageToColorByNumber = async (
   if (!hasWhite) {
     // No white-ish color was found in the quantized palette — force-add one.
     // This is critical for images with white areas that the quantizer missed.
-    initialPalette.push({ r: 255, g: 255, b: 255 });
-    console.log("[CBN] Force-added pure white to palette (was missing)");
+    if (initialPalette.length >= maxColors) {
+      let lightestIdx = 0;
+      let maxLightness = -1;
+      for (let i = 0; i < initialPalette.length; i++) {
+        const c = initialPalette[i];
+        const lightness = (c.r + c.g + c.b) / 3;
+        if (lightness > maxLightness) {
+          maxLightness = lightness;
+          lightestIdx = i;
+        }
+      }
+      initialPalette[lightestIdx] = { r: 255, g: 255, b: 255 };
+      console.log(
+        `[CBN] Replaced lightest color (idx ${lightestIdx}) with pure white to maintain max ${maxColors} colors`,
+      );
+    } else {
+      initialPalette.push({ r: 255, g: 255, b: 255 });
+      console.log("[CBN] Force-added pure white to palette (was missing)");
+    }
   }
 
   // 5b. DEDUPLICATE Dynamic Palette
