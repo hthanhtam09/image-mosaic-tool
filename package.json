@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3003",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@fontsource/noto-sans": "^5.2.10",
     "@types/file-saver": "^2.0.7",
     "file-saver": "^2.0.5",
     "image-q": "^4.0.0",

@@ -230,7 +230,7 @@ const PaletteColumnSVG = ({
             })()}
             {shape === "trapezoid" && (() => {
               const slant = s * TRAPEZOID_SLANT_FACTOR;
-              const startY = swCY - (s + slant) / 2 - 10;
+              const startY = swCY - (s + slant) / 2;
               const half = s / 2;
               const pts = [
                 `${cx - half},${startY}`,
@@ -266,7 +266,7 @@ const PaletteColumnSVG = ({
 
             <text
               x={cx}
-              y={shape === "trapezoid" ? swCY - 10 : swCY}
+              y={swCY}
               textAnchor="middle"
               dominantBaseline="central"
               fontSize={sLbl}
@@ -761,9 +761,10 @@ const CellTrapezoid = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={W * 0.45}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fill={textColor}
+          fontSize={W * 0.7}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored
             ? {
               stroke:
@@ -838,9 +839,10 @@ const CellFishScale = ({
           y={layout.cy + r * 0.2} // Offset down slightly for better centering in the visible "bottom" half
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={r * 0.9}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fill={textColor}
+          fontSize={r * 1.4}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
             stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: r * 0.15,
@@ -908,9 +910,10 @@ const CellIslamic = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={s * 0.45}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fill={textColor}
+          fontSize={s * 0.7}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
             stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: s * 0.1,
@@ -978,9 +981,10 @@ const CellPuzzle = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={s * 0.45}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fill={textColor}
+          fontSize={s * 0.7}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
             stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: s * 0.1,
@@ -1057,9 +1061,9 @@ const CellPentagon = ({
           textAnchor="middle"
           dominantBaseline="central"
           fill={textColor}
-          fontSize={r * 0.9}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fontSize={r * 1.4}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
             stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: r * 0.15,
@@ -1129,9 +1133,9 @@ const CellCircle = ({
           textAnchor="middle"
           dominantBaseline="central"
           fill={textColor}
-          fontSize={layout.r * 0.9}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fontSize={layout.r * 1.4}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
             stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: layout.r * 0.15,
@@ -1204,9 +1208,9 @@ const CellSquare = ({
           textAnchor="middle"
           dominantBaseline="central"
           fill={textColor}
-          fontSize={s * 0.45}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fontSize={s * 0.7}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
             stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: s * 0.1,
@@ -1282,9 +1286,9 @@ const CellDiamond = ({
           textAnchor="middle"
           dominantBaseline="central"
           fill={textColor}
-          fontSize={half * 0.9}
-          fontWeight={600}
-          fontFamily="sans-serif"
+          fontSize={half * 1.4}
+          fontWeight={400}
+          fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
             stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: half * 0.15,

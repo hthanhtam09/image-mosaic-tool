@@ -177,7 +177,7 @@ export const PAL_DROPLET_GAP = Math.round(0.025 * EXPORT_DPI); // ~7.5px gap bet
 export const PAL_ROW_GAP = Math.round(0.06 * EXPORT_DPI); // ~18px gap between rows
 export const PAL_SWD_GAP = Math.round(0.08 * EXPORT_DPI); // gap swatch→droplets (~11px)
 export const PAL_TOP_PAD = Math.round(0.35 * EXPORT_DPI);
-export const PAL_LABEL_FS = Math.round(0.11 * EXPORT_DPI); // ~33px
+export const PAL_LABEL_FS = Math.round(0.165 * EXPORT_DPI); // ~50px
 export const PAL_SIDE_PAD = Math.round(0.05 * EXPORT_DPI); // ~15px side padding (was 0.08 / 24px)
 /** 3 arc circles to the right of each swatch (larger, wider spacing, outline only) */
 export const PAL_ARC_CIRCLE_R = Math.round(0.065 * EXPORT_DPI); // ~19.5px radius
@@ -732,7 +732,7 @@ const drawPalSwatch = (
     drawTrapezoidPath(
       ctx,
       cx - half,
-      cy - (s + slant) / 2 - 10,
+      cy - (s + slant) / 2,
       s,
       s,
       slant,
@@ -838,13 +838,13 @@ const renderPaletteColumnCBN = (
 
     // Label inside swatch
     ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${sLbl}px sans-serif`;
+    ctx.font = `400 ${sLbl}px 'Noto Sans', sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(0,0,0,0.5)";
     ctx.lineWidth = 3;
-    ctx.strokeText(code, cx, shape === "trapezoid" ? swCY - 10 : swCY);
-    ctx.fillText(code, cx, shape === "trapezoid" ? swCY - 10 : swCY);
+    ctx.strokeText(code, cx, swCY);
+    ctx.fillText(code, cx, swCY);
 
     // 5 droplet icons
     const dropTop = yPos + sSW + sGap;
@@ -1232,7 +1232,7 @@ export const exportToCanvas = (
       ctx.save();
       const brightness = getBrightness(fillColor);
       const textFill = brightness < 128 ? "#ffffff" : "#999999";
-      ctx.font = `600 ${cl.r * 0.9}px sans-serif`;
+      ctx.font = `400 ${cl.r * 1.4}px 'Noto Sans', sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
@@ -1321,7 +1321,7 @@ export const exportPaletteToCanvas = (
 
     // Color name – left of box, right-aligned text near the swatch
     ctx.fillStyle = "#000000";
-    ctx.font = "500 28px sans-serif";
+    ctx.font = "400 42px 'Noto Sans', sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     ctx.fillText(
@@ -1341,7 +1341,7 @@ export const exportPaletteToCanvas = (
 
     // Code number inside the box, centered
     ctx.fillStyle = "#000000";
-    ctx.font = "600 26px sans-serif";
+    ctx.font = "400 39px 'Noto Sans', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(code, startX + swatchSize / 2, y + rowHeight / 2);
