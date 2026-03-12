@@ -736,8 +736,12 @@ export default function Dashboard() {
                                         </div>
                                     </div>
 
-                                    <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2 text-center">Generating Book...</h2>
-                                    <p className="text-[var(--text-secondary)] text-center text-sm mb-6">Processing high-quality vectors. This may take a moment.</p>
+                                    <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2 text-center">
+                                        {pdfProgress.total && pdfProgress.current === pdfProgress.total ? "Finalizing PDF..." : "Generating Book..."}
+                                    </h2>
+                                    <p className="text-[var(--text-secondary)] text-center text-sm mb-6">
+                                        {pdfProgress.total && pdfProgress.current === pdfProgress.total ? "Compressing and saving file structure. This might take a few seconds." : "Processing high-quality vectors. This may take a moment."}
+                                    </p>
 
                                     <div className="w-full max-w-sm flex justify-between text-xs text-[var(--text-secondary)] mb-2 font-mono">
                                         <span>Page {pdfProgress.current}</span>
