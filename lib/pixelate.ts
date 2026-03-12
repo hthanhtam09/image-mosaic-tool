@@ -27,7 +27,7 @@ const srgbToLinear = (c: number): number => {
 };
 
 /** RGB (0–255) to CIE Lab (D65) for perceptual comparison */
-const rgbToLab = (rgb: RGB): { L: number; a: number; b: number } => {
+export const rgbToLab = (rgb: RGB): { L: number; a: number; b: number } => {
   const r = srgbToLinear(rgb.r);
   const g = srgbToLinear(rgb.g);
   const b = srgbToLinear(rgb.b);
@@ -51,7 +51,7 @@ type Lab = { L: number; a: number; b: number };
  * Delta E 2000 (CIEDE2000) – better perceptual match than Delta E 76,
  * especially for orange/red and similar hues so palette choice is correct.
  */
-const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
+export const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
   const L1 = lab1.L;
   const a1 = lab1.a;
   const b1 = lab1.b;

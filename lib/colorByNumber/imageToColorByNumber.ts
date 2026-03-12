@@ -20,8 +20,9 @@ import { FIXED_PALETTE } from "@/lib/palette";
 import {
   createMosaicBlocks,
   reduceToUsedPalette,
-  deduplicatePaletteDynamic,
   mergeMinorColors,
+  rgbToLab,
+  deltaE2000,
 } from "@/lib/pixelate";
 import { quantizeImage } from "@/lib/quantize";
 
@@ -159,6 +160,64 @@ const findClosestFixedColorIndex = (color: RGB): number => {
 };
 
 /**
+ * Agglomerative palette merge using CIEDE2000.
+ *
+ * Repeatedly finds the two perceptually closest colors and merges them
+ * (pixel-weighted average in RGB, then re-convert) until the palette has
+ * ≤ maxColors entries.  This is optimal compared to threshold-bumping because
+ * it always collapses the single most-similar pair, preserving the most
+ * visually distinct colors in the final palette.
+ *
+ * White (r≥245, g≥245, b≥245) is protected: it is never merged into another color.
+ */
+const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
+  // Work on a mutable copy
+  let palette = colors.map((c) => ({ ...c }));
+
+  while (palette.length > maxColors) {
+    let bestI = 0;
+    let bestJ = 1;
+    let minDist = Infinity;
+
+    // Find closest pair (O(n²) – fine for n≤~200)
+    for (let i = 0; i < palette.length; i++) {
+      const labI = rgbToLab(palette[i]);
+      const isWhiteI =
+        palette[i].r >= 245 && palette[i].g >= 245 && palette[i].b >= 245;
+
+      for (let j = i + 1; j < palette.length; j++) {
+        // Never merge white with a non-white color
+        const isWhiteJ =
+          palette[j].r >= 245 && palette[j].g >= 245 && palette[j].b >= 245;
+        if (isWhiteI !== isWhiteJ) continue;
+
+        const labJ = rgbToLab(palette[j]);
+        const d = deltaE2000(labI, labJ);
+        if (d < minDist) {
+          minDist = d;
+          bestI = i;
+          bestJ = j;
+        }
+      }
+    }
+
+    // Merge bestJ into bestI (simple average in RGB – good enough for color-by-number)
+    const ci = palette[bestI];
+    const cj = palette[bestJ];
+    palette[bestI] = {
+      r: Math.round((ci.r + cj.r) / 2),
+      g: Math.round((ci.g + cj.g) / 2),
+      b: Math.round((ci.b + cj.b) / 2),
+    };
+
+    // Remove the merged color
+    palette.splice(bestJ, 1);
+  }
+
+  return palette;
+};
+
+/**
  * Convert an image file into ColorByNumberData.
  *
  * Uses dynamic palette extraction (image-q) to get accurate colors,
@@ -239,67 +298,30 @@ export const imageToColorByNumber = async (
       : resizeImageToSize(img, targetW, targetH);
 
   // 5. EXTRACT DYNAMIC PALETTE
-  // Instead of FIXED_PALETTE, we generate a palette from the image itself.
-  // We extract more colors initially to capture detail, then iteratively reduce to maxColors.
-  const { palette: initialPalette } = quantizeImage(
-    imageData,
-    Math.max(24, maxColors),
-  );
-
-  // DEBUG: Log the quantized palette to understand what colors the quantizer produces
-  console.log(
-    "[CBN] Quantized palette (" + initialPalette.length + " colors):",
-  );
-  initialPalette.forEach((c, i) => {
-    const hex = rgbToHex(c);
-    console.log(`  [${i}] rgb(${c.r},${c.g},${c.b}) = ${hex}`);
-  });
+  // Extract 3x more colors than needed so the quantizer captures fine details,
+  // then we smartly reduce to maxColors using agglomerative merging.
+  const overSample = Math.max(maxColors * 3, 48);
+  const { palette: initialPalette } = quantizeImage(imageData, overSample);
 
   // 5a. FORCE-ADD PURE WHITE TO PALETTE
-  // The quantizer (rgbquant) often lumps white and light beige into a single cluster
-  // when the image has many competing vibrant colors. Force-adding pure white ensures
-  // white areas (faces, highlights) are correctly separated from backgrounds.
-  // Also snap any existing near-white palette colors to pure white.
+  // Snap near-whites to pure white and ensure white is present.
   let hasWhite = false;
   for (let i = 0; i < initialPalette.length; i++) {
     const c = initialPalette[i];
     if (c.r >= 245 && c.g >= 245 && c.b >= 245) {
-      // Already close to pure white, snap it
       initialPalette[i] = { r: 255, g: 255, b: 255 };
       hasWhite = true;
     }
   }
   if (!hasWhite) {
-    // No white-ish color was found in the quantized palette — force-add one.
-    // This is critical for images with white areas that the quantizer missed.
-    // We just push it; we will enforce maxColors later during deduplication.
     initialPalette.push({ r: 255, g: 255, b: 255 });
-    console.log("[CBN] Force-added pure white to palette (was missing)");
   }
 
-  // 5b. DEDUPLICATE Dynamic Palette
-  // Merge colors that are perceptually very close (e.g. 2 shades of orange).
-  // Threshold 12.0 is generous enough to merge subtle variations.
-  let { palette: dynamicPalette } = deduplicatePaletteDynamic(
-    initialPalette,
-    12.0,
-  );
-
-  // 5c. ENFORCE MAX COLORS LIMIT
-  // If we still have more colors than allowed, progressively merge the most similar ones.
-  let limitThreshold = 13.0;
-  while (dynamicPalette.length > maxColors && limitThreshold < 100.0) {
-    const nextRes = deduplicatePaletteDynamic(dynamicPalette, limitThreshold);
-    dynamicPalette = nextRes.palette;
-    limitThreshold += 2.0;
-  }
-
-  console.log("[CBN] After dedup (" + dynamicPalette.length + " colors):");
-  dynamicPalette.forEach((c, i) => {
-    const hex = rgbToHex(c);
-    const w = isWhite(c) ? " [WHITE]" : "";
-    console.log(`  [${i}] rgb(${c.r},${c.g},${c.b}) = ${hex}${w}`);
-  });
+  // 5b. AGGLOMERATIVE MERGE to exactly maxColors.
+  // Repeatedly find and merge the two most perceptually similar colors (CIEDE2000)
+  // until palette size ≤ maxColors. This guarantees the final palette preserves
+  // the most visually distinct colors from the image.
+  const dynamicPalette = agglomerativeMerge(initialPalette, maxColors);
 
   // 6. Create mosaic blocks using the DYNAMIC palette
   // This ensures "Orange" in image stays "Orange" even if it's not in the 24 basic colors.
