@@ -190,10 +190,10 @@ export const generateBookPdf = async (
     // --- ODD PAGE (Right Page) ---
     pdf.addPage();
     currentPageIndex++;
-    
+
     const canvas = exportToCanvas(project.data, project.filled, {
       showCodes: globalOptions.showCodes,
-      colored: false, 
+      colored: false,
       showPalette: globalOptions.showPalette,
       partialColorMode: project.partialColorMode,
       bgColor: bgColorHex,

@@ -236,11 +236,31 @@ export const imageToColorByNumber = async (
   } = options;
 
   // 1. Load + initial resize (cap width)
-  // 1. Load + Crop Watermark + Crop to Aspect Ratio + Resize
-  // Enforce 7 x 10.2 inch aspect ratio (~0.686)
-  const TARGET_ASPECT = 7.0 / 10.2;
+  // 1. Load + Rotate (if landscape) + Crop Watermark + Crop to Aspect Ratio + Resize
+  // We want everything to be Portrait (7 x 10.2 inch aspect ratio ≈ 0.686).
 
-  const rawImg = await loadImageFromFile(file);
+  let rawImg = await loadImageFromFile(file);
+
+  // IF the source image is landscape (wider than tall), 
+  // we ROTATE it 90 degrees to make it portrait so it fits the standard page orientation.
+  if (rawImg.width > rawImg.height) {
+    const rotateCanvas = document.createElement("canvas");
+    rotateCanvas.width = rawImg.height;
+    rotateCanvas.height = rawImg.width;
+    const rotateCtx = rotateCanvas.getContext("2d");
+    if (rotateCtx) {
+      rotateCtx.translate(rotateCanvas.width / 2, rotateCanvas.height / 2);
+      rotateCtx.rotate((90 * Math.PI) / 180);
+      rotateCtx.drawImage(rawImg, -rawImg.width / 2, -rawImg.height / 2);
+      
+      const rotatedImg = new Image();
+      rotatedImg.src = rotateCanvas.toDataURL();
+      await new Promise((r) => (rotatedImg.onload = r));
+      rawImg = rotatedImg;
+    }
+  }
+
+  const TARGET_ASPECT = 7.0 / 10.2;
 
   // Remove Gemini watermark before applying aspect ratio crop
   const watermarkRemovedCanvas = removeGeminiWatermark(rawImg);
