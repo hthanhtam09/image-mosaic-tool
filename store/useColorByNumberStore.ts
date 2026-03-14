@@ -181,7 +181,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     })),
 
   convertAllIdleProjects: async () => {
-    const { projects, updateProject } = get();
+    const { projects, updateProject, globalCellSize } = get();
 
     // Filter projects that need processing
     const idleProjects = projects.filter(
@@ -192,24 +192,40 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     // Mark as processing
     idleProjects.forEach((p) => updateProject(p.id, { status: "processing" }));
 
-    // Process sequentially to prevent UI freezing
-    const { globalCellSize } = get();
-    for (const p of idleProjects) {
-      try {
-        // Yield to main thread to allow UI updates
-        await new Promise((resolve) => setTimeout(resolve, 50));
+    // Parallel processing with concurrency limit
+    // Use available CPU cores (workers run off main thread so higher concurrency is safe)
+    const cpuCores = typeof navigator !== "undefined" && navigator.hardwareConcurrency
+      ? navigator.hardwareConcurrency
+      : 4;
+    const limit = Math.min(Math.max(cpuCores, 2), 6);
+    const queue = [...idleProjects];
+    
+    const runProcessor = async () => {
+      while (queue.length > 0) {
+        const p = queue.shift();
+        if (!p) break;
 
-        const result = await imageToColorByNumber(p.originalFile, {
-          gridType: p.gridType,
-          cellSize: globalCellSize,
-          useDithering: p.useDithering,
-        });
-        updateProject(p.id, { data: result, status: "completed" });
-      } catch (e) {
-        console.error(`Failed to convert project ${p.id}`, e);
-        updateProject(p.id, { status: "error" });
+        try {
+          const result = await imageToColorByNumber(p.originalFile, {
+            gridType: p.gridType,
+            cellSize: globalCellSize,
+            useDithering: p.useDithering,
+          });
+          updateProject(p.id, { data: result, status: "completed" });
+        } catch (e) {
+          console.error(`Failed to convert project ${p.id}`, e);
+          updateProject(p.id, { status: "error" });
+        }
       }
+    };
+
+    // Spawn up to 'limit' processors
+    const processors = [];
+    for (let i = 0; i < Math.min(limit, idleProjects.length); i++) {
+      processors.push(runProcessor());
     }
+
+    await Promise.all(processors);
   },
 
   // --- Actions working on Active Project ---

@@ -299,6 +299,54 @@ export const resizeImage = (
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
 };
 
+/**
+ * Resize a canvas source to max width while preserving aspect ratio.
+ * Same as resizeImage but accepts HTMLCanvasElement directly — avoids toDataURL().
+ */
+export const resizeImageFromCanvas = (
+  source: HTMLCanvasElement,
+  maxWidth: number,
+): ImageData => {
+  const scale = Math.min(1, maxWidth / source.width);
+  const w = Math.round(source.width * scale);
+  const h = Math.round(source.height * scale);
+  if (scale >= 1) {
+    // No resize needed, just extract ImageData
+    const ctx = source.getContext("2d");
+    if (!ctx) throw new Error("Could not get canvas context");
+    return ctx.getImageData(0, 0, source.width, source.height);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get canvas context");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+};
+
+/**
+ * Resize a canvas-based source to exact pixel dimensions.
+ * Equivalent to resizeImageToSize but for canvas sources.
+ */
+export const resizeCanvasToSize = (
+  source: HTMLCanvasElement,
+  targetW: number,
+  targetH: number,
+): ImageData => {
+  const canvas = document.createElement("canvas");
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get canvas context");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, targetW, targetH);
+  return ctx.getImageData(0, 0, targetW, targetH);
+};
+
 /** Letter size (8.5" x 11") at 300 DPI for print */
 export const LETTER_OUTPUT_DPI = 300;
 export const LETTER_WIDTH_IN = 8.5;

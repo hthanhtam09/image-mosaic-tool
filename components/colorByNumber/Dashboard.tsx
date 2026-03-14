@@ -5,6 +5,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ColorByNumberGridType, PartialColorMode } from "@/lib/colorByNumber";
 import ProjectPreviewModal from "./ProjectPreviewModal";
 import { generateBookPdf, parseCSV, PDFCsvRow } from "@/lib/colorByNumber/pdfExport";
+import { exportToCanvas } from "@/lib/colorByNumber/export";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
 export default function Dashboard() {
     const {
@@ -57,6 +60,8 @@ export default function Dashboard() {
     const suffixInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [isConverting, setIsConverting] = useState(false);
+    const [isPreparingStep2, setIsPreparingStep2] = useState(false);
+    const [isZipping, setIsZipping] = useState(false);
     const [splitColorDropdownId, setSplitColorDropdownId] = useState<string | null>(null);
     const splitColorRef = useRef<HTMLDivElement>(null);
 
@@ -98,8 +103,9 @@ export default function Dashboard() {
                     "trapezoid",
                 ];
 
-                // Process sequentially to read files
-                await Promise.all(fileList.map(async (file, index) => {
+                // Process sequentially to preserve order
+                for (let index = 0; index < fileList.length; index++) {
+                    const file = fileList[index];
                     const reader = new FileReader();
                     const dataUrl = await new Promise<string>((resolve, reject) => {
                         reader.onload = () => resolve(reader.result as string);
@@ -114,7 +120,7 @@ export default function Dashboard() {
                     addProject(file, dataUrl, {
                         gridType: pattern,
                     });
-                }));
+                }
 
             } catch (err) {
                 console.error("Failed to import images:", err);
@@ -177,7 +183,9 @@ export default function Dashboard() {
     };
 
     const handleGeneratePdf = async () => {
-        const readyProjects = projects.filter(p => p.status === 'completed');
+        const readyProjects = [...projects]
+            .filter((p) => p.status === "completed")
+            .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         if (readyProjects.length === 0) return;
 
         setCurrentStep(3);
@@ -199,7 +207,11 @@ export default function Dashboard() {
                     csvData,
                     prefixPages,
                     suffixPages,
-                    globalOptions: { theme: globalTheme } as any
+                    globalOptions: { 
+                        theme: globalTheme,
+                        showCodes: globalShowNumbers,
+                        showPalette: globalShowPalette
+                    } as any
                 },
                 (current: number, total: number) => {
                     setPdfProgress({ current, total });
@@ -224,6 +236,65 @@ export default function Dashboard() {
         } finally {
             setIsGeneratingPdf(false);
         }
+    };
+
+    const handleDownloadAllImages = async () => {
+        const readyProjects = [...projects]
+            .filter((p) => p.status === "completed")
+            .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        if (readyProjects.length === 0) return;
+
+        setIsZipping(true);
+        const zip = new JSZip();
+        const rootFolder = zip.folder("converted_images");
+        const colorFolder = rootFolder?.folder("color");
+        const uncolorFolder = rootFolder?.folder("uncolor");
+
+        try {
+            for (let i = 0; i < readyProjects.length; i++) {
+                const project = readyProjects[i];
+                const baseName = project.name.replace(/\.[^/.]+$/, "");
+                
+                // Color version
+                const canvasColor = exportToCanvas(project.data!, project.filled, {
+                    showCodes: globalShowNumbers,
+                    colored: true,
+                    showPalette: globalShowPalette,
+                    partialColorMode: project.partialColorMode,
+                    bgColor: globalTheme === 'dark' ? "#1a1a1a" : "#ffffff",
+                });
+                const dataUrlColor = canvasColor.toDataURL("image/png");
+                const base64Color = dataUrlColor.split(',')[1];
+                colorFolder?.file(`${baseName}.png`, base64Color, { base64: true });
+                
+                // Uncolored version (empty grid with numbers)
+                const canvasUncolor = exportToCanvas(project.data!, project.filled, {
+                    showCodes: true, // Always show codes for uncolored version
+                    colored: false,  // Uncolored
+                    showPalette: globalShowPalette,
+                    partialColorMode: project.partialColorMode,
+                    bgColor: globalTheme === 'dark' ? "#1a1a1a" : "#ffffff",
+                });
+                const dataUrlUncolor = canvasUncolor.toDataURL("image/png");
+                const base64Uncolor = dataUrlUncolor.split(',')[1];
+                uncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
+            }
+
+            const content = await zip.generateAsync({ type: "blob" });
+            saveAs(content, "converted_images.zip");
+        } catch (error) {
+            console.error("Failed to ZIP images:", error);
+        } finally {
+            setIsZipping(false);
+        }
+    };
+
+    const handleNextToSetup = async () => {
+        setIsPreparingStep2(true);
+        // Emulate brief loading for better UX
+        await new Promise(resolve => setTimeout(resolve, 600));
+        setCurrentStep(2);
+        setIsPreparingStep2(false);
     };
 
 
@@ -388,14 +459,34 @@ export default function Dashboard() {
                         </button>
                     )}
                     {currentStep === 1 && projects.length > 0 && idleCount === 0 && (
-                        <button
-                            onClick={() => setCurrentStep(2)}
-                            disabled={isConverting}
-                            className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
-                        >
-                            Next: Setup PDF
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-                        </button>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleDownloadAllImages}
+                                disabled={isZipping}
+                                className="px-6 py-2 text-sm font-medium text-[var(--accent)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
+                            >
+                                {isZipping ? (
+                                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                )}
+                                Download All (.zip)
+                            </button>
+                            <button
+                                onClick={handleNextToSetup}
+                                disabled={isConverting || isPreparingStep2}
+                                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 min-w-[160px]"
+                            >
+                                {isPreparingStep2 ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <>
+                                        Next: Setup PDF
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     )}
                     <input
                         ref={imageInputRef}
@@ -711,6 +802,22 @@ export default function Dashboard() {
                                     </div>
                                     <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-2 text-center">Export Complete!</h2>
                                     <p className="text-[var(--text-secondary)] text-center mb-8">Your KDP-ready PDF has been generated and downloaded.</p>
+                                    
+                                    <div className="flex gap-4 w-full">
+                                        <button 
+                                            onClick={() => setCurrentStep(2)}
+                                            className="flex-1 px-6 py-3 text-sm font-medium text-[var(--text-primary)] border border-[var(--border-default)] rounded-xl hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                                            Edit Settings
+                                        </button>
+                                        <button 
+                                            onClick={() => setCurrentStep(1)}
+                                            className="flex-1 px-6 py-3 text-sm font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
+                                        >
+                                            Back to Dashboard
+                                        </button>
+                                    </div>
                                 </>
                             ) : (
                                 <>
