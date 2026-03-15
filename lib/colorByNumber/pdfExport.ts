@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import { ColorByNumberData, FilledMap } from "./types";
 import { exportToCanvas, PartialColorMode } from "./export";
+import { NOTO_SANS_REGULAR, NOTO_SANS_BOLD } from "./fonts";
 
 export interface PDFCsvRow {
   number: string;
@@ -8,10 +9,14 @@ export interface PDFCsvRow {
 }
 
 export interface PDFExportOptions {
-  projects: {
+  projects?: {
     data: ColorByNumberData;
     filled: FilledMap;
     partialColorMode: PartialColorMode;
+  }[];
+  directImages?: {
+    colorUrl: string;
+    uncolorUrl: string;
   }[];
   backgroundImage: string | null; // Data URL or URL
   csvData: PDFCsvRow[];
@@ -78,14 +83,21 @@ export const generateBookPdf = async (
   options: PDFExportOptions,
   onProgress?: (current: number, total: number) => void,
 ): Promise<Blob> => {
-  const { projects, backgroundImage, csvData, prefixPages = [], suffixPages = [], globalOptions } = options;
+  const { projects = [], directImages = [], backgroundImage, csvData, prefixPages = [], suffixPages = [], globalOptions } = options;
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "pt",
     format: [PAGE_W_PT, PAGE_H_PT],
   });
 
-  const totalPairs = projects.length;
+  // Register Noto Sans Font
+  pdf.addFileToVFS("NotoSans-Regular.ttf", NOTO_SANS_REGULAR);
+  pdf.addFileToVFS("NotoSans-Bold.ttf", NOTO_SANS_BOLD);
+  pdf.addFont("NotoSans-Regular.ttf", "Noto Sans", "normal");
+  pdf.addFont("NotoSans-Bold.ttf", "Noto Sans", "bold");
+  pdf.setFont("Noto Sans", "normal");
+
+  const totalPairs = directImages.length > 0 ? directImages.length : projects.length;
   const totalPrefix = prefixPages.length;
   const totalSuffix = suffixPages.length;
   const totalPages = totalPrefix + totalPairs * 2 + totalSuffix;
@@ -112,7 +124,6 @@ export const generateBookPdf = async (
 
   // --- MAIN CONTENT (Repeating Pairs) ---
   for (let i = 0; i < totalPairs; i++) {
-    const project = projects[i];
     const csvRow = csvData[i] || { number: "", text: "" };
 
     // --- EVEN PAGE (Left Page) ---
@@ -146,11 +157,7 @@ export const generateBookPdf = async (
     // Try to use requested custom fonts. 
     // Note: In jsPDF, custom fonts need to be added to VFS via addFileToVFS and addFont. 
     // If they aren't, it will fall back to Helvetica automatically, but we set the names here so it's ready.
-    try {
-      pdf.setFont("Roca Two", "bold");
-    } catch (e) {
-      pdf.setFont("helvetica", "bold");
-    }
+    pdf.setFont("Noto Sans", "bold");
     
     pdf.setFontSize(38); // 38px (pt in jsPDF)
     const numText = csvRow.number.toString();
@@ -167,11 +174,7 @@ export const generateBookPdf = async (
     pdf.setLineWidth(1.5);
     pdf.line((PAGE_W_PT - lineLength) / 2, lineY, (PAGE_W_PT + lineLength) / 2, lineY);
 
-    try {
-      pdf.setFont("Noto Sans", "normal");
-    } catch (e) {
-      pdf.setFont("helvetica", "normal");
-    }
+    pdf.setFont("Noto Sans", "normal");
     
     pdf.setFontSize(14); // 14px (pt in jsPDF)
     
@@ -217,15 +220,22 @@ export const generateBookPdf = async (
     pdf.addPage();
     currentPageIndex++;
 
-    const canvas = exportToCanvas(project.data, project.filled, {
-      showCodes: globalOptions.showCodes,
-      colored: false,
-      showPalette: globalOptions.showPalette,
-      partialColorMode: project.partialColorMode,
-      bgColor: bgColorHex,
-    });
+    let imgData: string;
+    
+    if (directImages.length > 0) {
+      imgData = directImages[i].uncolorUrl;
+    } else {
+      const project = projects[i];
+      const canvas = exportToCanvas(project.data, project.filled, {
+        showCodes: globalOptions.showCodes,
+        colored: false,
+        showPalette: globalOptions.showPalette,
+        partialColorMode: project.partialColorMode,
+        bgColor: bgColorHex,
+      });
 
-    const imgData = canvas.toDataURL("image/png");
+      imgData = canvas.toDataURL("image/png");
+    }
 
     pdf.addImage(
       imgData,

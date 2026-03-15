@@ -59,6 +59,10 @@ export default function Dashboard() {
     const prefixInputRef = useRef<HTMLInputElement>(null);
     const suffixInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const dirInputRef = useRef<HTMLInputElement>(null);
+    const [directImages, setDirectImages] = useState<{name: string; colorUrl: string; uncolorUrl: string}[]>([]);
+    const [uploadedFolders, setUploadedFolders] = useState<{color: boolean, uncolor: boolean}>({ color: false, uncolor: false });
+    const [isProcessingFolder, setIsProcessingFolder] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
     const [isPreparingStep2, setIsPreparingStep2] = useState(false);
     const [isZipping, setIsZipping] = useState(false);
@@ -131,6 +135,93 @@ export default function Dashboard() {
         [addProject],
     );
 
+    const handleDirUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
+        setIsProcessingFolder(true);
+
+        try {
+            // 1. Better detection logic
+            let hasColor = false;
+            let hasUncolor = false;
+            const groups: Record<string, { color?: File; uncolor?: File }> = {};
+
+            for (const file of files) {
+                const relPath = file.webkitRelativePath.toLowerCase();
+                const name = file.name;
+                
+                if (!groups[name]) groups[name] = {};
+
+                // Look for 'color' or 'uncolor' anywhere in the path segments
+                if (relPath.includes('/color/') || relPath.startsWith('color/')) {
+                    groups[name].color = file;
+                    hasColor = true;
+                } else if (relPath.includes('/uncolor/') || relPath.startsWith('uncolor/')) {
+                    groups[name].uncolor = file;
+                    hasUncolor = true;
+                } else if (relPath.includes('color')) { // fallback
+                    groups[name].color = file;
+                    hasColor = true;
+                } else if (relPath.includes('uncolor')) { // fallback
+                    groups[name].uncolor = file;
+                    hasUncolor = true;
+                }
+            }
+
+            // 2. Update status immediately
+            setUploadedFolders(prev => ({
+                color: prev.color || hasColor,
+                uncolor: prev.uncolor || hasUncolor
+            }));
+
+            const readFile = (f: File): Promise<string> => new Promise((resolve, reject) => {
+                const rd = new FileReader(); 
+                rd.onload = () => resolve(rd.result as string); 
+                rd.onerror = reject;
+                rd.readAsDataURL(f);
+            });
+
+            const newDirectImages: { name: string; colorUrl: string; uncolorUrl: string }[] = [];
+            for (const [name, g] of Object.entries(groups)) {
+                // To move to Step 2, we need at least the uncolor image
+                if (g.uncolor) {
+                    newDirectImages.push({
+                        name,
+                        colorUrl: g.color ? await readFile(g.color) : '',
+                        uncolorUrl: await readFile(g.uncolor)
+                    });
+                }
+            }
+
+            if (newDirectImages.length > 0) {
+                setDirectImages(prev => {
+                    // Filter out existing matches to avoid duplicates if re-uploading
+                    const filtered = prev.filter(p => !newDirectImages.some(n => n.name === p.name));
+                    const updated = [...filtered, ...newDirectImages];
+                    return updated.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+                });
+
+                // Small delay to show the "Light Up" effect before transitioning
+                setTimeout(() => {
+                    setCurrentStep(2);
+                    setIsProcessingFolder(false);
+                }, 1000);
+            } else {
+                setIsProcessingFolder(false);
+            }
+        } catch (err) {
+            console.error("Folder upload failed:", err);
+            setIsProcessingFolder(false);
+        }
+
+        e.target.value = '';
+    };
+
+    const removeDirectImage = (name: string) => {
+        setDirectImages(prev => prev.filter(img => img.name !== name));
+    };
+
     /* ── Split Color Mode Options ── */
     const SPLIT_COLOR_MODES: { value: PartialColorMode; label: string; icon: string }[] = [
         { value: 'none', label: 'Full Color', icon: '🟩' },
@@ -186,7 +277,7 @@ export default function Dashboard() {
         const readyProjects = [...projects]
             .filter((p) => p.status === "completed")
             .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-        if (readyProjects.length === 0) return;
+        if (readyProjects.length === 0 && directImages.length === 0) return;
 
         setCurrentStep(3);
         setIsGeneratingPdf(true);
@@ -202,6 +293,10 @@ export default function Dashboard() {
                         data: p.data!,
                         filled: p.filled,
                         partialColorMode: p.partialColorMode
+                    })),
+                    directImages: directImages.map(img => ({
+                        colorUrl: img.colorUrl,
+                        uncolorUrl: img.uncolorUrl
                     })),
                     backgroundImage: bgImage,
                     csvData,
@@ -309,15 +404,70 @@ export default function Dashboard() {
         { value: "trapezoid", label: "Trapezoid" },
     ];
 
-    if (projects.length === 0) {
+    if (projects.length === 0 && directImages.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-full w-full p-8 text-center">
-                <button
-                    onClick={handleImportClick}
-                    className="px-8 py-4 text-lg font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl shadow-lg transition-transform hover:scale-105 active:scale-95"
-                >
-                    Import Images
-                </button>
+            <div className="flex flex-col items-center justify-center h-full w-full p-8 text-center max-w-4xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+                    {/* Standard Import */}
+                    <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl p-8 flex flex-col items-center hover:shadow-xl transition-all group">
+                        <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        </div>
+                        <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">Standard Import</h2>
+                        <p className="text-sm text-[var(--text-secondary)] mb-8">Best for converting new images into patterns one by one.</p>
+                        <button
+                            onClick={handleImportClick}
+                            className="w-full py-4 text-lg font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl shadow-lg transition-all"
+                        >
+                            Select Images
+                        </button>
+                    </div>
+
+                    {/* Folder Upload */}
+                    <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl p-8 flex flex-col items-center hover:shadow-xl transition-all group">
+                        <div className="w-16 h-16 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                        </div>
+                        <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">Folder Upload</h2>
+                        <p className="text-sm text-[var(--text-secondary)] mb-6">Upload folder containing <b>color/</b> and <b>uncolor/</b> subfolders.</p>
+                        
+                        {/* Folder Status Indicators with Enhanced Effects */}
+                        <div className="flex gap-4 mb-6">
+                            <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl text-sm font-bold border transition-all duration-700 shadow-sm ${uploadedFolders.color 
+                                ? 'bg-green-500 border-green-400 text-white scale-110 shadow-[0_0_25px_rgba(34,197,94,0.6)] animate-pulse' 
+                                : 'bg-gray-500/5 border-gray-500/20 text-[var(--text-muted)] opacity-60'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all duration-500 ${uploadedFolders.color ? 'bg-white text-green-600' : 'bg-gray-500/30'}`}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
+                                <span className="tracking-wide">Color Folder</span>
+                            </div>
+                            <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl text-sm font-bold border transition-all duration-700 shadow-sm ${uploadedFolders.uncolor 
+                                ? 'bg-blue-600 border-blue-400 text-white scale-110 shadow-[0_0_25px_rgba(59,130,246,0.6)] animate-pulse' 
+                                : 'bg-gray-500/5 border-gray-500/20 text-[var(--text-muted)] opacity-60'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all duration-500 ${uploadedFolders.uncolor ? 'bg-white text-blue-600' : 'bg-gray-500/30'}`}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
+                                <span className="tracking-wide">Uncolor Folder</span>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => dirInputRef.current?.click()}
+                            disabled={isProcessingFolder}
+                            className="w-full py-4 text-lg font-medium text-blue-500 border border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 rounded-xl shadow-lg transition-all relative flex items-center justify-center gap-3"
+                        >
+                            {isProcessingFolder ? (
+                                <>
+                                    <div className="w-5 h-5 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                    Scanning Folder...
+                                </>
+                            ) : (
+                                "Select Folder"
+                            )}
+                        </button>
+                    </div>
+                </div>
+
                 <input
                     ref={imageInputRef}
                     type="file"
@@ -325,6 +475,13 @@ export default function Dashboard() {
                     className="hidden"
                     multiple
                     onChange={handleImageFileChange}
+                />
+                <input
+                    ref={dirInputRef}
+                    type="file"
+                    {...{ webkitdirectory: "", directory: "" } as any}
+                    className="hidden"
+                    onChange={handleDirUploadChange}
                 />
             </div>
         );
@@ -458,20 +615,22 @@ export default function Dashboard() {
                             {isConverting ? "Converting..." : `Convert All (${idleCount})`}
                         </button>
                     )}
-                    {currentStep === 1 && projects.length > 0 && idleCount === 0 && (
+                    {currentStep === 1 && (projects.length > 0 || directImages.length > 0) && idleCount === 0 && (
                         <div className="flex gap-3">
-                            <button
-                                onClick={handleDownloadAllImages}
-                                disabled={isZipping}
-                                className="px-6 py-2 text-sm font-medium text-[var(--accent)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
-                            >
-                                {isZipping ? (
-                                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                                )}
-                                Download All (.zip)
-                            </button>
+                            {projects.length > 0 && (
+                                <button
+                                    onClick={handleDownloadAllImages}
+                                    disabled={isZipping}
+                                    className="px-6 py-2 text-sm font-medium text-[var(--accent)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isZipping ? (
+                                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                    )}
+                                    Download All (.zip)
+                                </button>
+                            )}
                             <button
                                 onClick={handleNextToSetup}
                                 disabled={isConverting || isPreparingStep2}
@@ -503,6 +662,41 @@ export default function Dashboard() {
             {currentStep === 1 && (
                 <div className="flex-1 overflow-y-auto pr-2 no-scrollbar">
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6 pb-8">
+                        {/* Show direct folder upload cards */}
+                        {directImages.map(img => (
+                            <div
+                                key={img.name}
+                                className="flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow relative group"
+                            >
+                                <div className="relative w-full pt-[100%] bg-white/5 border-b border-[var(--border-subtle)] overflow-hidden">
+                                    <img
+                                        src={img.colorUrl || img.uncolorUrl}
+                                        alt={img.name}
+                                        className="absolute inset-0 w-full h-full object-cover object-top"
+                                    />
+                                    <div className="absolute top-2 right-2 px-2 py-1 text-[10px] font-bold bg-blue-500 text-white rounded uppercase tracking-wider shadow-sm">
+                                        Direct Folder
+                                    </div>
+                                    <button
+                                        onClick={() => removeDirectImage(img.name)}
+                                        className="absolute top-2 left-2 p-1.5 opacity-0 group-hover:opacity-100 bg-black/50 text-white rounded hover:bg-red-500/80 transition-all shadow-sm"
+                                        title="Remove"
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                                <div className="p-4">
+                                    <h3 className="text-sm font-medium text-[var(--text-primary)] truncate" title={img.name}>
+                                        {img.name}
+                                    </h3>
+                                    <p className="text-xs text-[var(--text-secondary)] mt-1 flex items-center gap-1.5">
+                                        <span className={`w-2 h-2 rounded-full ${img.colorUrl ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                                        {img.colorUrl ? 'Color included' : 'No color image'}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+
                         {projects
                             .slice()
                             .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
@@ -623,6 +817,33 @@ export default function Dashboard() {
             {/* Wizard Step 2: Setup PDF */}
             {currentStep === 2 && (
                 <div className="flex-1 flex flex-col py-2 overflow-y-auto no-scrollbar">
+                    {/* Folder Flow Status Header */}
+                    {directImages.length > 0 && (
+                        <div className="max-w-5xl mx-auto w-full mb-6 flex items-center justify-between px-2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-bold text-[var(--text-primary)]">Folder Mode Active</h2>
+                                    <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider font-semibold">{directImages.length} Pairs Loaded</p>
+                                </div>
+                                 <div className="flex gap-3">
+                                <div className={`flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-bold border shadow-sm transition-all duration-500 ${uploadedFolders.color ? 'bg-green-500 border-green-400 text-white' : 'bg-gray-500/5 border-gray-500/10 text-[var(--text-muted)]'}`}>
+                                    <div className={`w-3 h-3 rounded-full flex items-center justify-center ${uploadedFolders.color ? 'bg-white text-green-600' : 'bg-gray-500/20'}`}>
+                                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12"/></svg>
+                                    </div>
+                                    Color
+                                </div>
+                                <div className={`flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-bold border shadow-sm transition-all duration-500 ${uploadedFolders.uncolor ? 'bg-blue-600 border-blue-400 text-white' : 'bg-gray-500/5 border-gray-500/10 text-[var(--text-muted)]'}`}>
+                                    <div className={`w-3 h-3 rounded-full flex items-center justify-center ${uploadedFolders.uncolor ? 'bg-white text-blue-600' : 'bg-gray-500/20'}`}>
+                                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12"/></svg>
+                                    </div>
+                                    Uncolor
+                                </div>
+                            </div>                         </div>
+                        </div>
+                    )}
                     <div className="max-w-5xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
                         {/* 1. Intro Pages */}
                         <div className="bg-[var(--bg-secondary)] rounded-2xl p-5 border border-[var(--border-subtle)] flex flex-col items-center justify-center relative overflow-hidden group">
@@ -765,12 +986,54 @@ export default function Dashboard() {
                             {suffixPages.length > 0 && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded ({suffixPages.length})</div>}
                             {suffixPages.length === 0 && <div className="absolute top-4 right-4 bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Optional</div>}
                         </div>
+
+                        {/* 5. Theme Selection (Only for Upload Folder flow) */}
+                        {directImages.length > 0 && (
+                            <div className="bg-[var(--bg-secondary)] rounded-2xl p-5 border border-[var(--border-subtle)] flex flex-col items-center justify-center relative overflow-hidden group">
+                                <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
+                                    <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mb-4">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" /><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" /></svg>
+                                    </div>
+                                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">PDF Theme</h3>
+                                    <p className="text-xs text-[var(--text-secondary)] text-center mb-5">Select light or dark theme for the book</p>
+                                    
+                                    <div className="flex items-center gap-2 bg-[var(--bg-primary)] p-1 border border-[var(--border-default)] rounded-xl">
+                                        <button
+                                            onClick={() => setGlobalTheme('light')}
+                                            className={`px-6 py-2 text-sm font-medium rounded-lg transition-all ${globalTheme === 'light'
+                                                ? 'bg-white text-black shadow-md'
+                                                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                                }`}
+                                        >
+                                            Light
+                                        </button>
+                                        <button
+                                            onClick={() => setGlobalTheme('dark')}
+                                            className={`px-6 py-2 text-sm font-medium rounded-lg transition-all ${globalTheme === 'dark'
+                                                ? 'bg-zinc-800 text-white shadow-md'
+                                                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                                }`}
+                                        >
+                                            Dark
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="absolute top-4 right-4 bg-indigo-500/10 text-indigo-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Required</div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Step 2 Actions */}
                     <div className="flex items-center justify-between mt-6 max-w-5xl mx-auto w-full pt-4 border-t border-[var(--border-subtle)]">
                         <button
-                            onClick={() => setCurrentStep(1)}
+                            onClick={() => {
+                                setCurrentStep(1);
+                                if (directImages.length > 0) {
+                                    setDirectImages([]);
+                                    setUploadedFolders({ color: false, uncolor: false });
+                                }
+                            }}
                             className="px-6 py-2 text-sm font-medium text-[var(--text-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-white/5 transition-colors"
                         >
                             Back to Grid
@@ -812,7 +1075,11 @@ export default function Dashboard() {
                                             Edit Settings
                                         </button>
                                         <button 
-                                            onClick={() => setCurrentStep(1)}
+                                            onClick={() => {
+                                                setCurrentStep(1);
+                                                setDirectImages([]);
+                                                setUploadedFolders({ color: false, uncolor: false });
+                                            }}
                                             className="flex-1 px-6 py-3 text-sm font-medium text-white bg-[var(--accent)] rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
                                         >
                                             Back to Dashboard
