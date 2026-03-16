@@ -34,3 +34,33 @@ export interface ColorByNumberData {
 
 /** Filled state: map "x,y" -> true when cell is painted */
 export type FilledMap = Record<string, boolean>;
+
+export interface PageLayout {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  gridDims: { width: number; height: number };
+  boxW: number;
+  boxH: number;
+}
+
+export interface DirectImage {
+  name: string;
+  colorUrl: string;
+  uncolorUrl: string;
+}
+
+export interface ConversionWorkerMessage {
+  imageData: {
+    data: Uint8ClampedArray;
+    width: number;
+    height: number;
+    colorSpace: "srgb" | "display-p3";
+  };
+  gridType: ColorByNumberGridType;
+  cellSize: number;
+  useDithering: boolean;
+  maxColors: number;
+  cols: number;
+  rows: number;
+}

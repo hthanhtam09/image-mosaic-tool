@@ -26,12 +26,13 @@ import {
   PAGE_PADDING_X,
   PAGE_PADDING_Y,
 } from "@/lib/colorByNumber/export";
-import type { ColorByNumberData, ColorByNumberCell } from "@/lib/colorByNumber";
+import { getThemeById } from "@/lib/colorByNumber/themes";
+import type { ColorByNumberData, ColorByNumberCell, PageLayout } from "@/lib/colorByNumber";
+
 import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
 
 const STROKE_COLOR = "#000000";
 const DEFAULT_FILL_LIGHT = "#ffffff";
-const DEFAULT_FILL_DARK = "#1a1a1a";
 const TEXT_COLOR_ON_DARK = "#ffffff";
 // const PAGE_PADDING = 20; // Removed in favor of imports
 const PAGE_GAP = 30; // gap between the two pages in the viewport
@@ -61,6 +62,7 @@ const getTextColor = (fillColor: string): string => {
   const brightness = (r * 299 + g * 587 + b * 114) / 1000;
   return brightness < 128 ? TEXT_COLOR_ON_DARK : "#999999";
 };
+
 
 const getRoundedPolygonPath = (
   points: { x: number; y: number }[],
@@ -698,7 +700,6 @@ const CellTrapezoid = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -707,7 +708,6 @@ const CellTrapezoid = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -727,7 +727,9 @@ const CellTrapezoid = ({
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
+
 
   const W = data.cellSize;
   const H = data.cellSize;
@@ -761,14 +763,14 @@ const CellTrapezoid = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={W * 0.7}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored
             ? {
               stroke:
-                textColor === TEXT_COLOR_ON_DARK
+                textFill === TEXT_COLOR_ON_DARK
                   ? "rgba(0,0,0,0.6)"
                   : "rgba(255,255,255,0.8)",
               strokeWidth: W * 0.1,
@@ -791,7 +793,6 @@ const CellFishScale = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -800,7 +801,6 @@ const CellFishScale = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -817,10 +817,12 @@ const CellFishScale = ({
       isCellColored = ny > 0.5;
     }
   }
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
   const r = layout.r;
 
   return (
@@ -839,12 +841,12 @@ const CellFishScale = ({
           y={layout.cy + r * 0.2} // Offset down slightly for better centering in the visible "bottom" half
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={r * 1.4}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
-            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: r * 0.15,
             paintOrder: "stroke",
           } : {})}
@@ -864,7 +866,6 @@ const CellIslamic = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -873,7 +874,6 @@ const CellIslamic = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -890,10 +890,12 @@ const CellIslamic = ({
       isCellColored = ny > 0.5;
     }
   }
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
   const s = data.cellSize;
 
   return (
@@ -910,12 +912,12 @@ const CellIslamic = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={s * 0.7}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
-            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: s * 0.1,
             paintOrder: "stroke",
           } : {})}
@@ -935,7 +937,6 @@ const CellPuzzle = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -944,7 +945,6 @@ const CellPuzzle = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -961,10 +961,12 @@ const CellPuzzle = ({
       isCellColored = ny > 0.5;
     }
   }
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
   const s = data.cellSize;
 
   return (
@@ -981,12 +983,12 @@ const CellPuzzle = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={s * 0.7}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
-            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: s * 0.1,
             paintOrder: "stroke",
           } : {})}
@@ -1006,7 +1008,6 @@ const CellPentagon = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1015,7 +1016,6 @@ const CellPentagon = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1032,10 +1032,12 @@ const CellPentagon = ({
       isCellColored = ny > 0.5;
     }
   }
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
   const r = layout.r;
   const cx = layout.cx;
   const cy = layout.cy;
@@ -1060,12 +1062,12 @@ const CellPentagon = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={r * 1.4}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
-            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: r * 0.15,
             paintOrder: "stroke",
           } : {})}
@@ -1085,7 +1087,6 @@ const CellCircle = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1094,7 +1095,6 @@ const CellCircle = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1111,10 +1111,12 @@ const CellCircle = ({
       isCellColored = ny > 0.5;
     }
   }
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
 
   return (
     <g>
@@ -1132,12 +1134,12 @@ const CellCircle = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={layout.r * 1.4}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
-            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: layout.r * 0.15,
             paintOrder: "stroke",
           } : {})}
@@ -1157,7 +1159,6 @@ const CellSquare = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1166,7 +1167,6 @@ const CellSquare = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1186,7 +1186,8 @@ const CellSquare = ({
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
   const s = data.cellSize;
 
   return (
@@ -1207,12 +1208,12 @@ const CellSquare = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={s * 0.7}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
-            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: s * 0.1,
             paintOrder: "stroke",
           } : {})}
@@ -1232,7 +1233,6 @@ const CellDiamond = ({
   colored,
   partialColorMode,
   gridDims,
-  bgColor,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1241,7 +1241,6 @@ const CellDiamond = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
-  bgColor?: string;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1258,10 +1257,12 @@ const CellDiamond = ({
       isCellColored = ny > 0.5;
     }
   }
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
-  const textColor = getTextColor(fillColor);
+  const textFill = getTextColor(fillColor);
+
   const half = layout.r;
   const side = half * Math.sqrt(2);
 
@@ -1285,12 +1286,12 @@ const CellDiamond = ({
           y={layout.cy}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={textColor}
+          fill={textFill}
           fontSize={half * 1.4}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
-            stroke: textColor === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
             strokeWidth: half * 0.15,
             paintOrder: "stroke",
           } : {})}
@@ -1304,8 +1305,7 @@ const CellDiamond = ({
 
 /* ── Grid rendered onto an 8.5×11 page ── */
 interface PageGridLayout {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  gridLayout: any;
+  gridLayout: PageLayout;
   paletteLayout: PaletteLayout | null;
   gridVisualTop: number;
   paletteVisualTop: number;
@@ -1318,7 +1318,7 @@ const PageGrid = ({
   colored,
   layout,
   partialColorMode,
-  bgColor,
+  pageBgColor,
 }: {
   data: ColorByNumberData;
   filled: Record<string, boolean>;
@@ -1326,7 +1326,7 @@ const PageGrid = ({
   colored: boolean;
   layout: PageGridLayout;
   partialColorMode?: PartialColorMode;
-  bgColor?: string;
+  pageBgColor?: string;
 }) => {
   const {
     gridLayout,
@@ -1362,7 +1362,7 @@ const PageGrid = ({
         y={0}
         width={LETTER_OUTPUT_WIDTH}
         height={LETTER_OUTPUT_HEIGHT}
-        fill={bgColor ?? "#ffffff"}
+        fill={pageBgColor ?? "#ffffff"}
         stroke="#d4d4d8"
         strokeWidth={2}
       />
@@ -1390,7 +1390,6 @@ const PageGrid = ({
               colored={colored}
               partialColorMode={partialColorMode}
               gridDims={gridDims}
-              bgColor={bgColor}
             />
           ))}
         </g>
@@ -1427,7 +1426,9 @@ export default function ColorByNumberGrid({
   const showNumbers = globalShowNumbers;
   const showPalette = globalShowPalette;
   const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
-  const bgColor = globalTheme === 'dark' ? '#1a1a1a' : '#ffffff';
+  const theme = getThemeById(globalTheme);
+  const bgColor = theme.backgroundColor;
+
 
   // Actions wrapper
   const setPan = (x: number, y: number) => updateActiveProject({ panX: x, panY: y });
@@ -1628,7 +1629,7 @@ export default function ColorByNumberGrid({
 
     if (e.ctrlKey || e.metaKey) {
       // Zoom
-      const zoomSensitivity = 0.01;
+      const zoomSensitivity = 0.009;
       const zoomDelta = -e.deltaY * zoomSensitivity;
 
       let newZoom = activeProject.zoom * (1 + zoomDelta);
@@ -1666,7 +1667,7 @@ export default function ColorByNumberGrid({
 
   if (!data || !pageLayout) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-[var(--text-secondary)]">
+      <div className="flex h-full w-full items-center justify-center text-(--text-secondary)">
         {!activeProjectId ? "Select a project to view" : "Processing..."}
       </div>
     );
@@ -1702,7 +1703,7 @@ export default function ColorByNumberGrid({
               colored={true}
               layout={pageLayout}
               partialColorMode={partialColorMode}
-              bgColor={bgColor}
+              pageBgColor={bgColor}
             />
             {/* Page Border/Shadow for realism */}
             <rect
@@ -1720,7 +1721,7 @@ export default function ColorByNumberGrid({
               showNumbers={showNumbers}
               colored={false}
               layout={pageLayout}
-              bgColor={bgColor}
+              pageBgColor={bgColor}
             />
             <rect
               x={0} y={0}

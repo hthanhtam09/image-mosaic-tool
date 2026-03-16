@@ -7,13 +7,8 @@ import {
 } from "../pixelate";
 import { quantizeImage } from "../quantize";
 import { FIXED_PALETTE } from "../palette";
-import {
-  rgbToHex,
-  paletteIndexToLabel,
-  isWhite,
-  type RGB,
-} from "../utils";
-import type { ColorByNumberGridType } from "./types";
+import { rgbToHex, paletteIndexToLabel, isWhite, type RGB } from "../utils";
+import type { ConversionWorkerMessage } from "./types";
 
 /**
  * Pre-computed Lab values for FIXED_PALETTE (computed once at module load).
@@ -47,9 +42,11 @@ const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
   const n = colors.length;
   if (n <= maxColors) return colors.map((c) => ({ ...c }));
 
-  let palette = colors.map((c) => ({ ...c }));
-  let paletteLab = palette.map((c) => rgbToLab(c));
-  let paletteIsWhite = palette.map((c) => c.r >= 245 && c.g >= 245 && c.b >= 245);
+  const palette = colors.map((c) => ({ ...c }));
+  const paletteLab = palette.map((c) => rgbToLab(c));
+  const paletteIsWhite = palette.map(
+    (c) => c.r >= 245 && c.g >= 245 && c.b >= 245,
+  );
 
   // Build upper-triangular distance matrix
   const size = palette.length;
@@ -127,11 +124,15 @@ const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
 };
 
 self.onmessage = (e: MessageEvent) => {
-  const { imageData, gridType, cellSize, useDithering, maxColors, cols, rows } = e.data;
+  const { imageData, gridType, cellSize, useDithering, maxColors, cols, rows } =
+    e.data as ConversionWorkerMessage;
 
   // 1. EXTRACT DYNAMIC PALETTE
   const overSample = Math.max(maxColors * 3, 48);
-  const { palette: initialPalette } = quantizeImage(imageData, overSample);
+  const { palette: initialPalette } = quantizeImage(
+    imageData as unknown as ImageData,
+    overSample,
+  );
 
   // 1a. FORCE-ADD PURE WHITE TO PALETTE
   let hasWhite = false;
@@ -151,7 +152,7 @@ self.onmessage = (e: MessageEvent) => {
 
   // 2. Create mosaic blocks
   let rawBlocks = createMosaicBlocks(
-    imageData,
+    imageData as unknown as ImageData,
     dynamicPalette,
     cellSize,
     useDithering,
@@ -173,7 +174,7 @@ self.onmessage = (e: MessageEvent) => {
   );
 
   // 5. Build sequential code mapping
-  const indexIsWhite = usedPalette.map(c => isWhite(c));
+  const indexIsWhite = usedPalette.map((c) => isWhite(c));
   let seq = 0;
   const indexToCode = new Map<number, string>();
   for (let i = 0; i < usedPalette.length; i++) {

@@ -10,6 +10,7 @@ import type {
 } from "@/lib/colorByNumber";
 import { imageToColorByNumber } from "@/lib/colorByNumber";
 
+
 export interface Project {
   id: string;
   name: string;
@@ -46,7 +47,8 @@ export interface ColorByNumberState {
   globalCellSize: number;
   globalShowNumbers: boolean;
   globalShowPalette: boolean;
-  globalTheme: "light" | "dark";
+  globalTheme: string;
+
 
   // Projects
   projects: Project[];
@@ -59,7 +61,8 @@ export interface ColorByNumberState {
   setGlobalCellSize: (size: number) => void;
   toggleGlobalShowNumbers: () => void;
   toggleGlobalShowPalette: () => void;
-  setGlobalTheme: (theme: "light" | "dark") => void;
+  setGlobalTheme: (theme: string) => void;
+
 
   // Project Management
   addProject: (file: File, dataUrl: string, options?: Partial<Project>) => void;

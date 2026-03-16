@@ -2,6 +2,8 @@ import { jsPDF } from "jspdf";
 import { ColorByNumberData, FilledMap } from "./types";
 import { exportToCanvas, PartialColorMode } from "./export";
 import { NOTO_SANS_REGULAR, NOTO_SANS_BOLD } from "./fonts";
+import { getThemeById } from "./themes";
+
 
 export interface PDFCsvRow {
   number: string;
@@ -25,8 +27,9 @@ export interface PDFExportOptions {
   globalOptions: {
     showCodes: boolean;
     showPalette: boolean;
-    theme: "light" | "dark";
+    theme: string;
   };
+
 }
 
 /**
@@ -130,9 +133,20 @@ export const generateBookPdf = async (
     if (currentPageIndex > 0) pdf.addPage();
     currentPageIndex++;
     
-    const isDark = globalOptions.theme === "dark";
-    const bgColorHex = isDark ? "#1a1a1a" : "#ffffff";
-    const textColorHex = isDark ? "#ffffff" : "#1a1a1a";
+    const theme = getThemeById(globalOptions.theme);
+    const bgColorHex = theme.backgroundColor;
+    
+    // Determine text color based on background brightness
+    const getBrightness = (hex: string) => {
+      const s = hex.replace("#", "");
+      if (s.length !== 6) return 255;
+      const r = parseInt(s.slice(0, 2), 16);
+      const g = parseInt(s.slice(2, 4), 16);
+      const b = parseInt(s.slice(4, 6), 16);
+      return (r * 299 + g * 587 + b * 114) / 1000;
+    };
+    const textColorHex = getBrightness(bgColorHex) < 128 ? "#ffffff" : "#1a1a1a";
+
     
     // Background Image or Color
     if (backgroundImage) {
@@ -233,6 +247,7 @@ export const generateBookPdf = async (
         partialColorMode: project.partialColorMode,
         bgColor: bgColorHex,
       });
+
 
       imgData = canvas.toDataURL("image/png");
     }

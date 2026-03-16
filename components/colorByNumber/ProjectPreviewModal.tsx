@@ -4,6 +4,8 @@ import { useColorByNumberStore, useActiveProject } from "@/store/useColorByNumbe
 import { useEffect, useRef, useState } from "react";
 import ColorByNumberGrid from "./ColorByNumberGrid";
 import { exportToCanvas } from "@/lib/colorByNumber";
+import { getThemeById } from "@/lib/colorByNumber/themes";
+
 
 interface ProjectPreviewModalProps {
     projectId: string;
@@ -23,7 +25,6 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         setZoom,
         setPan,
         removeProject,
-        activeProjectId,
         globalShowNumbers,
         globalShowPalette,
         globalCellSize,
@@ -70,8 +71,8 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
     if (!activeProject || !activeProject.data) return null;
 
     /* ── Zoom Controls ── */
-    const handleZoomIn = () => setZoom(activeProject.zoom + 0.25);
-    const handleZoomOut = () => setZoom(activeProject.zoom - 0.25);
+    const handleZoomIn = () => setZoom(activeProject.zoom + 0.15);
+    const handleZoomOut = () => setZoom(activeProject.zoom - 0.15);
     const handleResetZoom = () => { setZoom(1); setPan(0, 0); };
 
     const handleDownloadBoth = () => {
@@ -81,12 +82,13 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         const baseName = getBaseName(activeProject.name);
 
         // Colored
+        const theme = getThemeById(globalTheme);
         const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
             showCodes: globalShowNumbers,
             colored: true,
             showPalette: globalShowPalette,
             partialColorMode: activeProject.partialColorMode,
-            bgColor: globalTheme === 'dark' ? '#1a1a1a' : '#ffffff',
+            bgColor: theme.backgroundColor,
         });
         downloadCanvas(canvas1, `colored-${baseName}.png`);
 
@@ -97,8 +99,9 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                     showCodes: globalShowNumbers,
                     colored: false,
                     showPalette: globalShowPalette,
-                    bgColor: globalTheme === 'dark' ? '#1a1a1a' : '#ffffff',
+                    bgColor: theme.backgroundColor,
                 });
+
                 downloadCanvas(canvas2, `uncolored-${baseName}.png`);
             }, 500);
         }

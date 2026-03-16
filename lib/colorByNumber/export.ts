@@ -5,7 +5,7 @@
  * The grid is centered on the page with padding.
  */
 
-import type { ColorByNumberData, FilledMap, ColorByNumberCell } from "./types";
+import type { ColorByNumberData, FilledMap, ColorByNumberCell, PageLayout } from "./types";
 import {
   getGridDimensions,
   getCellLayout,
@@ -146,7 +146,7 @@ export const getPageLayout = (
   data: ColorByNumberData,
   boxW: number,
   boxH: number,
-) => {
+): PageLayout => {
   const dims = getGridDimensions(data);
   const scale = Math.min(boxW / dims.width, boxH / dims.height);
   const scaledW = dims.width * scale;
@@ -1010,12 +1010,14 @@ export const exportToCanvas = (
     /** Background color for the page (default: '#ffffff') */
     bgColor?: string;
   },
+
 ): HTMLCanvasElement => {
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
   const showPalette = options.showPalette ?? true;
   const partialColorMode = options.partialColorMode ?? "none";
   const bgColor = options.bgColor ?? "#ffffff";
+
 
   // Page dimensions: strict 8.5x11 @ 300DPI
   const pageW = EXPORT_PAGE_W;
@@ -1232,6 +1234,7 @@ export const exportToCanvas = (
       ctx.save();
       const brightness = getBrightness(fillColor);
       const textFill = brightness < 128 ? "#ffffff" : "#999999";
+
       ctx.font = `400 ${cl.r * 1.4}px 'Noto Sans', sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";

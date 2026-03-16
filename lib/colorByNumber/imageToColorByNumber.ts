@@ -9,12 +9,7 @@
  */
 
 import type { ColorByNumberData, ColorByNumberGridType } from "./types";
-import {
-  resizeImage,
-  resizeImageFromCanvas,
-  resizeCanvasToSize,
-  rgbToHex,
-} from "@/lib/utils";
+import { resizeCanvasToSize, resizeImageFromCanvas } from "@/lib/utils";
 
 /** Load a File as HTMLImageElement */
 const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
@@ -29,26 +24,6 @@ const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-
-/**
- * Resize image to specific pixel dimensions using a canvas.
- * Uses high-quality smoothing for sharper result.
- */
-const resizeImageToSize = (
-  img: HTMLImageElement,
-  targetW: number,
-  targetH: number,
-): ImageData => {
-  const canvas = document.createElement("canvas");
-  canvas.width = targetW;
-  canvas.height = targetH;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not get canvas context");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(img, 0, 0, targetW, targetH);
-  return ctx.getImageData(0, 0, targetW, targetH);
-};
 
 /**
  * Crop image to exact aspect ratio (center crop).
@@ -92,7 +67,9 @@ const cropToAspectRatio = (
  * To maintain the image's center, we crop equally from all 4 sides.
  * Accepts any CanvasImageSource (HTMLImageElement or HTMLCanvasElement).
  */
-const removeGeminiWatermark = (img: HTMLImageElement | HTMLCanvasElement): HTMLCanvasElement => {
+const removeGeminiWatermark = (
+  img: HTMLImageElement | HTMLCanvasElement,
+): HTMLCanvasElement => {
   const srcW = img instanceof HTMLCanvasElement ? img.width : img.width;
   const srcH = img instanceof HTMLCanvasElement ? img.height : img.height;
   const canvas = document.createElement("canvas");
@@ -133,7 +110,6 @@ export interface ImageToColorByNumberOptions {
   maxColors?: number;
 }
 
-
 /**
  * Convert an image file into ColorByNumberData.
  *
@@ -157,7 +133,7 @@ export const imageToColorByNumber = async (
 
   const rawImg = await loadImageFromFile(file);
 
-  // IF the source image is landscape (wider than tall), 
+  // IF the source image is landscape (wider than tall),
   // we ROTATE it 90 degrees to make it portrait — directly on canvas.
   let currentSource: HTMLImageElement | HTMLCanvasElement = rawImg;
   if (rawImg.width > rawImg.height) {
@@ -179,7 +155,10 @@ export const imageToColorByNumber = async (
   const watermarkRemovedCanvas = removeGeminiWatermark(currentSource);
 
   // Crop to ensure aspect ratio — canvas to canvas (no toDataURL!)
-  const croppedCanvas = cropToAspectRatio(watermarkRemovedCanvas, TARGET_ASPECT);
+  const croppedCanvas = cropToAspectRatio(
+    watermarkRemovedCanvas,
+    TARGET_ASPECT,
+  );
 
   // Resize using canvas directly (resizeImageFromCanvas avoids toDataURL)
   const baseData = resizeImageFromCanvas(croppedCanvas, maxWidth);
@@ -215,7 +194,7 @@ export const imageToColorByNumber = async (
       : resizeCanvasToSize(croppedCanvas, targetW, targetH);
 
   // 5. Offload heavy computation to Worker
-  const result = await new Promise<any>((resolve, reject) => {
+  const result = await new Promise<ColorByNumberData>((resolve, reject) => {
     const worker = new Worker(
       new URL("./conversionWorker.ts", import.meta.url),
     );
@@ -246,7 +225,7 @@ export const imageToColorByNumber = async (
         cols,
         rows,
       },
-      [buffer] as any,
+      [buffer] as Transferable[],
     );
   });
   return result;
