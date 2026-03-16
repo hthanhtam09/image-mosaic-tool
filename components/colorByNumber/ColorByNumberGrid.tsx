@@ -370,9 +370,11 @@ const PaletteColumnSVG = ({
               );
               const r = sArcCircleR;
               const rSquare = r / Math.SQRT2; // half-size for square only, so squares don't overlap
+
               return arcAngles.map((angle, i) => {
                 const shapeX = arcCenterX + sArcRadius * Math.cos(angle);
-                const shapeY = arcCenterY + sArcRadius * Math.sin(angle);
+                let shapeY = arcCenterY + sArcRadius * Math.sin(angle);
+
                 if (shape === "circle") {
                   return (
                     <circle
@@ -385,8 +387,7 @@ const PaletteColumnSVG = ({
                       strokeWidth={1.5}
                     />
                   );
-                }
-                if (shape === "square") {
+                } else if (shape === "square") {
                   return (
                     <rect
                       key={i}
@@ -400,8 +401,7 @@ const PaletteColumnSVG = ({
                       strokeWidth={1.5}
                     />
                   );
-                }
-                if (shape === "diamond") {
+                } else if (shape === "diamond") {
                   // Approximating diamond with rotated rect
                   const side = r * 2 * 0.707 * 0.9;
                   return (
@@ -418,8 +418,7 @@ const PaletteColumnSVG = ({
                       />
                     </g>
                   );
-                }
-                if (shape === "puzzle") {
+                } else if (shape === "puzzle") {
                   return (
                     <path
                       key={i}
@@ -429,8 +428,7 @@ const PaletteColumnSVG = ({
                       strokeWidth={1.5}
                     />
                   );
-                }
-                if (shape === "islamic") {
+                } else if (shape === "islamic") {
                   return (
                     <path
                       key={i}
@@ -440,8 +438,7 @@ const PaletteColumnSVG = ({
                       strokeWidth={1.5}
                     />
                   );
-                }
-                if (shape === "fish-scale") {
+                } else if (shape === "fish-scale") {
                   return (
                     <path
                       key={i}
@@ -451,54 +448,44 @@ const PaletteColumnSVG = ({
                       strokeWidth={1.5}
                     />
                   );
+                } else if (shape === "trapezoid") {
+                  if (i === 1) shapeY += r * 0.2; // Shift middle shape down
+                  const size = rSquare * 2;
+                  const slant = size * TRAPEZOID_SLANT_FACTOR;
+                  const startY = shapeY - (size + slant) / 2;
+                  return (
+                    <polygon
+                      key={i}
+                      points={[
+                        `${shapeX - rSquare},${startY}`,
+                        `${shapeX + rSquare},${startY + slant}`,
+                        `${shapeX + rSquare},${startY + size + slant}`,
+                        `${shapeX - rSquare},${startY + size}`,
+                      ].join(" ")}
+                      fill="#ffffff"
+                      stroke="#555"
+                      strokeWidth={1.5}
+                    />
+                  );
+                } else {
+                  // Pentagon (Visual: Hexagon) - rounded
+                  const pAngles = [-90, -30, 30, 90, 150, 210].map(
+                    (deg) => (deg * Math.PI) / 180,
+                  );
+                  const points = pAngles.map((a) => ({
+                    x: shapeX + r * Math.cos(a),
+                    y: shapeY + r * Math.sin(a),
+                  }));
+                  return (
+                    <path
+                      key={i}
+                      d={getRoundedPolygonPath(points, r * 0.15)}
+                      fill="#ffffff"
+                      stroke="#555"
+                      strokeWidth={1.5}
+                    />
+                  );
                 }
-                // Pentagon (Visual: Hexagon) - rounded
-                const angles = [-90, -30, 30, 90, 150, 210].map(
-                  (deg) => (deg * Math.PI) / 180,
-                );
-                const points = angles.map((a) => ({
-                  x: shapeX + r * Math.cos(a),
-                  y: shapeY + r * Math.sin(a),
-                }));
-                return (
-                  <path
-                    key={i}
-                    d={getRoundedPolygonPath(points, r * 0.15)}
-                    fill="#ffffff"
-                    stroke="#555"
-                    strokeWidth={1.5}
-                  />
-                );
-              });
-            })()}
-            {shape === "trapezoid" && (() => {
-              const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
-              const arcCenterY = swCY;
-              const arcAngles = [-80, 0, 80].map(
-                (deg) => (deg * Math.PI) / 180,
-              );
-              const rSquare = sArcCircleR / Math.SQRT2;
-              const size = rSquare * 2;
-              const slant = size * TRAPEZOID_SLANT_FACTOR;
-              return arcAngles.map((angle, i) => {
-                const shapeX = arcCenterX + sArcRadius * Math.cos(angle);
-                let shapeY = arcCenterY + sArcRadius * Math.sin(angle);
-                if (i === 1) shapeY += rSquare * 0.5; // Shift middle shape down
-                const startY = shapeY - (size + slant) / 2;
-                return (
-                  <polygon
-                    key={i}
-                    points={[
-                      `${shapeX - rSquare},${startY}`,
-                      `${shapeX + rSquare},${startY + slant}`,
-                      `${shapeX + rSquare},${startY + size + slant}`,
-                      `${shapeX - rSquare},${startY + size}`,
-                    ].join(" ")}
-                    fill="#ffffff"
-                    stroke="#555"
-                    strokeWidth={1.5}
-                  />
-                );
               });
             })()}
 
@@ -689,7 +676,7 @@ const getFishScalePath = (cx: number, cy: number, size: number) => {
   // A simple circle is often used for fish scales if the overlap is handled by drawing order.
   // However, for single swatches, a circle is fine.
   // If we want the "scallop" look:
-  return `M ${cx - r},${cy} A ${r},${r} 0 1 0 ${cx + r},${cy} A ${r},${r} 0 0 1 ${cx - r},${cy}`;
+  return `M ${cx - r},${cy} A ${r},${r} 0 1 0 ${cx + r},${cy} A ${r},${r} 0 1 0 ${cx - r},${cy}`;
 };
 
 const CellTrapezoid = ({
@@ -838,7 +825,7 @@ const CellFishScale = ({
       {showNumbers && (
         <text
           x={layout.cx}
-          y={layout.cy + r * 0.2} // Offset down slightly for better centering in the visible "bottom" half
+          y={layout.cy - r * 0.4} // Offset up significantly for better centering in the visible "top" half (since bottom half is covered by row below)
           textAnchor="middle"
           dominantBaseline="central"
           fill={textFill}

@@ -1239,17 +1239,22 @@ export const exportToCanvas = (
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
+      let textY = cl.cy;
+      if (data.gridType === "fish-scale") {
+        textY -= cl.r * 0.4;
+      }
+
       // Add stroke outline in colored mode so numbers are always readable
       if (isCellColored) {
         ctx.strokeStyle =
           brightness < 128 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)";
         ctx.lineWidth = cl.r * 0.15;
         ctx.lineJoin = "round";
-        ctx.strokeText(cell.code, cl.cx, cl.cy);
+        ctx.strokeText(cell.code, cl.cx, textY);
       }
 
       ctx.fillStyle = textFill;
-      ctx.fillText(cell.code, cl.cx, cl.cy);
+      ctx.fillText(cell.code, cl.cx, textY);
       ctx.restore();
     }
   };
