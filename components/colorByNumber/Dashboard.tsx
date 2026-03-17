@@ -37,7 +37,7 @@ export default function Dashboard() {
     const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1); // 1: Import, 2: Setup, 3: Preview, 4: Download
 
     // --- PDF Export Config State ---
-    const [bgImage, setBgImage] = useState<string | null>(null);
+    const [bgImages, setBgImages] = useState<string[]>([]);
     const [csvData, setCsvData] = useState<PDFCsvRow[]>([]);
     const [csvFileName, setCsvFileName] = useState<string>("");
     const [prefixPages, setPrefixPages] = useState<string[]>([]);
@@ -232,12 +232,11 @@ export default function Dashboard() {
             reader.readAsDataURL(file);
         });
 
-    const handleBgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => setBgImage(reader.result as string);
-        reader.readAsDataURL(file);
+    const handleBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        const dataUrls = await Promise.all(files.map(readFileAsDataURL));
+        setBgImages(prev => [...prev, ...dataUrls]);
     };
 
     const handlePrefixChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,7 +286,7 @@ export default function Dashboard() {
                         colorUrl: img.colorUrl,
                         uncolorUrl: img.uncolorUrl
                     })),
-                    backgroundImage: bgImage,
+                    backgroundImages: bgImages,
                     csvData,
                     prefixPages,
                     suffixPages,
@@ -415,7 +414,7 @@ export default function Dashboard() {
             {/* Wizard Header */}
             <div className="flex items-center justify-between mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">
+                    <h1 className="text-2xl font-bold text-(--text-primary)">
                         PDF Book Generator
                     </h1>
                 </div>
@@ -427,7 +426,7 @@ export default function Dashboard() {
 
                     <button
                         onClick={handleImportClick}
-                        className="px-4 py-2 text-sm font-medium text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg hover:bg-white/5 transition-colors"
+                        className="px-4 py-2 text-sm font-medium text-(--text-primary) border border-(--border-default) rounded-lg hover:bg-white/5 transition-colors"
                     >
                         + Add More
                     </button>
@@ -435,7 +434,7 @@ export default function Dashboard() {
                         <button
                             onClick={handleConvertAll}
                             disabled={isConverting}
-                            className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                            className="px-6 py-2 text-sm font-medium text-(--bg-primary) bg-(--accent) hover:bg-(--accent-hover) rounded-lg shadow-sm transition-colors disabled:opacity-50"
                         >
                             {isConverting ? "Converting..." : `Convert All (${idleCount})`}
                         </button>
@@ -446,7 +445,7 @@ export default function Dashboard() {
                                 <button
                                     onClick={handleDownloadAllImages}
                                     disabled={isZipping}
-                                    className="px-6 py-2 text-sm font-medium text-[var(--accent)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
+                                    className="px-6 py-2 text-sm font-medium text-(--accent) border border-(--accent)/30 bg-(--accent)/5 hover:bg-(--accent)/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
                                 >
                                     {isZipping ? (
                                         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -507,10 +506,10 @@ export default function Dashboard() {
                     prefixInputRef={prefixInputRef}
                     handlePrefixChange={handlePrefixChange}
                     setPrefixPages={setPrefixPages}
-                    bgImage={bgImage}
+                    bgImages={bgImages}
                     bgInputRef={bgInputRef}
                     handleBgChange={handleBgChange}
-                    setBgImage={setBgImage}
+                    setBgImages={setBgImages}
                     csvFileName={csvFileName}
                     csvData={csvData}
                     csvInputRef={csvInputRef}

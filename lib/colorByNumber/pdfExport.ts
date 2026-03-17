@@ -20,7 +20,7 @@ export interface PDFExportOptions {
     colorUrl: string;
     uncolorUrl: string;
   }[];
-  backgroundImage: string | null; // Data URL or URL
+  backgroundImages: string[]; // Array of Data URLs or URLs
   csvData: PDFCsvRow[];
   prefixPages?: string[]; // Array of image data URLs
   suffixPages?: string[]; // Array of image data URLs
@@ -86,7 +86,7 @@ export const generateBookPdf = async (
   options: PDFExportOptions,
   onProgress?: (current: number, total: number) => void,
 ): Promise<Blob> => {
-  const { projects = [], directImages = [], backgroundImage, csvData, prefixPages = [], suffixPages = [], globalOptions } = options;
+  const { projects = [], directImages = [], backgroundImages = [], csvData, prefixPages = [], suffixPages = [], globalOptions } = options;
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "pt",
@@ -149,9 +149,10 @@ export const generateBookPdf = async (
 
     
     // Background Image or Color
-    if (backgroundImage) {
+    if (backgroundImages.length > 0) {
+      const bgImg = backgroundImages[i % backgroundImages.length];
       pdf.addImage(
-        backgroundImage,
+        bgImg,
         "PNG",
         PADDING_PT,
         PADDING_PT,

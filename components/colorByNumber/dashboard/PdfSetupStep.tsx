@@ -13,10 +13,10 @@ interface PdfSetupStepProps {
     prefixInputRef: React.RefObject<HTMLInputElement | null>;
     handlePrefixChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     setPrefixPages: (pages: string[]) => void;
-    bgImage: string | null;
+    bgImages: string[];
     bgInputRef: React.RefObject<HTMLInputElement | null>;
     handleBgChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    setBgImage: (img: string | null) => void;
+    setBgImages: (imgs: string[]) => void;
     csvFileName: string;
     csvData: PDFCsvRow[];
     csvInputRef: React.RefObject<HTMLInputElement | null>;
@@ -42,10 +42,10 @@ export default function PdfSetupStep({
     prefixInputRef,
     handlePrefixChange,
     setPrefixPages,
-    bgImage,
+    bgImages,
     bgInputRef,
     handleBgChange,
-    setBgImage,
+    setBgImages,
     csvFileName,
     csvData,
     csvInputRef,
@@ -130,35 +130,35 @@ export default function PdfSetupStep({
                 {/* 2. Background Image */}
                 <div className="bg-(--bg-secondary) rounded-2xl p-5 border border-(--border-subtle) flex flex-col items-center justify-center relative overflow-hidden group">
                     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    {bgImage && (
-                        <div className="absolute inset-0 opacity-10 blur-sm">
-                            <Image src={bgImage} alt="bg" width={48} height={64} className="w-full h-full object-cover" />
-                        </div>
-                    )}
                     <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
                         <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center mb-4">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
                         </div>
                         <h3 className="text-sm font-semibold text-(--text-primary) mb-1">Background Theme</h3>
-                        <p className="text-xs text-(--text-secondary) text-center mb-5">Design applied to all left-side pages</p>
+                        <p className="text-xs text-(--text-secondary) text-center mb-5">Design applied to all left-side pages (cycles through multiple images)</p>
 
-                        {bgImage ? (
-                            <div className="flex flex-col items-center gap-3">
-                                <div className="relative w-24 h-32 rounded-lg overflow-hidden border-2 border-white shadow-lg">
-                                    <Image src={bgImage} alt="Preview" width={96} height={128} className="w-full h-full object-cover" />
+                        {bgImages.length > 0 ? (
+                            <div className="flex flex-col items-center w-full gap-3">
+                                <div className="flex items-center gap-2 max-w-full overflow-x-auto pb-2 no-scrollbar">
+                                    {bgImages.map((img, i) => (
+                                        <div key={i} className="shrink-0 relative w-12 h-16 rounded border border-(--border-default) overflow-hidden shadow-sm">
+                                            <Image src={img} alt={`BG ${i + 1}`} width={48} height={64} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)] rounded" />
+                                        </div>
+                                    ))}
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setBgImage(null)} className="px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">Remove</button>
-                                    <button onClick={() => bgInputRef.current?.click()} className="px-3 py-1.5 text-xs font-medium text-(--text-secondary) hover:bg-black/5 rounded-lg transition-colors">Change</button>
+                                    <button onClick={() => setBgImages([])} className="px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">Clear</button>
+                                    <button onClick={() => bgInputRef.current?.click()} className="px-3 py-1.5 text-xs font-medium text-(--accent) hover:bg-(--accent)/10 rounded-lg transition-colors">Add More</button>
                                 </div>
                             </div>
                         ) : (
-                            <button onClick={() => bgInputRef.current?.click()} className="px-4 py-2 bg-(--bg-primary) border border-(--border-default) rounded-lg shadow-sm text-sm font-medium hover:bg-black/5 transition-colors">Upload Image</button>
+                            <button onClick={() => bgInputRef.current?.click()} className="px-4 py-2 bg-(--bg-primary) border border-(--border-default) rounded-lg shadow-sm text-sm font-medium hover:bg-black/5 transition-colors">Select Images</button>
                         )}
-                        <input ref={bgInputRef} type="file" accept="image/png,image/jpeg" className="hidden" onChange={handleBgChange} />
+                        <input ref={bgInputRef} type="file" accept="image/png,image/jpeg" multiple className="hidden" onChange={handleBgChange} />
                     </div>
-                    {bgImage && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded</div>}
-                    {!bgImage && <div className="absolute top-4 right-4 bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Optional</div>}
+                    {bgImages.length > 0 && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded ({bgImages.length})</div>}
+                    {bgImages.length === 0 && <div className="absolute top-4 right-4 bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Optional</div>}
                 </div>
 
                 {/* 3. CSV Text Content */}
