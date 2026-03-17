@@ -825,11 +825,11 @@ const CellFishScale = ({
       {showNumbers && (
         <text
           x={layout.cx}
-          y={layout.cy - r * 0.4} // Offset up significantly for better centering in the visible "top" half (since bottom half is covered by row below)
+          y={layout.cy - r * 0.3} // Offset up significantly for better centering in the visible "top" half (since bottom half is covered by row below)
           textAnchor="middle"
           dominantBaseline="central"
           fill={textFill}
-          fontSize={r * 1.4}
+          fontSize={r * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {

@@ -1235,14 +1235,16 @@ export const exportToCanvas = (
       const brightness = getBrightness(fillColor);
       const textFill = brightness < 128 ? "#ffffff" : "#999999";
 
-      ctx.font = `400 ${cl.r * 1.4}px 'Noto Sans', sans-serif`;
+      let textY = cl.cy;
+      let fontSize = cl.r * 1.4;
+      if (data.gridType === "fish-scale") {
+        textY -= cl.r * 0.3;
+        fontSize = cl.r * 1.1; // Scale down to fit inside the visible semicircle
+      }
+
+      ctx.font = `400 ${fontSize}px 'Noto Sans', sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-
-      let textY = cl.cy;
-      if (data.gridType === "fish-scale") {
-        textY -= cl.r * 0.4;
-      }
 
       // Add stroke outline in colored mode so numbers are always readable
       if (isCellColored) {
