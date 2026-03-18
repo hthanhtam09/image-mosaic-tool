@@ -1238,8 +1238,16 @@ export const exportToCanvas = (
       let textY = cl.cy;
       let fontSize = cl.r * 1.4;
       if (data.gridType === "fish-scale") {
-        textY -= cl.r * 0.3;
+        if (cell.y !== data.height - 1) {
+          textY -= cl.r * 0.3;
+        }
         fontSize = cl.r * 1.1; // Scale down to fit inside the visible semicircle
+      } else if (
+        data.gridType === "diamond" ||
+        data.gridType === "puzzle" ||
+        data.gridType === "islamic"
+      ) {
+        fontSize = cl.r * 1.1; // Match fish-scale text size
       }
 
       ctx.font = `400 ${fontSize}px 'Noto Sans', sans-serif`;

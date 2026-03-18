@@ -825,7 +825,7 @@ const CellFishScale = ({
       {showNumbers && (
         <text
           x={layout.cx}
-          y={layout.cy - r * 0.3} // Offset up significantly for better centering in the visible "top" half (since bottom half is covered by row below)
+          y={cell.y === data.height - 1 ? layout.cy : layout.cy - r * 0.3} // Offset up for better centering in visible top half, except for last row which is fully visible
           textAnchor="middle"
           dominantBaseline="central"
           fill={textFill}
@@ -900,7 +900,7 @@ const CellIslamic = ({
           textAnchor="middle"
           dominantBaseline="central"
           fill={textFill}
-          fontSize={s * 0.7}
+          fontSize={layout.r * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
@@ -971,7 +971,7 @@ const CellPuzzle = ({
           textAnchor="middle"
           dominantBaseline="central"
           fill={textFill}
-          fontSize={s * 0.7}
+          fontSize={layout.r * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
@@ -1274,7 +1274,7 @@ const CellDiamond = ({
           textAnchor="middle"
           dominantBaseline="central"
           fill={textFill}
-          fontSize={half * 1.4}
+          fontSize={half * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored ? {
