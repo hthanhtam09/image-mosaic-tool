@@ -12,6 +12,7 @@
     "@fontsource/noto-sans": "^5.2.10",
     "@types/file-saver": "^2.0.7",
     "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
     "image-q": "^4.0.0",
     "jspdf": "^4.2.0",
     "jszip": "^3.10.1",
