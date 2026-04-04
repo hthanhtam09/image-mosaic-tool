@@ -1067,7 +1067,8 @@ export const exportToCanvas = (
 
   // Swatch center in palette coordinate space is sTop + sSW/2
   const paletteFirstSwatchCenterY = layout ? layout.sTop + layout.sSW / 2 : 0;
-  const paletteY = gridFirstRowCenterY - paletteFirstSwatchCenterY;
+  // Padding top 10px added as requested
+  const paletteY = gridFirstRowCenterY - paletteFirstSwatchCenterY + 25;
 
   // Grid Top is just gridY
   // Grid visual top remains padY (it was gridY which was padY)
