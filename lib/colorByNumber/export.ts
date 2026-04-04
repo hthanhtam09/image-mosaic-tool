@@ -23,30 +23,14 @@ import { getPaletteColorName } from "@/lib/palette";
 
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
-
-// Trim size: 8.5 x 11 inches
-const TRIM_W_IN = 8.5;
-const TRIM_H_IN = 11;
-
-// Bleed per Amazon KDP spec:
-// Width: +0.125" on outside edge only (not spine)
-// Height: +0.125" top + 0.125" bottom
-const BLEED_OUTSIDE_IN = 0.125;
-
-// Full page with bleed
-const EXPORT_PAGE_W = Math.round((TRIM_W_IN + BLEED_OUTSIDE_IN) * EXPORT_DPI);       // 2588
-const EXPORT_PAGE_H = Math.round((TRIM_H_IN + BLEED_OUTSIDE_IN * 2) * EXPORT_DPI);   // 3375
+const EXPORT_PAGE_W = Math.round(8.5 * EXPORT_DPI); // 2550
+const EXPORT_PAGE_H = Math.round(11 * EXPORT_DPI); // 3300
 
 const STORAGE_KEY = "color-by-number-progress";
 
-/** Page padding from bleed edge in px */
-// Safe content area: 0.375" from trim edge
-// Outside edge: 0.375" from trim + 0.125" bleed = 0.5" from page edge
-// Spine edge: 0.375" from trim + 0" bleed = 0.375" from page edge
-// Top/Bottom: 0.375" from trim + 0.125" bleed = 0.5" from page edge
-// Use uniform 0.5" padding from page edge for simplicity (content stays well within safe area)
-export const PAGE_PADDING_X = Math.round(0.5 * EXPORT_DPI); // 150px
-export const PAGE_PADDING_Y = Math.round(0.5 * EXPORT_DPI); // 150px
+/** Page padding in layout units (applied before fitting to letter) */
+export const PAGE_PADDING_X = 90; // 0.3 inch * 300 DPI = 90px
+export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
 
 export const saveProgressToStorage = (
   dataId: string,
@@ -1083,8 +1067,7 @@ export const exportToCanvas = (
 
   // Swatch center in palette coordinate space is sTop + sSW/2
   const paletteFirstSwatchCenterY = layout ? layout.sTop + layout.sSW / 2 : 0;
-  const PALETTE_Y_OFFSET = showPalette ? 30 : 0; // ~10px visual offset
-  const paletteY = gridFirstRowCenterY - paletteFirstSwatchCenterY + PALETTE_Y_OFFSET;
+  const paletteY = gridFirstRowCenterY - paletteFirstSwatchCenterY;
 
   // Grid Top is just gridY
   // Grid visual top remains padY (it was gridY which was padY)
