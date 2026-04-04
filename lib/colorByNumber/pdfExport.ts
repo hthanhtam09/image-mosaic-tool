@@ -34,22 +34,30 @@ export interface PDFExportOptions {
 
 /**
  * PDF generation module for KDP-compatible books
- * Page size: 8.5 x 11 inches
- * Padding: 0.4 inches
+ * Trim size: 8.5 x 11 inches
+ * Bleed (per Amazon KDP):
+ *   - Width: +0.125" on outside edge only (not spine) → 8.625"
+ *   - Height: +0.125" top + 0.125" bottom → 11.25"
  * DPI: 300 (standard for printing)
  */
 
-const PAGE_W_IN = 8.5;
-const PAGE_H_IN = 11;
-const PADDING_IN = 0;
+// Trim (final) size
+const TRIM_W_IN = 8.5;
+const TRIM_H_IN = 11;
+
+// Bleed per Amazon KDP spec:
+// Width: 0.125" on outside edge only (spine side has no bleed)
+// Height: 0.125" on top + 0.125" on bottom
+const BLEED_OUTSIDE_IN = 0.125;
+
+// Full page with bleed
+const PAGE_W_IN = TRIM_W_IN + BLEED_OUTSIDE_IN;       // 8.625"
+const PAGE_H_IN = TRIM_H_IN + BLEED_OUTSIDE_IN * 2;   // 11.25"
 
 // jsPDF points (1 inch = 72 points)
 const PT_PER_IN = 72;
-const PAGE_W_PT = PAGE_W_IN * PT_PER_IN;
-const PAGE_H_PT = PAGE_H_IN * PT_PER_IN;
-const PADDING_PT = PADDING_IN * PT_PER_IN;
-const SAFE_W_PT = PAGE_W_PT - PADDING_PT * 2;
-const SAFE_H_PT = PAGE_H_PT - PADDING_PT * 2;
+const PAGE_W_PT = PAGE_W_IN * PT_PER_IN;   // 621 pt
+const PAGE_H_PT = PAGE_H_IN * PT_PER_IN;   // 810 pt
 
 export const parseCSV = (csvText: string): PDFCsvRow[] => {
   const lines = csvText.split(/\r?\n/).filter((line) => line.trim());
@@ -112,10 +120,11 @@ export const generateBookPdf = async (
     if (currentPageIndex > 0) pdf.addPage();
     currentPageIndex++;
 
+    // Full bleed: image fills entire page including bleed area
     pdf.addImage(
       prefixPages[i],
       "PNG",
-      0, // Intro pages usually full bleed or handled by image itself
+      0,
       0,
       PAGE_W_PT,
       PAGE_H_PT,
@@ -148,20 +157,22 @@ export const generateBookPdf = async (
     const textColorHex = getBrightness(bgColorHex) < 128 ? "#ffffff" : "#1a1a1a";
 
     
-    // Background Image or Color
+    // Background Image or Color - must extend to full bleed edge
     if (backgroundImages.length > 0) {
       const bgImg = backgroundImages[i % backgroundImages.length];
+      // Full bleed: background fills entire page including bleed area
       pdf.addImage(
         bgImg,
         "PNG",
-        PADDING_PT,
-        PADDING_PT,
-        SAFE_W_PT,
-        SAFE_H_PT,
+        0,
+        0,
+        PAGE_W_PT,
+        PAGE_H_PT,
         undefined,
         "FAST"
       );
     } else {
+        // Fill entire page (including bleed) with background color
         pdf.setFillColor(bgColorHex);
         pdf.rect(0, 0, PAGE_W_PT, PAGE_H_PT, "F");
     }
@@ -253,13 +264,14 @@ export const generateBookPdf = async (
       imgData = canvas.toDataURL("image/png");
     }
 
+    // Full bleed: grid image fills entire page including bleed area
     pdf.addImage(
       imgData,
       "PNG",
-      PADDING_PT,
-      PADDING_PT,
-      SAFE_W_PT,
-      SAFE_H_PT,
+      0,
+      0,
+      PAGE_W_PT,
+      PAGE_H_PT,
       undefined,
       "FAST"
     );
@@ -275,6 +287,7 @@ export const generateBookPdf = async (
     pdf.addPage();
     currentPageIndex++;
 
+    // Full bleed: image fills entire page including bleed area
     pdf.addImage(
       suffixPages[i],
       "PNG",
