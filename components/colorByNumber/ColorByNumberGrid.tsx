@@ -1490,7 +1490,7 @@ export default function ColorByNumberGrid({
     const firstCell = getCellLayout(0, 0, data);
     const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
     const paletteFirstSwatchCenterY = pLayout ? pLayout.sTop + pLayout.sSW / 2 : 0;
-    const paletteVisualTop = pLayout ? gridFirstRowCenterY - paletteFirstSwatchCenterY : gridVisualTop;
+    const paletteVisualTop = pLayout ? gridFirstRowCenterY - paletteFirstSwatchCenterY + 25 : gridVisualTop;
 
     return {
       gridLayout,

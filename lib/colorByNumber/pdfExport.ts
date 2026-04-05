@@ -28,6 +28,7 @@ export interface PDFExportOptions {
     showCodes: boolean;
     showPalette: boolean;
     theme: string;
+    showStoryInput: boolean;
   };
 
 }
@@ -177,9 +178,24 @@ export const generateBookPdf = async (
     pdf.setFontSize(38); // 38px (pt in jsPDF)
     const numText = csvRow.number.toString();
     const numW = pdf.getTextWidth(numText);
+
+    pdf.setFontSize(14); // 14px (pt in jsPDF)
+    
+    // Text constraint: "khoảng 1/3 ở giữa" (middle 1/3 of the page width)
+    const textMaxWidth = PAGE_W_PT / 3;
+    const splitText = pdf.splitTextToSize(csvRow.text, textMaxWidth);
+    const textHeight = splitText.length * 14 * 1.15;
     
     // Center vertically in the upper-middle area, shifted up by 20pt
-    const startY = (PAGE_H_PT * 0.45) - 20; 
+    let startY = (PAGE_H_PT * 0.45) - 20; 
+    
+    if (!globalOptions.showStoryInput) {
+        // Adjust content for center
+        startY = (PAGE_H_PT / 2) - 10 - (textHeight / 2);
+    }
+
+    pdf.setFont("Noto Sans", "bold");
+    pdf.setFontSize(38);
     pdf.text(numText, (PAGE_W_PT - numW) / 2, startY);
 
     // Decorative line under the number
@@ -193,38 +209,35 @@ export const generateBookPdf = async (
     
     pdf.setFontSize(14); // 14px (pt in jsPDF)
     
-    // Text constraint: "khoảng 1/3 ở giữa" (middle 1/3 of the page width)
-    const textMaxWidth = PAGE_W_PT / 3;
-    const splitText = pdf.splitTextToSize(csvRow.text, textMaxWidth);
-    
     // Center the text body horizontally below the line
     const textStartY = lineY + 30;
     pdf.text(splitText, PAGE_W_PT / 2, textStartY, { align: "center" });
 
-    // Add white box with dotted line below the text
-    const textDimensions = pdf.getTextDimensions(splitText);
-    const textBottomY = textStartY + textDimensions.h;
+    if (globalOptions.showStoryInput) {
+        // Add white box with dotted line below the text
+        const textBottomY = textStartY + textHeight;
 
-    const boxWidth = textMaxWidth; // Match the width of the text constraint
-    const boxHeight = 60; // Make the input a bit taller
-    const boxX = (PAGE_W_PT - boxWidth) / 2;
-    const boxY = textBottomY + 10; // 10pt spacing below text
+        const boxWidth = textMaxWidth; // Match the width of the text constraint
+        const boxHeight = 60; // Make the input a bit taller
+        const boxX = (PAGE_W_PT - boxWidth) / 2;
+        const boxY = textBottomY + 10; // 10pt spacing below text
 
-    // 1. Draw white rectangle with rounded corners (15px border radius)
-    pdf.setFillColor("#ffffff");
-    pdf.roundedRect(boxX, boxY, boxWidth, boxHeight, 15, 15, "F");
+        // 1. Draw white rectangle with rounded corners (15px border radius)
+        pdf.setFillColor("#ffffff");
+        pdf.roundedRect(boxX, boxY, boxWidth, boxHeight, 15, 15, "F");
 
-    // 2. Draw dotted line inside for user to write on
-    pdf.setDrawColor("#666666"); // Dark gray dotted line
-    pdf.setLineWidth(1);
-    pdf.setLineDashPattern([4, 4], 0); // 4pt line, 4pt gap
+        // 2. Draw dotted line inside for user to write on
+        pdf.setDrawColor("#666666"); // Dark gray dotted line
+        pdf.setLineWidth(1);
+        pdf.setLineDashPattern([4, 4], 0); // 4pt line, 4pt gap
 
-    const paddingX = 20;
-    const dottedLineY = boxY + boxHeight - 20; // Near the bottom of the taller box
-    pdf.line(boxX + paddingX, dottedLineY, boxX + boxWidth - paddingX, dottedLineY);
+        const paddingX = 20;
+        const dottedLineY = boxY + boxHeight - 20; // Near the bottom of the taller box
+        pdf.line(boxX + paddingX, dottedLineY, boxX + boxWidth - paddingX, dottedLineY);
 
-    // Reset line dash for subsequent drawings
-    pdf.setLineDashPattern([], 0);
+        // Reset line dash for subsequent drawings
+        pdf.setLineDashPattern([], 0);
+    }
 
     if (onProgress) {
         onProgress(currentPageIndex, totalPages);

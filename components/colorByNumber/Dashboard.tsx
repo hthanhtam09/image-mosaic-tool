@@ -53,6 +53,7 @@ export default function Dashboard() {
     const dirInputRef = useRef<HTMLInputElement>(null);
     const [directImages, setDirectImages] = useState<{ name: string; colorUrl: string; uncolorUrl: string }[]>([]);
     const [uploadedFolders, setUploadedFolders] = useState<{ color: boolean, uncolor: boolean }>({ color: false, uncolor: false });
+    const [showStoryInput, setShowStoryInput] = useState(true);
     const [isProcessingFolder, setIsProcessingFolder] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
     const [isPreparingStep2, setIsPreparingStep2] = useState(false);
@@ -293,7 +294,8 @@ export default function Dashboard() {
                     globalOptions: {
                         showCodes: globalShowNumbers,
                         showPalette: globalShowPalette,
-                        theme: globalTheme
+                        theme: globalTheme,
+                        showStoryInput: showStoryInput
                     },
                 },
                 (current: number, total: number) => {
@@ -526,6 +528,8 @@ export default function Dashboard() {
                     setDirectImages={setDirectImages}
                     setUploadedFolders={setUploadedFolders}
                     handleGeneratePdf={handleGeneratePdf}
+                    showStoryInput={showStoryInput}
+                    setShowStoryInput={setShowStoryInput}
                 />
             )}
 

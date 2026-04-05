@@ -33,6 +33,8 @@ interface PdfSetupStepProps {
     setDirectImages: (imgs: DirectImage[]) => void;
     setUploadedFolders: (status: { color: boolean; uncolor: boolean }) => void;
     handleGeneratePdf: () => void;
+    showStoryInput: boolean;
+    setShowStoryInput: (val: boolean) => void;
 }
 
 export default function PdfSetupStep({
@@ -62,6 +64,8 @@ export default function PdfSetupStep({
     setDirectImages,
     setUploadedFolders,
     handleGeneratePdf,
+    showStoryInput,
+    setShowStoryInput,
 }: PdfSetupStepProps) {
     return (
         <div className="flex-1 flex flex-col py-2 overflow-y-auto no-scrollbar">
@@ -169,7 +173,20 @@ export default function PdfSetupStep({
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" /></svg>
                         </div>
                         <h3 className="text-sm font-semibold text-(--text-primary) mb-1">Story Content</h3>
-                        <p className="text-xs text-(--text-secondary) text-center mb-5">Fun facts and text blocks via CSV</p>
+                        <p className="text-xs text-(--text-secondary) text-center mb-4">Fun facts and text blocks via CSV</p>
+
+                        <div className="flex items-center gap-2 mb-4 w-full bg-black/5 p-2 rounded-lg justify-between border border-(--border-subtle)">
+                            <span className="text-xs font-medium text-(--text-primary)">Include Writing Box</span>
+                            <label className="relative inline-flex items-center cursor-pointer select-none">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={showStoryInput}
+                                    onChange={(e) => setShowStoryInput(e.target.checked)}
+                                />
+                                <div className="w-8 h-4 bg-gray-500/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-green-500"></div>
+                            </label>
+                        </div>
 
                         {csvFileName && csvData.length > 0 ? (
                             <div className="flex flex-col items-center gap-4 w-full">
