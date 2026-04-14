@@ -60,6 +60,7 @@ export default function Dashboard() {
     const [isPreparingStep2, setIsPreparingStep2] = useState(false);
     const [isZipping, setIsZipping] = useState(false);
     const [splitColorDropdownId, setSplitColorDropdownId] = useState<string | null>(null);
+    const [keepImportScreen, setKeepImportScreen] = useState(false);
     const splitColorRef = useRef<HTMLDivElement>(null);
 
     // Close split color dropdown when clicking outside
@@ -75,6 +76,7 @@ export default function Dashboard() {
 
     /* ── Import Image (Batch) ── */
     const handleImportClick = useCallback(() => {
+        setKeepImportScreen(false);
         imageInputRef.current?.click();
     }, []);
 
@@ -129,6 +131,7 @@ export default function Dashboard() {
     );
 
     const handleImportTransparentClick = useCallback(() => {
+        setKeepImportScreen(true);
         transparentImageInputRef.current?.click();
     }, []);
 
@@ -184,11 +187,12 @@ export default function Dashboard() {
                 }
 
                 if (newProjectIds.length > 0) {
+                    // Keep user on import step and open preview in-place for Object Focus flow.
+                    setCurrentStep(1);
+                    setPreviewProjectId(newProjectIds[0]);
                     setIsConverting(true);
                     await convertAllIdleProjects();
                     setIsConverting(false);
-                    // Mở Preview ngay lập tức cho hình đầu tiên
-                    setPreviewProjectId(newProjectIds[0]);
                 }
 
             } catch (err) {
@@ -198,7 +202,7 @@ export default function Dashboard() {
                 e.target.value = "";
             }
         },
-        [addProject],
+        [addProject, convertAllIdleProjects],
     );
 
     const handleDirUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -504,20 +508,30 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
         { value: "trapezoid", label: "Trapezoid" },
     ];
 
-    if (projects.length === 0 && directImages.length === 0) {
+    const shouldShowImportScreen = (projects.length === 0 && directImages.length === 0) || keepImportScreen;
+
+    if (shouldShowImportScreen) {
         return (
-            <EmptyState
-                handleImportClick={handleImportClick}
-                handleImportTransparentClick={handleImportTransparentClick}
-                dirInputRef={dirInputRef}
-                handleDirUploadChange={handleDirUploadChange}
-                isProcessingFolder={isProcessingFolder}
-                uploadedFolders={uploadedFolders}
-                imageInputRef={imageInputRef}
-                handleImageFileChange={handleImageFileChange}
-                transparentImageInputRef={transparentImageInputRef}
-                handleTransparentImageFileChange={handleTransparentImageFileChange}
-            />
+            <>
+                <EmptyState
+                    handleImportClick={handleImportClick}
+                    handleImportTransparentClick={handleImportTransparentClick}
+                    dirInputRef={dirInputRef}
+                    handleDirUploadChange={handleDirUploadChange}
+                    isProcessingFolder={isProcessingFolder}
+                    uploadedFolders={uploadedFolders}
+                    imageInputRef={imageInputRef}
+                    handleImageFileChange={handleImageFileChange}
+                    transparentImageInputRef={transparentImageInputRef}
+                    handleTransparentImageFileChange={handleTransparentImageFileChange}
+                />
+                {previewProjectId && (
+                    <ProjectPreviewModal
+                        projectId={previewProjectId}
+                        onClose={() => setPreviewProjectId(null)}
+                    />
+                )}
+            </>
         );
     }
 
