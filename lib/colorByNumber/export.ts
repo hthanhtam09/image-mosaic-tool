@@ -1039,10 +1039,10 @@ export const exportToCanvas = (
     let pY = PAGE_PADDING_Y;
 
     if (tightCrop) {
-      // Use a tight, fixed 20px margin (40px total) to make the image "expanded" but safe
-      const FIXED_MARGIN = 40;
-      pageW = Math.ceil(visualBounds.width + FIXED_MARGIN);
-      pageH = Math.ceil(visualBounds.height + FIXED_MARGIN);
+      // Object Focus: shrink subject further while preserving print clarity.
+      const FIXED_MARGIN = 220;
+      pageW = Math.max(EXPORT_PAGE_W, Math.ceil(visualBounds.width + FIXED_MARGIN));
+      pageH = Math.max(EXPORT_PAGE_H, Math.ceil(visualBounds.height + FIXED_MARGIN));
       pX = FIXED_MARGIN / 2;
       pY = FIXED_MARGIN / 2;
     }
@@ -1109,6 +1109,8 @@ export const exportToCanvas = (
   canvas.height = pageH;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   // Page background
   if (!transparentBg) {

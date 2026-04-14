@@ -171,10 +171,11 @@ export default function Dashboard() {
                     const id = crypto.randomUUID();
 
                     // 1.5 Pad the image to protect edges
-                    const paddedDataUrl = await padImageDataUrl(dataUrl, 40);
+                    const paddedDataUrl = await padImageDataUrl(dataUrl, 130);
 
                     // Add project with assigned pattern and transparent background mode
-                    addProject(file, paddedDataUrl, {
+                    const paddedFile = await dataUrlToFile(paddedDataUrl, file.name, file.type || "image/png");
+                    addProject(paddedFile, paddedDataUrl, {
                         id,
                         gridType: pattern,
                         removeBackground: true,
@@ -417,12 +418,13 @@ export default function Dashboard() {
                 // Color version
                 const theme = getThemeById(globalTheme);
                 const canvasColor = exportToCanvas(project.data!, project.filled, {
-                    showCodes: globalShowNumbers,
+                    showCodes: project.removeBackground ? false : globalShowNumbers,
                     colored: true,
                     showPalette: project.removeBackground ? false : globalShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
+                    tightCrop: project.removeBackground,
                 });
                 const dataUrlColor = canvasColor.toDataURL("image/png");
                 const base64Color = dataUrlColor.split(',')[1];
@@ -430,12 +432,13 @@ export default function Dashboard() {
 
                 // Uncolored version (empty grid with numbers)
                 const canvasUncolor = exportToCanvas(project.data!, project.filled, {
-                    showCodes: true, // Always show codes for uncolored version
+                    showCodes: !project.removeBackground, // Object Focus keeps outputs number-free
                     colored: false,  // Uncolored
                     showPalette: project.removeBackground ? false : globalShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
+                    tightCrop: project.removeBackground,
                 });
                 const dataUrlUncolor = canvasUncolor.toDataURL("image/png");
                 const base64Uncolor = dataUrlUncolor.split(',')[1];
@@ -458,9 +461,6 @@ export default function Dashboard() {
         setCurrentStep(2);
         setIsPreparingStep2(false);
     };
-
-
-    const WHITE_THRESHOLD = 250;
 
 /**
  * Pads a dataURL image with transparent pixels to ensure objects don't touch the edge.
@@ -485,6 +485,12 @@ async function padImageDataUrl(dataUrl: string, padding: number): Promise<string
         img.onerror = () => resolve(dataUrl);
         img.src = dataUrl;
     });
+}
+
+async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string): Promise<File> {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return new File([blob], filename, { type: mimeType || blob.type || "image/png" });
 }
 
     const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [

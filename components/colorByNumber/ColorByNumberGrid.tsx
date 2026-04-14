@@ -1492,7 +1492,7 @@ export default function ColorByNumberGrid({
   const zoom = activeProject?.zoom || 1;
   const panX = activeProject?.panX || 0;
   const panY = activeProject?.panY || 0;
-  const showNumbers = globalShowNumbers;
+  const showNumbers = activeProject?.removeBackground ? false : globalShowNumbers;
   const showPalette = activeProject?.removeBackground ? false : globalShowPalette;
   const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
   const theme = getThemeById(globalTheme);
@@ -1573,9 +1573,9 @@ export default function ColorByNumberGrid({
 
     const visualBounds = getVisualGridBounds(data);
 
-    // Apply a slightly larger margin (6%) to fulfill "shrink to avoid cut" while looking pro
+    // Keep a little extra air in Object Focus mode so the subject is not clipped.
     if (activeProject?.removeBackground) {
-      const padRatio = 0.06; // 6% air on all sides for better safety than 3%
+      const padRatio = 0.16;
       maxGridW = safeW * (1 - padRatio * 2);
       maxGridH = safeH * (1 - padRatio * 2);
       gridVisualLeftOffset = safeW * padRatio;

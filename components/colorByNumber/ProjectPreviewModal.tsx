@@ -84,7 +84,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         // Colored
         const theme = getThemeById(globalTheme);
         const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
-            showCodes: globalShowNumbers,
+            showCodes: activeProject.removeBackground ? false : globalShowNumbers,
             colored: true,
             showPalette: activeProject.removeBackground ? false : globalShowPalette,
             partialColorMode: activeProject.partialColorMode,
@@ -98,7 +98,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         if (activeProject.partialColorMode === 'none' && !activeProject.removeBackground) {
             setTimeout(() => {
                 const canvas2 = exportToCanvas(activeProject.data!, activeProject.filled, {
-                    showCodes: globalShowNumbers,
+                    showCodes: activeProject.removeBackground ? false : globalShowNumbers,
                     colored: false,
                     showPalette: globalShowPalette,
                     bgColor: theme.backgroundColor,

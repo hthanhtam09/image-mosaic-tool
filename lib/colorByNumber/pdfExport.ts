@@ -260,12 +260,13 @@ export const generateBookPdf = async (
       imgData = directImages[i].uncolorUrl;
     } else {
       const canvas = exportToCanvas(project!.data, project!.filled, {
-        showCodes: globalOptions.showCodes,
+        showCodes: project!.removeBackground ? false : globalOptions.showCodes,
         colored: isTransparentProject, // Only export colored for transparent mode
         showPalette: project!.removeBackground ? false : globalOptions.showPalette,
         partialColorMode: project!.partialColorMode,
         bgColor: bgColorHex,
         transparentBg: project!.removeBackground,
+        tightCrop: project!.removeBackground,
       });
 
       imgData = canvas.toDataURL("image/png");
