@@ -61,7 +61,7 @@ export const removeBackgroundBlocks = (
         const b = grid[nr][nc];
         if (b && isNearWhite(b.color)) {
           isBg[nr][nc] = true;
-          queue.push({nr, nc});
+          queue.push({ r: nr, c: nc });
         }
       }
     }

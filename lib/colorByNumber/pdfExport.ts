@@ -133,15 +133,14 @@ export const generateBookPdf = async (
 
     // Omit Left Text Page & Right Uncolored Page if this is a transparent background project (single page per project)
     const project = directImages.length === 0 ? projects[i] : null;
-    const isTransparentProject = project && project.removeBackground;
+    const isTransparentProject = Boolean(project?.removeBackground);
+    const theme = getThemeById(globalOptions.theme);
+    const bgColorHex = theme.backgroundColor;
 
     // --- EVEN PAGE (Left Page) ---
     if (!isTransparentProject) {
       if (currentPageIndex > 0) pdf.addPage();
       currentPageIndex++;
-      
-      const theme = getThemeById(globalOptions.theme);
-      const bgColorHex = theme.backgroundColor;
       
       // Determine text color based on background brightness
       const getBrightness = (hex: string) => {

@@ -16,6 +16,7 @@ export default function GlobalSettings({
     const {
         globalCellSize,
         globalShowNumbers,
+        globalShowPalette,
         globalTheme,
         setGlobalCellSize,
         toggleGlobalShowNumbers,

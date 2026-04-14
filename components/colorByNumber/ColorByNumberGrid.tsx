@@ -1347,6 +1347,8 @@ interface PageGridLayout {
   paletteLayout: PaletteLayout | null;
   gridVisualTop: number;
   paletteVisualTop: number;
+  gridVisualLeftOffset: number;
+  visualBounds: { width: number; height: number; minX: number; minY: number };
 }
 
 const PageGrid = ({
