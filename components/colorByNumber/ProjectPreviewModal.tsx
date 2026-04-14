@@ -86,14 +86,16 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
             showCodes: globalShowNumbers,
             colored: true,
-            showPalette: globalShowPalette,
+            showPalette: activeProject.removeBackground ? false : globalShowPalette,
             partialColorMode: activeProject.partialColorMode,
             bgColor: theme.backgroundColor,
+            transparentBg: activeProject.removeBackground,
+            tightCrop: activeProject.removeBackground,
         });
         downloadCanvas(canvas1, `colored-${baseName}.png`);
 
-        // Uncolored (only for full color projects)
-        if (activeProject.partialColorMode === 'none') {
+        // Uncolored (only for full color projects, and skipped for transparent import)
+        if (activeProject.partialColorMode === 'none' && !activeProject.removeBackground) {
             setTimeout(() => {
                 const canvas2 = exportToCanvas(activeProject.data!, activeProject.filled, {
                     showCodes: globalShowNumbers,
@@ -173,7 +175,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                             onClick={handleDownloadBoth}
                             className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm"
                         >
-                            Download Both (Zip/Seq)
+                            {activeProject.removeBackground ? 'Download Image' : 'Download Both (Zip/Seq)'}
                         </button>
                     </div>
                 </div>

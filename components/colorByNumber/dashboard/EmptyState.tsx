@@ -1,4 +1,4 @@
-"use client";
+import React from "react";
 
 interface EmptyStateProps {
     handleImportClick: () => void;
@@ -8,6 +8,11 @@ interface EmptyStateProps {
     uploadedFolders: { color: boolean; uncolor: boolean };
     imageInputRef: React.RefObject<HTMLInputElement | null>;
     handleImageFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    
+    // Transparent Importer
+    handleImportTransparentClick: () => void;
+    transparentImageInputRef: React.RefObject<HTMLInputElement | null>;
+    handleTransparentImageFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export default function EmptyState({
@@ -18,22 +23,41 @@ export default function EmptyState({
     uploadedFolders,
     imageInputRef,
     handleImageFileChange,
+    handleImportTransparentClick,
+    transparentImageInputRef,
+    handleTransparentImageFileChange,
 }: EmptyStateProps) {
     return (
-        <div className="flex flex-col items-center justify-center h-full w-full p-8 text-center max-w-4xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+        <div className="flex flex-col items-center justify-center h-full w-full p-8 text-center max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
                 {/* Standard Import */}
                 <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl p-8 flex flex-col items-center hover:shadow-xl transition-all group">
                     <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
                     </div>
                     <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">Standard Import</h2>
-                    <p className="text-sm text-[var(--text-secondary)] mb-8">Best for converting new images into patterns one by one.</p>
+                    <p className="text-sm text-[var(--text-secondary)] mb-8">Convert images focusing on the whole frame.</p>
                     <button
                         onClick={handleImportClick}
                         className="w-full py-4 text-lg font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl shadow-lg transition-all"
                     >
                         Select Images
+                    </button>
+                </div>
+
+                {/* Import with White Background Removed */}
+                <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl p-8 flex flex-col items-center hover:shadow-xl transition-all group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-50"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/></svg></div>
+                    <div className="w-16 h-16 rounded-2xl bg-purple-500/10 text-purple-500 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">Object Focus</h2>
+                    <p className="text-sm text-[var(--text-secondary)] mb-8">Automatically strips white backgrounds to isolate the object.</p>
+                    <button
+                        onClick={handleImportTransparentClick}
+                        className="w-full py-4 text-lg font-medium text-white bg-purple-500 hover:bg-purple-600 rounded-xl shadow-lg transition-all"
+                    >
+                        Transparent Import
                     </button>
                 </div>
 
@@ -89,6 +113,14 @@ export default function EmptyState({
                 className="hidden"
                 multiple
                 onChange={handleImageFileChange}
+            />
+            <input
+                ref={transparentImageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                className="hidden"
+                multiple
+                onChange={handleTransparentImageFileChange}
             />
             <input
                 ref={dirInputRef}

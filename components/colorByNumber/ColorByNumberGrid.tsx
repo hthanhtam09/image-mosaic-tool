@@ -15,6 +15,7 @@ import {
   getCellLayout,
   hitTestCell,
   getGridDimensions,
+  getVisualGridBounds,
   TRAPEZOID_SLANT_FACTOR,
 } from "@/lib/colorByNumber/layoutCalculator";
 import {
@@ -687,6 +688,7 @@ const CellTrapezoid = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -695,6 +697,7 @@ const CellTrapezoid = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -711,6 +714,11 @@ const CellTrapezoid = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
@@ -780,6 +788,7 @@ const CellFishScale = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -788,6 +797,7 @@ const CellFishScale = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -804,6 +814,10 @@ const CellFishScale = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -853,6 +867,7 @@ const CellIslamic = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -861,6 +876,7 @@ const CellIslamic = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -877,6 +893,10 @@ const CellIslamic = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -924,6 +944,7 @@ const CellPuzzle = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -932,6 +953,7 @@ const CellPuzzle = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -948,6 +970,10 @@ const CellPuzzle = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -995,6 +1021,7 @@ const CellPentagon = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1003,6 +1030,7 @@ const CellPentagon = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1019,6 +1047,10 @@ const CellPentagon = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -1074,6 +1106,7 @@ const CellCircle = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1082,6 +1115,7 @@ const CellCircle = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1098,6 +1132,10 @@ const CellCircle = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -1146,6 +1184,7 @@ const CellSquare = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1154,6 +1193,7 @@ const CellSquare = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1170,6 +1210,11 @@ const CellSquare = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
+
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
@@ -1220,6 +1265,7 @@ const CellDiamond = ({
   colored,
   partialColorMode,
   gridDims,
+  removeBackground,
 }: {
   cell: ColorByNumberCell;
   filled: boolean;
@@ -1228,6 +1274,7 @@ const CellDiamond = ({
   colored: boolean;
   partialColorMode?: PartialColorMode;
   gridDims?: { width: number; height: number };
+  removeBackground?: boolean;
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
@@ -1244,6 +1291,10 @@ const CellDiamond = ({
       isCellColored = ny > 0.5;
     }
   }
+
+  // In transparent mode, skip uncolored cells entirely
+  const isBgCell = !cell.code;
+  if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
     ? getCellFillColor(cell.color, filled)
@@ -1306,6 +1357,7 @@ const PageGrid = ({
   layout,
   partialColorMode,
   pageBgColor,
+  removeBackground,
 }: {
   data: ColorByNumberData;
   filled: Record<string, boolean>;
@@ -1314,6 +1366,7 @@ const PageGrid = ({
   layout: PageGridLayout;
   partialColorMode?: PartialColorMode;
   pageBgColor?: string;
+  removeBackground?: boolean;
 }) => {
   const {
     gridLayout,
@@ -1341,21 +1394,47 @@ const PageGrid = ({
                   ? CellTrapezoid
                   : CellSquare;
 
+  // Checker pattern ID for transparent background preview
+  const checkerId = `checker-${colored ? 'c' : 'u'}`;
+
   return (
     <g>
-      {/* White page background */}
-      <rect
-        x={0}
-        y={0}
-        width={LETTER_OUTPUT_WIDTH}
-        height={LETTER_OUTPUT_HEIGHT}
-        fill={pageBgColor ?? "#ffffff"}
-        stroke="#d4d4d8"
-        strokeWidth={2}
-      />
+      {/* Page background */}
+      {removeBackground ? (
+        // Transparent mode: show checker pattern so user sees transparency
+        <>
+          <defs>
+            <pattern id={checkerId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+              <rect width="10" height="10" fill="#cccccc" />
+              <rect x="10" y="0" width="10" height="10" fill="#ffffff" />
+              <rect x="0" y="10" width="10" height="10" fill="#ffffff" />
+              <rect x="10" y="10" width="10" height="10" fill="#cccccc" />
+            </pattern>
+          </defs>
+          <rect
+            x={0}
+            y={0}
+            width={LETTER_OUTPUT_WIDTH}
+            height={LETTER_OUTPUT_HEIGHT}
+            fill={`url(#${checkerId})`}
+            stroke="#d4d4d8"
+            strokeWidth={2}
+          />
+        </>
+      ) : (
+        <rect
+          x={0}
+          y={0}
+          width={LETTER_OUTPUT_WIDTH}
+          height={LETTER_OUTPUT_HEIGHT}
+          fill={pageBgColor ?? "#ffffff"}
+          stroke="#d4d4d8"
+          strokeWidth={2}
+        />
+      )}
 
-      {/* Palette Column (always show if layout exists, per requirement) */}
-      {paletteLayout && (
+      {/* Palette Column (only show if not removeBackground) */}
+      {paletteLayout && !removeBackground && (
         <g transform={`translate(${PAGE_PADDING_X - 40}, ${paletteVisualTop})`}>
           <PaletteColumnSVG data={data} layout={paletteLayout} />
         </g>
@@ -1364,7 +1443,7 @@ const PageGrid = ({
       {/* Grid centered in its available area */}
       {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 40 offset */}
       <g
-        transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
+        transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + (layout.gridVisualLeftOffset || 0) + (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0)}, ${gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0)}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
           {data.cells.map((cell) => (
@@ -1377,6 +1456,7 @@ const PageGrid = ({
               colored={colored}
               partialColorMode={partialColorMode}
               gridDims={gridDims}
+              removeBackground={removeBackground}
             />
           ))}
         </g>
@@ -1411,7 +1491,7 @@ export default function ColorByNumberGrid({
   const panX = activeProject?.panX || 0;
   const panY = activeProject?.panY || 0;
   const showNumbers = globalShowNumbers;
-  const showPalette = globalShowPalette;
+  const showPalette = activeProject?.removeBackground ? false : globalShowPalette;
   const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
   const theme = getThemeById(globalTheme);
   const bgColor = theme.backgroundColor;
@@ -1452,13 +1532,18 @@ export default function ColorByNumberGrid({
   const pageLayout = useMemo<PageGridLayout | null>(() => {
     if (!data) return null;
 
-    // Palette width available is full page width - padding
-    const paletteAvailableW = LETTER_OUTPUT_WIDTH - PAGE_PADDING_X * 2;
+    // 1. Determine "Safe Area" based on fixed margins
+    const padX = showPalette ? PAGE_PADDING_X : 0;
+    const padY = showPalette ? PAGE_PADDING_Y : 0;
+
+    const safeW = LETTER_OUTPUT_WIDTH - padX * 2;
+    const safeH = LETTER_OUTPUT_HEIGHT - padY * 2;
+
     let pLayout: PaletteLayout | null = null;
 
     // Only calculate palette layout if enabled
     if (showPalette) {
-      pLayout = calculatePaletteLayout(data, paletteAvailableW, { vertical: true });
+      pLayout = calculatePaletteLayout(data, safeW, { vertical: true });
     }
 
     const PALETTE_GAP = 30;
@@ -1472,19 +1557,32 @@ export default function ColorByNumberGrid({
     const PALETTE_X_OFFSET = -40; // Only relevant if palette is present
 
     // If palette is hidden, paletteWidth is 0. 
-    // visual available width = paletteAvailableW
+    // visual available width = safeW
 
-    const maxGridW = Math.max(
+    let maxGridW = Math.max(
       0,
-      paletteAvailableW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - (paletteWidth > 0 ? PALETTE_X_OFFSET : 0)
+      safeW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - (paletteWidth > 0 ? PALETTE_X_OFFSET : 0)
     );
 
-    const maxGridH =
-      LETTER_OUTPUT_HEIGHT - PAGE_PADDING_Y * 2; // full height available
+    let maxGridH = safeH;
+
+    let gridVisualLeftOffset = 0;
+    let gridVisualTopOffset = 0;
+
+    const visualBounds = getVisualGridBounds(data);
+
+    // Apply a slightly larger margin (6%) to fulfill "shrink to avoid cut" while looking pro
+    if (activeProject?.removeBackground) {
+      const padRatio = 0.06; // 6% air on all sides for better safety than 3%
+      maxGridW = safeW * (1 - padRatio * 2);
+      maxGridH = safeH * (1 - padRatio * 2);
+      gridVisualLeftOffset = safeW * padRatio;
+      gridVisualTopOffset = safeH * padRatio;
+    }
 
     const gridLayout = getPageLayout(data, maxGridW, maxGridH);
 
-    const gridVisualTop = PAGE_PADDING_Y;
+    const gridVisualTop = PAGE_PADDING_Y + gridVisualTopOffset;
 
     // Vertical positioning: align palette swatches with grid rows (matching export.ts)
     const firstCell = getCellLayout(0, 0, data);
@@ -1497,8 +1595,10 @@ export default function ColorByNumberGrid({
       paletteLayout: pLayout,
       gridVisualTop,
       paletteVisualTop,
+      gridVisualLeftOffset,
+      visualBounds,
     };
-  }, [data, showPalette]);
+  }, [data, showPalette, activeProject?.removeBackground]);
 
   // Center the "page" in the viewport
   const pageScale = Math.min(
@@ -1511,7 +1611,7 @@ export default function ColorByNumberGrid({
   // User might only want to zoom into one?
   // For now, keep existing logic: 2 pages side-by-side.
 
-  const totalContentW = LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
+  const totalContentW = activeProject?.removeBackground ? LETTER_OUTPUT_WIDTH : LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
   const totalContentH = LETTER_OUTPUT_HEIGHT;
 
   // Initial center (before pan)
@@ -1587,18 +1687,17 @@ export default function ColorByNumberGrid({
       hitY = localY;
     }
     // Check Right Page
-    else if (localX >= LETTER_OUTPUT_WIDTH + PAGE_GAP && localX <= totalContentW && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
+    else if (!activeProject?.removeBackground && localX >= LETTER_OUTPUT_WIDTH + PAGE_GAP && localX <= totalContentW && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
       hitX = localX - (LETTER_OUTPUT_WIDTH + PAGE_GAP);
       hitY = localY;
     }
 
     if (hitX >= 0 && hitY >= 0) {
       // Inverse PageGrid transform
-      // transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX}, ${gridVisualTop}) scale(${gridLayout.scale})`}
-
-      const { gridLayout, paletteLayout, gridVisualTop } = pageLayout;
-      const gridXOffset = PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX;
-      const gridYOffset = gridVisualTop;
+      const { gridLayout, paletteLayout, gridVisualTop, gridVisualLeftOffset = 0, visualBounds } = pageLayout;
+      const removeBackground = activeProject?.removeBackground;
+      const gridXOffset = PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + gridVisualLeftOffset + (removeBackground ? -visualBounds.minX * gridLayout.scale : 0);
+      const gridYOffset = gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -visualBounds.minY * gridLayout.scale : 0);
       const gridScale = gridLayout.scale;
 
       const cellX = (hitX - gridXOffset) / gridScale;
@@ -1691,6 +1790,7 @@ export default function ColorByNumberGrid({
               layout={pageLayout}
               partialColorMode={partialColorMode}
               pageBgColor={bgColor}
+              removeBackground={activeProject?.removeBackground}
             />
             {/* Page Border/Shadow for realism */}
             <rect
@@ -1701,24 +1801,24 @@ export default function ColorByNumberGrid({
           </g>
 
           {/* Right Page: Uncolored Preview */}
-          <g transform={`translate(${LETTER_OUTPUT_WIDTH + PAGE_GAP}, 0)`}>
-            <PageGrid
-              data={data}
-              filled={filled}
-              showNumbers={showNumbers}
-              colored={false}
-              layout={pageLayout}
-              pageBgColor={bgColor}
-            />
-            <rect
-              x={0} y={0}
-              width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT}
-              fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1"
-            />
-
-            {/* Add Thumbnail to Top Right of Right Page */}
-            {/* Thumbnail Removed */}
-          </g>
+          {!activeProject?.removeBackground && (
+            <g transform={`translate(${LETTER_OUTPUT_WIDTH + PAGE_GAP}, 0)`}>
+              <PageGrid
+                data={data}
+                filled={filled}
+                showNumbers={showNumbers}
+                colored={false}
+                layout={pageLayout}
+                pageBgColor={bgColor}
+                removeBackground={activeProject?.removeBackground}
+              />
+              <rect
+                x={0} y={0}
+                width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT}
+                fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1"
+              />
+            </g>
+          )}
         </g>
       </svg>
     </div>

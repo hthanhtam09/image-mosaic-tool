@@ -10,6 +10,7 @@ import { RGB, resizeImage } from "@/lib/utils";
 import {
   createMosaicBlocks,
   reduceToUsedPalette,
+  removeBackgroundBlocks,
   MosaicBlock,
 } from "@/lib/pixelate";
 import { FIXED_PALETTE } from "@/lib/palette";
@@ -36,6 +37,8 @@ export interface EditorState {
   gridRows: number;
   gridCols: number;
 
+  removeBackground: boolean;
+
   // UI state
   isProcessing: boolean;
 
@@ -47,6 +50,7 @@ export interface EditorState {
   setGridType: (type: GridType) => void;
   setGridRows: (rows: number) => void;
   setGridCols: (cols: number) => void;
+  setRemoveBackground: (val: boolean) => void;
   reset: () => void;
   reprocessImage: () => void;
 }
@@ -63,6 +67,7 @@ const DEFAULT_STATE = {
   gridType: "square" as GridType,
   gridRows: 10,
   gridCols: 10,
+  removeBackground: true,
   isProcessing: false,
 };
 
@@ -85,12 +90,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       const img = await loadImageFromFile(file);
       const resizedImageData = resizeImage(img, 800);
-      const { blockSize } = get();
-      const rawBlocks = createMosaicBlocks(
+      const { blockSize, removeBackground } = get();
+      let rawBlocks = createMosaicBlocks(
         resizedImageData,
         FIXED_PALETTE,
         blockSize,
       );
+      if (removeBackground) {
+        rawBlocks = removeBackgroundBlocks(rawBlocks, Math.ceil(resizedImageData.width / blockSize), Math.ceil(resizedImageData.height / blockSize), blockSize);
+      }
       const { palette, blocks, fixedIndices } = reduceToUsedPalette(
         rawBlocks,
         FIXED_PALETTE,
@@ -113,14 +121,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setBlockSize: (size: number) => {
     set({ blockSize: size });
 
-    const { processedImageData } = get();
+    const { processedImageData, removeBackground } = get();
     if (!processedImageData) return;
 
-    const rawBlocks = createMosaicBlocks(
+    let rawBlocks = createMosaicBlocks(
       processedImageData,
       FIXED_PALETTE,
       size,
     );
+    if (removeBackground) {
+      rawBlocks = removeBackgroundBlocks(rawBlocks, Math.ceil(processedImageData.width / size), Math.ceil(processedImageData.height / size), size);
+    }
     const { palette, blocks, fixedIndices } = reduceToUsedPalette(
       rawBlocks,
       FIXED_PALETTE,
@@ -148,19 +159,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ gridCols: Math.max(1, Math.min(100, cols)) });
   },
 
+  setRemoveBackground: (val: boolean) => {
+    set({ removeBackground: val });
+    get().reprocessImage();
+  },
+
   reset: () => {
     set(DEFAULT_STATE);
   },
 
   reprocessImage: () => {
-    const { processedImageData, blockSize } = get();
+    const { processedImageData, blockSize, removeBackground } = get();
     if (!processedImageData) return;
 
-    const rawBlocks = createMosaicBlocks(
+    let rawBlocks = createMosaicBlocks(
       processedImageData,
       FIXED_PALETTE,
       blockSize,
     );
+    if (removeBackground) {
+      rawBlocks = removeBackgroundBlocks(rawBlocks, Math.ceil(processedImageData.width / blockSize), Math.ceil(processedImageData.height / blockSize), blockSize);
+    }
     const { palette, blocks, fixedIndices } = reduceToUsedPalette(
       rawBlocks,
       FIXED_PALETTE,

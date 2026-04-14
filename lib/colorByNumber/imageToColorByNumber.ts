@@ -108,6 +108,8 @@ export interface ImageToColorByNumberOptions {
   useDithering?: boolean;
   /** Maximum number of colors to use (default: 16). */
   maxColors?: number;
+  /** Remove white/near-white backgrounds by flood-fill from edges (default: false). */
+  removeWhiteBackground?: boolean;
 }
 
 /**
@@ -125,6 +127,7 @@ export const imageToColorByNumber = async (
     maxWidth = 1800,
     useDithering = true,
     maxColors = 16,
+    removeWhiteBackground = true,
   } = options;
 
   // 1. Load + Rotate (if landscape) + Crop Watermark + Crop to Aspect Ratio + Resize
@@ -224,6 +227,7 @@ export const imageToColorByNumber = async (
         maxColors,
         cols,
         rows,
+        removeWhiteBackground,
       },
       [buffer] as Transferable[],
     );

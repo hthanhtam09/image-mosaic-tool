@@ -63,4 +63,5 @@ export interface ConversionWorkerMessage {
   maxColors: number;
   cols: number;
   rows: number;
+  removeWhiteBackground?: boolean;
 }

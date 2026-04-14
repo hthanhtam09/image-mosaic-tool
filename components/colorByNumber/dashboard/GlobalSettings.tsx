@@ -16,7 +16,6 @@ export default function GlobalSettings({
     const {
         globalCellSize,
         globalShowNumbers,
-        globalShowPalette,
         globalTheme,
         setGlobalCellSize,
         toggleGlobalShowNumbers,
@@ -109,6 +108,7 @@ export default function GlobalSettings({
                                     }`} />
                             </div>
                         </label>
+
 
                         <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-subtle)]">
                             <span className="text-xs text-[var(--text-secondary)] font-medium">Theme</span>

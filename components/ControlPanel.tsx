@@ -99,6 +99,8 @@ export default function ControlPanel() {
     gridType,
     gridRows,
     gridCols,
+    removeBackground,
+    setRemoveBackground,
   } = useEditorStore();
 
   const handleExportMosaic = () => {
@@ -112,7 +114,8 @@ export default function ControlPanel() {
       blockSize,
       showGrid,
       processedImageData.width,
-      processedImageData.height
+      processedImageData.height,
+      removeBackground
     );
     downloadCanvas(canvas, `mosaic-${Date.now()}.png`);
   };
@@ -359,6 +362,18 @@ export default function ControlPanel() {
                   />
                   <span className="text-sm text-[var(--text-secondary)]">
                     Block numbers
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg py-2.5 transition-colors hover:bg-white/[0.02]">
+                  <input
+                    type="checkbox"
+                    checked={removeBackground}
+                    onChange={(e) => setRemoveBackground(e.target.checked)}
+                    className="h-4 w-4 rounded border-white/20"
+                    aria-label="Remove white background"
+                  />
+                  <span className="text-sm text-[var(--text-secondary)]">
+                    Remove Background
                   </span>
                 </label>
               </div>

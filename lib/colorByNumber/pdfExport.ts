@@ -15,6 +15,7 @@ export interface PDFExportOptions {
     data: ColorByNumberData;
     filled: FilledMap;
     partialColorMode: PartialColorMode;
+    removeBackground?: boolean;
   }[];
   directImages?: {
     colorUrl: string;
@@ -130,122 +131,128 @@ export const generateBookPdf = async (
   for (let i = 0; i < totalPairs; i++) {
     const csvRow = csvData[i] || { number: "", text: "" };
 
+    // Omit Left Text Page & Right Uncolored Page if this is a transparent background project (single page per project)
+    const project = directImages.length === 0 ? projects[i] : null;
+    const isTransparentProject = project && project.removeBackground;
+
     // --- EVEN PAGE (Left Page) ---
+    if (!isTransparentProject) {
+      if (currentPageIndex > 0) pdf.addPage();
+      currentPageIndex++;
+      
+      const theme = getThemeById(globalOptions.theme);
+      const bgColorHex = theme.backgroundColor;
+      
+      // Determine text color based on background brightness
+      const getBrightness = (hex: string) => {
+        const s = hex.replace("#", "");
+        if (s.length !== 6) return 255;
+        const r = parseInt(s.slice(0, 2), 16);
+        const g = parseInt(s.slice(2, 4), 16);
+        const b = parseInt(s.slice(4, 6), 16);
+        return (r * 299 + g * 587 + b * 114) / 1000;
+      };
+      const textColorHex = getBrightness(bgColorHex) < 128 ? "#ffffff" : "#1a1a1a";
+
+      
+      // Background Image or Color
+      if (backgroundImages.length > 0) {
+        const bgImg = backgroundImages[i % backgroundImages.length];
+        pdf.addImage(
+          bgImg,
+          "PNG",
+          PADDING_PT,
+          PADDING_PT,
+          SAFE_W_PT,
+          SAFE_H_PT,
+          undefined,
+          "FAST"
+        );
+      } else {
+          pdf.setFillColor(bgColorHex);
+          pdf.rect(0, 0, PAGE_W_PT, PAGE_H_PT, "F");
+      }
+
+      // Overlay Text
+      pdf.setTextColor(textColorHex);
+      
+      // Try to use requested custom fonts. 
+      // Note: In jsPDF, custom fonts need to be added to VFS via addFileToVFS and addFont. 
+      // If they aren't, it will fall back to Helvetica automatically, but we set the names here so it's ready.
+      pdf.setFont("Noto Sans", "bold");
+      
+      pdf.setFontSize(38); // 38px (pt in jsPDF)
+      const numText = csvRow.number.toString();
+      const numW = pdf.getTextWidth(numText);
+
+      pdf.setFontSize(14); // 14px (pt in jsPDF)
+      
+      // Text constraint: "khoảng 1/3 ở giữa" (middle 1/3 of the page width)
+      const textMaxWidth = PAGE_W_PT / 3;
+      const splitText = pdf.splitTextToSize(csvRow.text, textMaxWidth);
+      const textHeight = splitText.length * 14 * 1.15;
+      
+      // Center vertically in the upper-middle area, shifted up by 20pt
+      let startY = (PAGE_H_PT * 0.45) - 20; 
+      
+      if (!globalOptions.showStoryInput) {
+          // Adjust content for center
+          startY = (PAGE_H_PT / 2) - 10 - (textHeight / 2);
+      }
+
+      pdf.setFont("Noto Sans", "bold");
+      pdf.setFontSize(38);
+      pdf.text(numText, (PAGE_W_PT - numW) / 2, startY);
+
+      // Decorative line under the number
+      const lineY = startY + 20;
+      const lineLength = 40; // Short decorative line
+      pdf.setDrawColor(textColorHex);
+      pdf.setLineWidth(1.5);
+      pdf.line((PAGE_W_PT - lineLength) / 2, lineY, (PAGE_W_PT + lineLength) / 2, lineY);
+
+      pdf.setFont("Noto Sans", "normal");
+      
+      pdf.setFontSize(14); // 14px (pt in jsPDF)
+      
+      // Center the text body horizontally below the line
+      const textStartY = lineY + 30;
+      pdf.text(splitText, PAGE_W_PT / 2, textStartY, { align: "center" });
+
+      if (globalOptions.showStoryInput) {
+          // Add white box with dotted line below the text
+          const textBottomY = textStartY + textHeight;
+
+          const boxWidth = textMaxWidth; // Match the width of the text constraint
+          const boxHeight = 60; // Make the input a bit taller
+          const boxX = (PAGE_W_PT - boxWidth) / 2;
+          const boxY = textBottomY + 10; // 10pt spacing below text
+
+          // 1. Draw white rectangle with rounded corners (15px border radius)
+          pdf.setFillColor("#ffffff");
+          pdf.roundedRect(boxX, boxY, boxWidth, boxHeight, 15, 15, "F");
+
+          // 2. Draw dotted line inside for user to write on
+          pdf.setDrawColor("#666666"); // Dark gray dotted line
+          pdf.setLineWidth(1);
+          pdf.setLineDashPattern([4, 4], 0); // 4pt line, 4pt gap
+
+          const paddingX = 20;
+          const dottedLineY = boxY + boxHeight - 20; // Near the bottom of the taller box
+          pdf.line(boxX + paddingX, dottedLineY, boxX + boxWidth - paddingX, dottedLineY);
+
+          // Reset line dash for subsequent drawings
+          pdf.setLineDashPattern([], 0);
+      }
+
+      if (onProgress) {
+          onProgress(currentPageIndex, totalPages);
+          await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    // --- ODD PAGE (Right Page / Object Page) ---
     if (currentPageIndex > 0) pdf.addPage();
-    currentPageIndex++;
-    
-    const theme = getThemeById(globalOptions.theme);
-    const bgColorHex = theme.backgroundColor;
-    
-    // Determine text color based on background brightness
-    const getBrightness = (hex: string) => {
-      const s = hex.replace("#", "");
-      if (s.length !== 6) return 255;
-      const r = parseInt(s.slice(0, 2), 16);
-      const g = parseInt(s.slice(2, 4), 16);
-      const b = parseInt(s.slice(4, 6), 16);
-      return (r * 299 + g * 587 + b * 114) / 1000;
-    };
-    const textColorHex = getBrightness(bgColorHex) < 128 ? "#ffffff" : "#1a1a1a";
-
-    
-    // Background Image or Color
-    if (backgroundImages.length > 0) {
-      const bgImg = backgroundImages[i % backgroundImages.length];
-      pdf.addImage(
-        bgImg,
-        "PNG",
-        PADDING_PT,
-        PADDING_PT,
-        SAFE_W_PT,
-        SAFE_H_PT,
-        undefined,
-        "FAST"
-      );
-    } else {
-        pdf.setFillColor(bgColorHex);
-        pdf.rect(0, 0, PAGE_W_PT, PAGE_H_PT, "F");
-    }
-
-    // Overlay Text
-    pdf.setTextColor(textColorHex);
-    
-    // Try to use requested custom fonts. 
-    // Note: In jsPDF, custom fonts need to be added to VFS via addFileToVFS and addFont. 
-    // If they aren't, it will fall back to Helvetica automatically, but we set the names here so it's ready.
-    pdf.setFont("Noto Sans", "bold");
-    
-    pdf.setFontSize(38); // 38px (pt in jsPDF)
-    const numText = csvRow.number.toString();
-    const numW = pdf.getTextWidth(numText);
-
-    pdf.setFontSize(14); // 14px (pt in jsPDF)
-    
-    // Text constraint: "khoảng 1/3 ở giữa" (middle 1/3 of the page width)
-    const textMaxWidth = PAGE_W_PT / 3;
-    const splitText = pdf.splitTextToSize(csvRow.text, textMaxWidth);
-    const textHeight = splitText.length * 14 * 1.15;
-    
-    // Center vertically in the upper-middle area, shifted up by 20pt
-    let startY = (PAGE_H_PT * 0.45) - 20; 
-    
-    if (!globalOptions.showStoryInput) {
-        // Adjust content for center
-        startY = (PAGE_H_PT / 2) - 10 - (textHeight / 2);
-    }
-
-    pdf.setFont("Noto Sans", "bold");
-    pdf.setFontSize(38);
-    pdf.text(numText, (PAGE_W_PT - numW) / 2, startY);
-
-    // Decorative line under the number
-    const lineY = startY + 20;
-    const lineLength = 40; // Short decorative line
-    pdf.setDrawColor(textColorHex);
-    pdf.setLineWidth(1.5);
-    pdf.line((PAGE_W_PT - lineLength) / 2, lineY, (PAGE_W_PT + lineLength) / 2, lineY);
-
-    pdf.setFont("Noto Sans", "normal");
-    
-    pdf.setFontSize(14); // 14px (pt in jsPDF)
-    
-    // Center the text body horizontally below the line
-    const textStartY = lineY + 30;
-    pdf.text(splitText, PAGE_W_PT / 2, textStartY, { align: "center" });
-
-    if (globalOptions.showStoryInput) {
-        // Add white box with dotted line below the text
-        const textBottomY = textStartY + textHeight;
-
-        const boxWidth = textMaxWidth; // Match the width of the text constraint
-        const boxHeight = 60; // Make the input a bit taller
-        const boxX = (PAGE_W_PT - boxWidth) / 2;
-        const boxY = textBottomY + 10; // 10pt spacing below text
-
-        // 1. Draw white rectangle with rounded corners (15px border radius)
-        pdf.setFillColor("#ffffff");
-        pdf.roundedRect(boxX, boxY, boxWidth, boxHeight, 15, 15, "F");
-
-        // 2. Draw dotted line inside for user to write on
-        pdf.setDrawColor("#666666"); // Dark gray dotted line
-        pdf.setLineWidth(1);
-        pdf.setLineDashPattern([4, 4], 0); // 4pt line, 4pt gap
-
-        const paddingX = 20;
-        const dottedLineY = boxY + boxHeight - 20; // Near the bottom of the taller box
-        pdf.line(boxX + paddingX, dottedLineY, boxX + boxWidth - paddingX, dottedLineY);
-
-        // Reset line dash for subsequent drawings
-        pdf.setLineDashPattern([], 0);
-    }
-
-    if (onProgress) {
-        onProgress(currentPageIndex, totalPages);
-        await new Promise(resolve => setTimeout(resolve, 0));
-    }
-
-    // --- ODD PAGE (Right Page) ---
-    pdf.addPage();
     currentPageIndex++;
 
     let imgData: string;
@@ -253,15 +260,14 @@ export const generateBookPdf = async (
     if (directImages.length > 0) {
       imgData = directImages[i].uncolorUrl;
     } else {
-      const project = projects[i];
-      const canvas = exportToCanvas(project.data, project.filled, {
+      const canvas = exportToCanvas(project!.data, project!.filled, {
         showCodes: globalOptions.showCodes,
-        colored: false,
-        showPalette: globalOptions.showPalette,
-        partialColorMode: project.partialColorMode,
+        colored: isTransparentProject, // Only export colored for transparent mode
+        showPalette: project!.removeBackground ? false : globalOptions.showPalette,
+        partialColorMode: project!.partialColorMode,
         bgColor: bgColorHex,
+        transparentBg: project!.removeBackground,
       });
-
 
       imgData = canvas.toDataURL("image/png");
     }

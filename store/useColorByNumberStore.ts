@@ -23,6 +23,7 @@ export interface Project {
   status: "idle" | "processing" | "completed" | "error"; // Added status
 
   // Independent settings
+  removeBackground: boolean;
   gridType: ColorByNumberGridType;
   useDithering: boolean;
   /** Partial color split mode: 'none' | 'diagonal-bl-tr' | 'diagonal-tl-br' | 'horizontal-middle' | 'horizontal-sides' */
@@ -140,6 +141,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       status: "idle",
       filled: {},
       selectedCode: null,
+      removeBackground: false,
       gridType: "standard",
       useDithering: true,
       partialColorMode: "none",
@@ -213,6 +215,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
             gridType: p.gridType,
             cellSize: globalCellSize,
             useDithering: p.useDithering,
+            removeWhiteBackground: p.removeBackground,
           });
           updateProject(p.id, { data: result, status: "completed" });
         } catch (e) {

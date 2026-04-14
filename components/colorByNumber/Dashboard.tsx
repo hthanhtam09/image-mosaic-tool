@@ -24,9 +24,9 @@ export default function Dashboard() {
         projects,
         addProject,
         convertAllIdleProjects,
-        globalShowNumbers,
         globalShowPalette,
         globalTheme,
+        globalShowNumbers,
         setGlobalTheme,
     } = useColorByNumberStore();
 
@@ -50,6 +50,7 @@ export default function Dashboard() {
     const prefixInputRef = useRef<HTMLInputElement>(null);
     const suffixInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const transparentImageInputRef = useRef<HTMLInputElement>(null);
     const dirInputRef = useRef<HTMLInputElement>(null);
     const [directImages, setDirectImages] = useState<{ name: string; colorUrl: string; uncolorUrl: string }[]>([]);
     const [uploadedFolders, setUploadedFolders] = useState<{ color: boolean, uncolor: boolean }>({ color: false, uncolor: false });
@@ -120,6 +121,78 @@ export default function Dashboard() {
 
             } catch (err) {
                 console.error("Failed to import images:", err);
+            } finally {
+                e.target.value = "";
+            }
+        },
+        [addProject],
+    );
+
+    const handleImportTransparentClick = useCallback(() => {
+        transparentImageInputRef.current?.click();
+    }, []);
+
+    const handleTransparentImageFileChange = useCallback(
+        async (e: React.ChangeEvent<HTMLInputElement>) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+
+            try {
+                // 1. Convert to array and Sort naturally (1, 2, 10...)
+                const fileList = Array.from(files).sort((a, b) =>
+                    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+                );
+                // Pattern cycle: Square -> Circle -> Diamond -> Pentagon -> Puzzle -> Islamic -> Fish Scale -> Trapezoid
+                const patternCycle: ColorByNumberGridType[] = [
+                    "standard",
+                    "honeycomb",
+                    "diamond",
+                    "pentagon",
+                    "puzzle",
+                    "islamic",
+                    "fish-scale",
+                    "trapezoid",
+                ];
+
+                const newProjectIds: string[] = [];
+
+                // Process sequentially to preserve order
+                for (let index = 0; index < fileList.length; index++) {
+                    const file = fileList[index];
+                    const reader = new FileReader();
+                    const dataUrl = await new Promise<string>((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+
+                    // Calculate pattern based on index
+                    const pattern = patternCycle[index % patternCycle.length];
+                    const id = crypto.randomUUID();
+
+                    // 1.5 Pad the image to protect edges
+                    const paddedDataUrl = await padImageDataUrl(dataUrl, 40);
+
+                    // Add project with assigned pattern and transparent background mode
+                    addProject(file, paddedDataUrl, {
+                        id,
+                        gridType: pattern,
+                        removeBackground: true,
+                    });
+                    newProjectIds.push(id);
+                }
+
+                if (newProjectIds.length > 0) {
+                    setIsConverting(true);
+                    await convertAllIdleProjects();
+                    setIsConverting(false);
+                    // Mở Preview ngay lập tức cho hình đầu tiên
+                    setPreviewProjectId(newProjectIds[0]);
+                }
+
+            } catch (err) {
+                console.error("Failed to import transparent images:", err);
+                setIsConverting(false);
             } finally {
                 e.target.value = "";
             }
@@ -281,7 +354,8 @@ export default function Dashboard() {
                     projects: readyProjects.map(p => ({
                         data: p.data!,
                         filled: p.filled,
-                        partialColorMode: p.partialColorMode
+                        partialColorMode: p.partialColorMode,
+                        removeBackground: p.removeBackground
                     })),
                     directImages: directImages.map(img => ({
                         colorUrl: img.colorUrl,
@@ -345,9 +419,10 @@ export default function Dashboard() {
                 const canvasColor = exportToCanvas(project.data!, project.filled, {
                     showCodes: globalShowNumbers,
                     colored: true,
-                    showPalette: globalShowPalette,
+                    showPalette: project.removeBackground ? false : globalShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
+                    transparentBg: project.removeBackground,
                 });
                 const dataUrlColor = canvasColor.toDataURL("image/png");
                 const base64Color = dataUrlColor.split(',')[1];
@@ -357,9 +432,10 @@ export default function Dashboard() {
                 const canvasUncolor = exportToCanvas(project.data!, project.filled, {
                     showCodes: true, // Always show codes for uncolored version
                     colored: false,  // Uncolored
-                    showPalette: globalShowPalette,
+                    showPalette: project.removeBackground ? false : globalShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
+                    transparentBg: project.removeBackground,
                 });
                 const dataUrlUncolor = canvasUncolor.toDataURL("image/png");
                 const base64Uncolor = dataUrlUncolor.split(',')[1];
@@ -384,6 +460,33 @@ export default function Dashboard() {
     };
 
 
+    const WHITE_THRESHOLD = 250;
+
+/**
+ * Pads a dataURL image with transparent pixels to ensure objects don't touch the edge.
+ * This protects white objects from being accidentally eaten by the background remover.
+ */
+async function padImageDataUrl(dataUrl: string, padding: number): Promise<string> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.width + padding * 2;
+            canvas.height = img.height + padding * 2;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                resolve(dataUrl);
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, padding, padding);
+            resolve(canvas.toDataURL("image/png"));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
     const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [
         { value: "standard", label: "Square" },
         { value: "honeycomb", label: "Circle" },
@@ -399,12 +502,15 @@ export default function Dashboard() {
         return (
             <EmptyState
                 handleImportClick={handleImportClick}
+                handleImportTransparentClick={handleImportTransparentClick}
                 dirInputRef={dirInputRef}
                 handleDirUploadChange={handleDirUploadChange}
                 isProcessingFolder={isProcessingFolder}
                 uploadedFolders={uploadedFolders}
                 imageInputRef={imageInputRef}
                 handleImageFileChange={handleImageFileChange}
+                transparentImageInputRef={transparentImageInputRef}
+                handleTransparentImageFileChange={handleTransparentImageFileChange}
             />
         );
     }

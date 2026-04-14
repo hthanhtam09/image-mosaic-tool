@@ -11,13 +11,79 @@ import { paletteIndexToLabel, getLetterSizeFit, isWhite } from "./utils";
  * which are perceptually white but fail the strict threshold.
  * Used to prevent merging white-ish colors with gray/beige.
  */
-const isNearWhite = (c: RGB): boolean => c.r >= 225 && c.g >= 225 && c.b >= 225;
+export const isNearWhite = (c: RGB): boolean => c.r >= 225 && c.g >= 225 && c.b >= 225;
+
+/**
+ * Removes white/near-white background blocks using a flood-fill algorithm from the edges.
+ * Only white blocks contiguous with the edge (background) are removed, preserving white blocks inside the object.
+ */
+export const removeBackgroundBlocks = (
+  blocks: MosaicBlock[],
+  cols: number,
+  rows: number,
+  blockSize: number
+): MosaicBlock[] => {
+  if (blocks.length === 0) return blocks;
+  
+  // Create a 2D grid of blocks for easy neighbor lookup
+  const grid = new Array(rows).fill(null).map(() => new Array(cols).fill(null)) as (MosaicBlock | null)[][];
+  blocks.forEach(b => {
+    const gy = Math.round(b.y / blockSize);
+    const gx = Math.round(b.x / blockSize);
+    if (gy >= 0 && gy < rows && gx >= 0 && gx < cols) grid[gy][gx] = b;
+  });
+
+  const isBg = new Array(rows).fill(null).map(() => new Array(cols).fill(false));
+  const queue: {r: number, c: number}[] = [];
+  
+  // Initialize queue with white edge blocks
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1) {
+        const b = grid[r][c];
+        if (b && isNearWhite(b.color)) {
+          isBg[r][c] = true;
+          queue.push({r, c});
+        }
+      }
+    }
+  }
+
+  const dirs = [[-1,0], [1,0], [0,-1], [0,1]];
+  
+  // Flood fill
+  while (queue.length > 0) {
+    const {r, c} = queue.shift()!;
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !isBg[nr][nc]) {
+        const b = grid[nr][nc];
+        if (b && isNearWhite(b.color)) {
+          isBg[nr][nc] = true;
+          queue.push({nr, nc});
+        }
+      }
+    }
+  }
+
+  // Filter out background blocks
+  return blocks.filter(b => {
+    const gy = Math.round(b.y / blockSize);
+    const gx = Math.round(b.x / blockSize);
+    if (gy >= 0 && gy < rows && gx >= 0 && gx < cols) {
+      return !isBg[gy][gx];
+    }
+    return true; // Keep if out of bounds
+  });
+};
 
 export interface MosaicBlock {
   x: number;
   y: number;
   paletteIndex: number;
   color: RGB;
+  isTransparent?: boolean;
 }
 
 /** sRGB (0-255) channel to linear */
@@ -349,9 +415,18 @@ export const createMosaicBlocks = (
       for (let col = 0; col < cols; col++) {
         const blockX = col * blockSize;
         const blockY = row * blockSize;
+        
+        let opaqueCount = 0;
+        for (let dy = 0; dy < blockSize && blockY + dy < height; dy++) {
+          for (let dx = 0; dx < blockSize && blockX + dx < width; dx++) {
+            const idx = (blockY + dy) * width + (blockX + dx);
+            if ((data[idx * 4 + 3] ?? 255) >= 128) opaqueCount++;
+          }
+        }
+
         const labs = blockPixelLabs(pixelLabs, width, height, blockX, blockY, blockSize);
         const bestIndex =
-          labs.length > 0
+          labs.length > 0 && opaqueCount > 0
             ? bestPaletteIndexByMinTotalError(labs, paletteLab)
             : 0;
         blocks.push({
@@ -359,6 +434,7 @@ export const createMosaicBlocks = (
           y: blockY,
           paletteIndex: bestIndex,
           color: palette[bestIndex],
+          isTransparent: opaqueCount === 0,
         });
       }
     }
@@ -388,11 +464,13 @@ export const createMosaicBlocks = (
 
       let bestIndex = 0;
       let maxVotes = 0;
+      let opaqueCount = 0;
       for (let k = 0; k < votes.length; k++) {
         if (votes[k] > maxVotes) {
           maxVotes = votes[k];
           bestIndex = k;
         }
+        opaqueCount += votes[k];
       }
 
       blocks.push({
@@ -400,6 +478,7 @@ export const createMosaicBlocks = (
         y: blockY,
         paletteIndex: bestIndex,
         color: palette[bestIndex],
+        isTransparent: opaqueCount === 0,
       });
     }
   }
@@ -711,6 +790,7 @@ export const renderMosaicWithNumbersToCanvas = (
   showGrid: boolean,
   contentWidth: number,
   contentHeight: number,
+  transparentBg: boolean = false
 ): void => {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -730,20 +810,24 @@ export const renderMosaicWithNumbersToCanvas = (
   );
   const padding = Math.max(4, minDim * NUMBERED_TEMPLATE_PADDING_FRAC);
 
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
+  if (!transparentBg) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
 
-  /* Outer border: same filled frame as numbered template (sync with inner edges) */
-  ctx.fillStyle = NUMBERED_TEMPLATE_OUTER_BORDER_COLOR;
-  ctx.fillRect(0, 0, width, borderWidth);
-  ctx.fillRect(0, height - borderWidth, width, borderWidth);
-  ctx.fillRect(0, borderWidth, borderWidth, height - 2 * borderWidth);
-  ctx.fillRect(
-    width - borderWidth,
-    borderWidth,
-    borderWidth,
-    height - 2 * borderWidth,
-  );
+    /* Outer border: same filled frame as numbered template (sync with inner edges) */
+    ctx.fillStyle = NUMBERED_TEMPLATE_OUTER_BORDER_COLOR;
+    ctx.fillRect(0, 0, width, borderWidth);
+    ctx.fillRect(0, height - borderWidth, width, borderWidth);
+    ctx.fillRect(0, borderWidth, borderWidth, height - 2 * borderWidth);
+    ctx.fillRect(
+      width - borderWidth,
+      borderWidth,
+      borderWidth,
+      height - 2 * borderWidth,
+    );
+  } else {
+    ctx.clearRect(0, 0, width, height);
+  }
 
   const contentAreaWidth = width - 2 * borderWidth - 2 * padding;
   const contentAreaHeight = height - 2 * borderWidth - 2 * padding;
@@ -803,6 +887,7 @@ export const renderMosaicToCanvas = (
   showGrid: boolean,
   contentWidth: number,
   contentHeight: number,
+  transparentBg: boolean = false
 ): void => {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -815,8 +900,12 @@ export const renderMosaicToCanvas = (
   );
 
   const { width, height } = canvas;
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
+  if (!transparentBg) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    ctx.clearRect(0, 0, width, height);
+  }
 
   const { scale, offsetX, offsetY } = getLetterSizeFit(
     gridWidth,

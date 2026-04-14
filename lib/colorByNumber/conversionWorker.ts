@@ -4,6 +4,7 @@ import {
   mergeMinorColors,
   rgbToLab,
   deltaE2000,
+  removeBackgroundBlocks,
 } from "../pixelate";
 import { quantizeImage } from "../quantize";
 import { FIXED_PALETTE } from "../palette";
@@ -124,7 +125,7 @@ const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
 };
 
 self.onmessage = (e: MessageEvent) => {
-  const { imageData, gridType, cellSize, useDithering, maxColors, cols, rows } =
+  const { imageData, gridType, cellSize, useDithering, maxColors, cols, rows, removeWhiteBackground } =
     e.data as ConversionWorkerMessage;
 
   // 1. EXTRACT DYNAMIC PALETTE
@@ -161,6 +162,19 @@ self.onmessage = (e: MessageEvent) => {
 
   // 2b. FILTER MINOR COLORS
   rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
+  
+  // 2c. REMOVE BACKGROUND IF REQUESTED
+  if (removeWhiteBackground) {
+    const hasTransparentBlocks = rawBlocks.some((b) => b.isTransparent);
+    if (hasTransparentBlocks) {
+      // If the image already has true alpha transparency, just remove the empty blocks!
+      // This prevents the flood-fill from accidentally eating white objects that touch the edge.
+      rawBlocks = rawBlocks.filter((b) => !b.isTransparent);
+    } else {
+      // Fallback for JPEG or solid-white backgrounds: use the color-based floodfill
+      rawBlocks = removeBackgroundBlocks(rawBlocks, cols, rows, cellSize);
+    }
+  }
 
   // 3. Reduce to used palette
   const { blocks, palette: usedPalette } = reduceToUsedPalette(
@@ -187,22 +201,56 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   // 6. Convert to cells
-  const cells = blocks.map((block) => ({
-    x: Math.round(block.x / cellSize),
-    y: Math.round(block.y / cellSize),
-    code: indexToCode.get(block.paletteIndex) ?? "",
-    color: rgbToHex(block.color),
-    fixedPaletteIndex: dynamicToFixedIndex[block.paletteIndex],
-  }));
+  let minX = cols,
+    minY = rows,
+    maxX = 0,
+    maxY = 0;
+
+  const rawCells = blocks.map((block) => {
+    const x = Math.round(block.x / cellSize);
+    const y = Math.round(block.y / cellSize);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+
+    return {
+      x,
+      y,
+      code: indexToCode.get(block.paletteIndex) ?? "",
+      color: rgbToHex(block.color),
+      fixedPaletteIndex: dynamicToFixedIndex[block.paletteIndex],
+    };
+  });
+
+  let finalCells = rawCells;
+  let finalCols = cols;
+  let finalRows = rows;
+
+  if (removeWhiteBackground && rawCells.length > 0) {
+    // Padding logic: keep standard cells padding 1 cell if possible
+    minX = Math.max(0, minX - 1);
+    minY = Math.max(0, minY - 1);
+    maxX = Math.min(cols - 1, maxX + 1);
+    maxY = Math.min(rows - 1, maxY + 1);
+
+    finalCols = maxX - minX + 1;
+    finalRows = maxY - minY + 1;
+    finalCells = rawCells.map((c) => ({
+      ...c,
+      x: c.x - minX,
+      y: c.y - minY,
+    }));
+  }
 
   const result = {
     gridType,
-    width: cols,
-    height: rows,
+    width: finalCols,
+    height: finalRows,
     cellSize,
     cellGap: gridType === "honeycomb" ? 2 : 0,
     rotationDeg: gridType === "diamond" ? 45 : 0,
-    cells,
+    cells: finalCells,
   };
 
   self.postMessage(result);

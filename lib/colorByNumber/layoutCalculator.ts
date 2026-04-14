@@ -294,6 +294,46 @@ export const getGridDimensions = (
 };
 
 /**
+ * Visual bounding box of the grid including overhangs (puzzle tabs, stroke widths).
+ * Returns { width, height, minX, minY } where minX/minY are the visual offsets relative to local (0,0).
+ */
+export const getVisualGridBounds = (
+  data: ColorByNumberData,
+): { width: number; height: number; minX: number; minY: number } => {
+  const { width, height, cellSize, gridType } = data;
+  const dims = getGridDimensions(data);
+
+  // Default bleed for stroke width (1.5px is standard)
+  const STROKE_BLEED = 2; // px
+
+  let minX = -STROKE_BLEED;
+  let minY = -STROKE_BLEED;
+  let maxX = dims.width + STROKE_BLEED;
+  let maxY = dims.height + STROKE_BLEED;
+
+  // Add specific overhangs for grid types
+  if (gridType === "puzzle") {
+    const tabSize = cellSize * 0.22;
+    minX -= tabSize;
+    minY -= tabSize;
+    maxX += tabSize;
+    maxY += tabSize;
+  } else if (gridType === "fish-scale") {
+    // Fish scale draws slightly below the bottom edge due to the arc
+    // maxY already includes 'r' in getGridDimensions, but let's be safe
+  } else if (gridType === "trapezoid") {
+    // minY starts at 0, but trapezoid can shift. getGridDimensions accounts for slant in height.
+  }
+
+  return {
+    width: maxX - minX,
+    height: maxY - minY,
+    minX,
+    minY,
+  };
+};
+
+/**
  * Hit test: given (px, py) in grid coordinates, return cell (x,y) or null.
  */
 export const hitTestCell = (

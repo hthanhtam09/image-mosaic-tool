@@ -8,6 +8,7 @@
 import type { ColorByNumberData, FilledMap, ColorByNumberCell, PageLayout } from "./types";
 import {
   getGridDimensions,
+  getVisualGridBounds,
   getCellLayout,
   TRAPEZOID_SLANT_FACTOR,
 } from "./layoutCalculator";
@@ -1009,6 +1010,10 @@ export const exportToCanvas = (
     partialColorMode?: PartialColorMode;
     /** Background color for the page (default: '#ffffff') */
     bgColor?: string;
+    /** Whether to make the page background transparent */
+    transparentBg?: boolean;
+    /** Whether to crop the output canvas strictly to the grid bounds (ignoring 8.5x11 logic) */
+    tightCrop?: boolean;
   },
 
 ): HTMLCanvasElement => {
@@ -1017,18 +1022,40 @@ export const exportToCanvas = (
   const showPalette = options.showPalette ?? true;
   const partialColorMode = options.partialColorMode ?? "none";
   const bgColor = options.bgColor ?? "#ffffff";
+  const transparentBg = options.transparentBg ?? false;
+  const tightCrop = options.tightCrop ?? false;
 
+  // Extra padding to prevent puzzle tabs / shape overhangs from being clipped.
+  // Puzzle tabs protrude by ~18% of cellSize; we add a proportional pixel buffer.
+  const GRID_CLIP_PADDING = data.gridType === "puzzle" ? data.cellSize * 0.22 : 0;
 
   // Page dimensions: strict 8.5x11 @ 300DPI
-  const pageW = EXPORT_PAGE_W;
-  const pageH = EXPORT_PAGE_H;
+  const visualBounds = getVisualGridBounds(data);
 
-  // For uncolored mode (OR colored mode now per request), add palette on the LEFT if enabled
+  const cropSettings = (() => {
+    let pageW = EXPORT_PAGE_W;
+    let pageH = EXPORT_PAGE_H;
+    let pX = PAGE_PADDING_X;
+    let pY = PAGE_PADDING_Y;
+
+    if (tightCrop) {
+      // Use a tight, fixed 20px margin (40px total) to make the image "expanded" but safe
+      const FIXED_MARGIN = 40;
+      pageW = Math.ceil(visualBounds.width + FIXED_MARGIN);
+      pageH = Math.ceil(visualBounds.height + FIXED_MARGIN);
+      pX = FIXED_MARGIN / 2;
+      pY = FIXED_MARGIN / 2;
+    }
+    
+    return { pageW, pageH, padX: pX, padY: pY };
+  })();
+
   const needsPalette = showPalette;
-
-  // 1. Determine "Safe Area" based on fixed margins
-  const padX = showPalette ? PAGE_PADDING_X : 0;
-  const padY = PAGE_PADDING_Y;
+  const padX = showPalette ? PAGE_PADDING_X : cropSettings.padX;
+  const padY = showPalette ? PAGE_PADDING_Y : cropSettings.padY;
+  
+  const pageW = cropSettings.pageW;
+  const pageH = cropSettings.pageH;
 
   const safeW = pageW - padX * 2;
   const safeH = pageH - padY * 2;
@@ -1045,14 +1072,16 @@ export const exportToCanvas = (
   // 3. Grid available width = SafeW - PaletteW - Gap
   // Gain 50px from palette shift!
   const PALETTE_X_OFFSET = showPalette ? -40 : 0; // Shift palette left into margin (was -50)
+  // Shrink available area by clip-padding so the scaled grid keeps overhangs inside the page
   const gridAvailableW = Math.max(
     0,
     safeW -
       paletteWidth -
       (paletteWidth > 0 ? PALETTE_GAP : 0) -
-      PALETTE_X_OFFSET,
+      PALETTE_X_OFFSET -
+      GRID_CLIP_PADDING * 2,
   );
-  const gridAvailableH = safeH;
+  const gridAvailableH = safeH - GRID_CLIP_PADDING * 2;
 
   // 4. Fit grid into gridAvailableH/W
   const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
@@ -1062,7 +1091,7 @@ export const exportToCanvas = (
   // Anchor to TOP padding (0.4 inch) instead of centering vertically
   // Vertical positioning: align palette swatches with grid rows
   const firstCell = getCellLayout(0, 0, data);
-  const gridVisualTop = padY;
+  const gridVisualTop = padY + GRID_CLIP_PADDING;
   const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
 
   // Swatch center in palette coordinate space is sTop + sSW/2
@@ -1071,8 +1100,9 @@ export const exportToCanvas = (
   const paletteY = gridFirstRowCenterY - paletteFirstSwatchCenterY + 25;
 
   // Grid Top is just gridY
-  // Grid visual top remains padY (it was gridY which was padY)
-  const gridVisualTopPos = gridVisualTop;
+  // When palette is present, we align grid to padY + clip padding to sync with swatches.
+  // When palette is absent (transparent mode / tight crop), we center it vertically using offsetY.
+  const gridVisualTopPos = !needsPalette ? gridVisualTop + gridLayout.offsetY : gridVisualTop;
 
   const canvas = document.createElement("canvas");
   canvas.width = pageW;
@@ -1081,8 +1111,12 @@ export const exportToCanvas = (
   if (!ctx) return canvas;
 
   // Page background
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, pageW, pageH);
+  if (!transparentBg) {
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, pageW, pageH);
+  } else {
+    ctx.clearRect(0, 0, pageW, pageH);
+  }
 
   // ── Palette column (Left) ──
   if (needsPalette && layout) {
@@ -1097,15 +1131,18 @@ export const exportToCanvas = (
 
   // ── Grid (Right) ──
   ctx.save();
-  // Grid starts after Palette + Gap
+  // Grid starts after Palette + Gap; shift right by clip-padding so overhangs don't clip
   const gridStartX =
     padX +
     PALETTE_X_OFFSET +
     paletteWidth +
     (paletteWidth > 0 ? PALETTE_GAP : 0) +
-    gridLayout.offsetX;
+    gridLayout.offsetX +
+    GRID_CLIP_PADDING +
+    (tightCrop ? -visualBounds.minX : 0); // Compensate for visual minX bleed in tight mode
 
-  ctx.translate(gridStartX, gridVisualTopPos);
+  const gridYOffset = tightCrop ? -visualBounds.minY : 0;
+  ctx.translate(gridStartX, gridVisualTopPos + gridYOffset);
   ctx.scale(gridLayout.scale, gridLayout.scale);
 
   const strokeColor = "#000000";
@@ -1141,14 +1178,21 @@ export const exportToCanvas = (
         isCellColored = ny > 0.5;
       }
     }
+
+    // In transparent-background mode, cells that are not colored (background cells)
+    // should be completely invisible – skip both fill AND stroke.
+    const isBgCell = !cell.code;
+    if (transparentBg && isBgCell) return;
+
     const fillColor = isCellColored
       ? getCellFillColor(cell.color, filledCell)
       : "#ffffff";
 
+    ctx.fillStyle = fillColor;
+
     if (data.gridType === "honeycomb") {
       ctx.beginPath();
       ctx.arc(cl.cx, cl.cy, cl.r, 0, Math.PI * 2);
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     } else if (data.gridType === "diamond") {
@@ -1162,7 +1206,6 @@ export const exportToCanvas = (
       } else {
         ctx.rect(-side / 2, -side / 2, side, side);
       }
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
       ctx.restore();
@@ -1176,7 +1219,6 @@ export const exportToCanvas = (
         y: cl.cy + cl.r * Math.sin(a),
       }));
       getRoundedPolygonPath(ctx, points, cl.r * 0.15);
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     } else if (data.gridType === "puzzle") {
@@ -1191,17 +1233,14 @@ export const exportToCanvas = (
         data.width,
         data.height,
       );
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     } else if (data.gridType === "islamic") {
       drawIslamicTilePath(ctx, cl.cx, cl.cy, data.cellSize, cell.x, cell.y);
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     } else if (data.gridType === "fish-scale") {
       drawFishScalePath(ctx, cl.cx, cl.cy, data.cellSize);
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     } else if (data.gridType === "trapezoid") {
@@ -1215,7 +1254,6 @@ export const exportToCanvas = (
         slant,
         cell.x,
       );
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     } else {
@@ -1226,7 +1264,6 @@ export const exportToCanvas = (
       } else {
         ctx.rect(cell.x * s, cell.y * s, s, s);
       }
-      ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.stroke();
     }
