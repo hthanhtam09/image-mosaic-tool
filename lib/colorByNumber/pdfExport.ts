@@ -36,13 +36,13 @@ export interface PDFExportOptions {
 
 /**
  * PDF generation module for KDP-compatible books
- * Page size: 8.5 x 11 inches
+ * Page size: 8.625 x 11.25 inches
  * Padding: 0.4 inches
  * DPI: 300 (standard for printing)
  */
 
-const PAGE_W_IN = 8.5;
-const PAGE_H_IN = 11;
+const PAGE_W_IN = 8.625;
+const PAGE_H_IN = 11.25;
 const PADDING_IN = 0;
 
 // jsPDF points (1 inch = 72 points)
