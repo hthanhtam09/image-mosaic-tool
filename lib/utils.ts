@@ -278,6 +278,130 @@ export const paletteIndexToLabel = (index: number): string => {
   return String.fromCharCode(65 + n - 10);
 };
 
+export interface EnhanceOptions {
+  /** Auto-contrast strength: 0 = none, 1 = full. Default 0.8 */
+  contrastStrength?: number;
+  /** Saturation multiplier relative to original. 1 = unchanged, 1.3 = +30%. Default 1.25 */
+  saturation?: number;
+  /** Enable unsharp mask to sharpen edges before pixelation. Default true */
+  sharpen?: boolean;
+}
+
+/**
+ * Enhance image for better color recognition:
+ *  1. Auto-contrast: stretch the luminance histogram to fill [0, 255].
+ *  2. Saturation boost: amplify chroma so the quantizer distinguishes hues more easily.
+ *  3. Unsharp mask: preserve edge sharpness so block averaging picks the right dominant color.
+ *
+ * All operations run entirely on CPU (ImageData) to work inside Web Workers too.
+ */
+export const enhanceImage = (
+  imageData: ImageData,
+  options: EnhanceOptions = {},
+): ImageData => {
+  const {
+    contrastStrength = 0.8,
+    saturation = 1.25,
+    sharpen = true,
+  } = options;
+
+  const { width, height, data } = imageData;
+  const n = width * height;
+  const out = new Uint8ClampedArray(data);
+
+  // --- Step 1: Auto-contrast (per-channel min/max stretch) ---
+  if (contrastStrength > 0) {
+    const minR = new Array(256).fill(0);
+    const minG = new Array(256).fill(0);
+    const minB = new Array(256).fill(0);
+    let rMin = 255, rMax = 0, gMin = 255, gMax = 0, bMin = 255, bMax = 0;
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      const r = data[j], g = data[j + 1], b = data[j + 2];
+      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
+      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
+      if (b < bMin) bMin = b; if (b > bMax) bMax = b;
+      void minR; void minG; void minB;
+    }
+    const rRange = Math.max(1, rMax - rMin);
+    const gRange = Math.max(1, gMax - gMin);
+    const bRange = Math.max(1, bMax - bMin);
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      const r = data[j], g = data[j + 1], b = data[j + 2];
+      // Blend between original and fully-stretched: strength controls blend
+      out[j]     = Math.round(r + contrastStrength * (((r - rMin) / rRange) * 255 - r));
+      out[j + 1] = Math.round(g + contrastStrength * (((g - gMin) / gRange) * 255 - g));
+      out[j + 2] = Math.round(b + contrastStrength * (((b - bMin) / bRange) * 255 - b));
+    }
+  }
+
+  // --- Step 2: Saturation boost (HSL-based) ---
+  if (saturation !== 1.0) {
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      const r = out[j] / 255;
+      const g = out[j + 1] / 255;
+      const b = out[j + 2] / 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      if (max === min) continue; // achromatic, skip
+      const d = max - min;
+      let s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      s = Math.min(1, s * saturation);
+
+      // Re-compute RGB from modified HSL
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      const hue2rgb = (pv: number, qv: number, t: number): number => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return pv + (qv - pv) * 6 * t;
+        if (t < 1 / 2) return qv;
+        if (t < 2 / 3) return pv + (qv - pv) * (2 / 3 - t) * 6;
+        return pv;
+      };
+      // Hue
+      let h = 0;
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h /= 6;
+
+      out[j]     = Math.round(hue2rgb(p, q, h + 1 / 3) * 255);
+      out[j + 1] = Math.round(hue2rgb(p, q, h) * 255);
+      out[j + 2] = Math.round(hue2rgb(p, q, h - 1 / 3) * 255);
+    }
+  }
+
+  // --- Step 3: Unsharp mask (simple 3x3 approximation) ---
+  if (sharpen) {
+    const src = new Uint8ClampedArray(out);
+    const amount = 0.4; // Sharpening intensity
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          const center = src[idx + c];
+          // 3x3 box blur approximation (neighbors)
+          const blurred = (
+            src[((y - 1) * width + x) * 4 + c] +
+            src[((y + 1) * width + x) * 4 + c] +
+            src[(y * width + x - 1) * 4 + c] +
+            src[(y * width + x + 1) * 4 + c] +
+            center * 4
+          ) / 8;
+          const sharpened = center + amount * (center - blurred);
+          out[idx + c] = Math.max(0, Math.min(255, Math.round(sharpened)));
+        }
+      }
+    }
+  }
+
+  return new ImageData(out, width, height);
+};
+
 /**
  * Resize image to max width while preserving aspect ratio.
  * Uses high-quality smoothing so the scaled image stays sharp for conversion.
@@ -286,6 +410,7 @@ export const paletteIndexToLabel = (index: number): string => {
 export const resizeImage = (
   img: HTMLImageElement,
   maxWidth: number,
+  enhance?: EnhanceOptions | false,
 ): ImageData => {
   const canvas = document.createElement("canvas");
   const scale = Math.min(1, maxWidth / img.width);
@@ -296,7 +421,9 @@ export const resizeImage = (
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const raw = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  if (enhance === false) return raw;
+  return enhanceImage(raw, enhance ?? {});
 };
 
 /**

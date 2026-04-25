@@ -15,11 +15,12 @@ export const quantizeImage = (
   const pointContainer = utils.PointContainer.fromImageData(imageData);
 
   // wuquant is ~5-10x faster than neuquant with good quality
-  // euclidean distance is much faster than ciede2000 and sufficient for quantization
-  // (perceptual correction is done later via deltaE2000 in palette matching)
+  // manhattan distance works better than euclidean in perceptual terms for this purpose:
+  // it avoids "false proximity" in high-saturation regions (e.g., orange vs red)
+  // (precise perceptual correction is done later via deltaE2000 in palette matching)
   const palette = buildPaletteSync([pointContainer], {
     colors: colorCount,
-    colorDistanceFormula: 'euclidean',
+    colorDistanceFormula: 'manhattan',
     paletteQuantization: 'wuquant',
   });
 

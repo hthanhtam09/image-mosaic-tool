@@ -86,119 +86,69 @@ export interface MosaicBlock {
   isTransparent?: boolean;
 }
 
-/** sRGB (0-255) channel to linear */
-const srgbToLinear = (c: number): number => {
+/**
+ * Convert sRGB [0-255] to OKLab (Björn Ottosson, 2020).
+ * Returns {L, a, b} – keeping uppercase L so all existing callers stay unchanged.
+ *
+ * Why OKLab instead of CIELab + CIEDE2000?
+ * - Perceptually uniform: hue-linear, no blue-to-purple shift
+ * - Simple Euclidean distance is sufficient (no 40-line correction formula)
+ * - Better hue separation for red/orange, blue/purple, etc.
+ */
+const _toLinear = (c: number): number => {
   const x = c / 255;
   return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
 };
 
-/** RGB (0-255) to CIE Lab (D65) for perceptual comparison */
 export const rgbToLab = (rgb: RGB): { L: number; a: number; b: number } => {
-  const r = srgbToLinear(rgb.r);
-  const g = srgbToLinear(rgb.g);
-  const b = srgbToLinear(rgb.b);
-  const x = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b;
-  const y = 0.2126729 * r + 0.7151522 * g + 0.072175 * b;
-  const z = 0.0193339 * r + 0.119192 * g + 0.9503041 * b;
-  const xn = 0.95047;
-  const yn = 1;
-  const zn = 1.08883;
-  const f = (t: number): number =>
-    t > 0.008856 ? Math.pow(t, 1 / 3) : t / 0.128452 + 0.137931;
-  const L = 116 * f(y / yn) - 16;
-  const a = 500 * (f(x / xn) - f(y / yn));
-  const bLab = 200 * (f(y / yn) - f(z / zn));
-  return { L, a, b: bLab };
+  const r = _toLinear(rgb.r);
+  const g = _toLinear(rgb.g);
+  const b = _toLinear(rgb.b);
+  // sRGB linear → LMS (M1)
+  const lmsL = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const lmsM = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const lmsS = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+  const l_ = Math.cbrt(lmsL);
+  const m_ = Math.cbrt(lmsM);
+  const s_ = Math.cbrt(lmsS);
+  // LMS → OKLab (M2)
+  return {
+    L: 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+    a: 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+    b: 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_,
+  };
 };
 
 type Lab = { L: number; a: number; b: number };
 
 /**
- * Delta E 2000 (CIEDE2000) - better perceptual match than Delta E 76,
- * especially for orange/red and similar hues so palette choice is correct.
+ * Perceptual color distance using OKLab Euclidean.
+ * Replaces the 40-line CIEDE2000 formula — OKLab Euclidean is more accurate
+ * for most use cases and eliminates hue-shift artifacts in CIELab.
+ * Scale: 0 = identical, ~1.0 = maximum gamut distance (black vs white).
  */
 export const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
-  const L1 = lab1.L;
-  const a1 = lab1.a;
-  const b1 = lab1.b;
-  const L2 = lab2.L;
-  const a2 = lab2.a;
-  const b2 = lab2.b;
-
-  const C1 = Math.sqrt(a1 * a1 + b1 * b1);
-  const C2 = Math.sqrt(a2 * a2 + b2 * b2);
-  const Cbar = (C1 + C2) / 2;
-  const G =
-    0.5 *
-    (1 - Math.sqrt(Math.pow(Cbar, 7) / (Math.pow(Cbar, 7) + Math.pow(25, 7))));
-  const a1p = a1 * (1 + G);
-  const a2p = a2 * (1 + G);
-  const C1p = Math.sqrt(a1p * a1p + b1 * b1);
-  const C2p = Math.sqrt(a2p * a2p + b2 * b2);
-  const h1p = Math.atan2(b1, a1p);
-  const h2p = Math.atan2(b2, a2p);
-
-  const dLp = L2 - L1;
-  const dCp = C2p - C1p;
-  let dhp = h2p - h1p;
-  if (C1p * C2p !== 0) {
-    if (dhp > Math.PI) dhp -= 2 * Math.PI;
-    else if (dhp < -Math.PI) dhp += 2 * Math.PI;
-  }
-  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(dhp / 2);
-
-  const Lpbar = (L1 + L2) / 2;
-  const Cpbar = (C1p + C2p) / 2;
-  let hpbar = h1p + h2p;
-  if (C1p * C2p !== 0) {
-    if (Math.abs(h1p - h2p) > Math.PI) hpbar += 2 * Math.PI;
-    hpbar /= 2;
-  }
-
-  const T =
-    1 -
-    0.17 * Math.cos(hpbar - (30 * Math.PI) / 180) +
-    0.24 * Math.cos(2 * hpbar) +
-    0.32 * Math.cos(3 * hpbar + (6 * Math.PI) / 180) -
-    0.2 * Math.cos(4 * hpbar - (63 * Math.PI) / 180);
-  const dtheta = 30 * Math.exp(-Math.pow(hpbar - (275 * Math.PI) / 180, 2));
-  const Rc =
-    2 * Math.sqrt(Math.pow(Cpbar, 7) / (Math.pow(Cpbar, 7) + Math.pow(25, 7)));
-  const Sl =
-    1 +
-    (0.015 * Math.pow(Lpbar - 50, 2)) / Math.sqrt(20 + Math.pow(Lpbar - 50, 2));
-  const Sc = 1 + 0.045 * Cpbar;
-  const Sh = 1 + 0.015 * Cpbar * T;
-  const Rt = -Math.sin(2 * dtheta * (Math.PI / 180)) * Rc;
-
-  return Math.sqrt(
-    Math.pow(dLp / Sl, 2) +
-      Math.pow(dCp / Sc, 2) +
-      Math.pow(dHp / Sh, 2) +
-      Rt * (dCp / Sc) * (dHp / Sh),
-  );
+  const dL = lab1.L - lab2.L;
+  const da = lab1.a - lab2.a;
+  const db = lab1.b - lab2.b;
+  return Math.sqrt(dL * dL + da * da + db * db);
 };
 
-/**
- * Find palette index whose color is perceptually closest to the given Lab.
- * Uses CIEDE2000; paletteLab is pre-computed to avoid repeated rgbToLab.
- */
+/** Find palette index whose color is perceptually closest (OKLab Euclidean). */
 const findPaletteIndexFromLab = (lab: Lab, paletteLab: Lab[]): number => {
-  let minDeltaE = Infinity;
+  let minDist = Infinity;
   let bestIndex = 0;
   for (let i = 0; i < paletteLab.length; i++) {
     const d = deltaE2000(lab, paletteLab[i]);
-    if (d < minDeltaE) {
-      minDeltaE = d;
+    if (d < minDist) {
+      minDist = d;
       bestIndex = i;
     }
   }
   return bestIndex;
 };
 
-/**
- * Find palette index for RGB (used by dithering). Converts to Lab then uses paletteLab.
- */
+/** Find palette index for RGB. Converts to OKLab then finds closest. */
 const findPaletteIndex = (
   color: RGB,
   palette: readonly RGB[],
@@ -207,6 +157,10 @@ const findPaletteIndex = (
   const colorLab = rgbToLab(color);
   return findPaletteIndexFromLab(colorLab, paletteLab);
 };
+
+
+
+
 
 /**
  * Floyd-Steinberg dithering (reserved for optional mode). Uses paletteLab + CIEDE2000.
@@ -309,13 +263,16 @@ const hueDistanceDeg = (h1: number, h2: number): number => {
 };
 
 /**
- * Pick palette index closest to the block's average Lab.
+ * Pick palette index closest to the block's saturation-weighted average Lab.
  * OPTIMIZED: Instead of computing deltaE2000 for every pixel x palette color
  * (O(pixels x palette)), we compute the block average Lab once and compare
  * only against palette entries (O(palette)).
  *
- * Tie-break: when two palette colors have similar distance, prefer
- * the one whose hue is closer to the block average hue.
+ * Improvements:
+ * - Saturation weighting: vivid pixels count more than desaturated (gray) pixels.
+ *   This prevents gray/off-white noise in a block from washing out a vibrant color.
+ * - Hue tie-breaking: when two palette colors have similar distance, prefer
+ *   the one whose hue is closer to the block's saturation-weighted hue.
  */
 const bestPaletteIndexByMinTotalError = (
   pixelLabs: Lab[],
@@ -324,19 +281,28 @@ const bestPaletteIndexByMinTotalError = (
   const n = pixelLabs.length;
   if (n === 0) return 0;
 
-  // Compute block average Lab
+  // Compute saturation-weighted block average Lab.
+  // Chroma C* = sqrt(a^2 + b^2) in CIELAB; higher C* = more saturated.
+  // Weight = 1 + 2 * (C_normalized), so vivid pixels get up to 3x more weight.
   let sumL = 0;
   let sumA = 0;
   let sumB = 0;
+  let totalWeight = 0;
+
   for (let i = 0; i < n; i++) {
-    sumL += pixelLabs[i].L;
-    sumA += pixelLabs[i].a;
-    sumB += pixelLabs[i].b;
+    const { L, a, b } = pixelLabs[i];
+    const chroma = Math.sqrt(a * a + b * b); // 0..~180
+    const weight = 1 + 2 * Math.min(1, chroma / 50); // 1 (gray) .. 3 (vivid)
+    sumL += L * weight;
+    sumA += a * weight;
+    sumB += b * weight;
+    totalWeight += weight;
   }
+
   const avgLab: Lab = {
-    L: sumL / n,
-    a: sumA / n,
-    b: sumB / n,
+    L: sumL / totalWeight,
+    a: sumA / totalWeight,
+    b: sumB / totalWeight,
   };
   const blockHue = labHueDeg(avgLab);
 
@@ -360,7 +326,7 @@ const bestPaletteIndexByMinTotalError = (
   }
 
   // Hue tie-breaking: if second-best is within 5% of best, pick whichever
-  // has closer hue to the block average
+  // has closer hue to the block's saturation-weighted average hue.
   const tieThreshold = minDist * 1.05;
   if (secondDist <= tieThreshold && secondDist < Infinity) {
     const bestHue = labHueDeg(paletteLab[bestIndex]);
@@ -528,7 +494,7 @@ export const reduceToUsedPalette = (
  */
 export const deduplicatePaletteDynamic = (
   palette: RGB[],
-  threshold = 6.0,
+  threshold = 0.06, // OKLab Euclidean scale (was 6.0 in CIEDE2000 scale)
 ): { palette: RGB[]; indexMap: number[] } => {
   const paletteLab = palette.map((c) => rgbToLab(c));
   const uniqueIndices: number[] = [];

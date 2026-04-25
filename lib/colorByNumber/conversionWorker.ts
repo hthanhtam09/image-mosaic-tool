@@ -8,17 +8,18 @@ import {
 } from "../pixelate";
 import { quantizeImage } from "../quantize";
 import { FIXED_PALETTE } from "../palette";
-import { rgbToHex, paletteIndexToLabel, isWhite, type RGB } from "../utils";
+import { rgbToHex, paletteIndexToLabel, isWhite, enhanceImage, type RGB } from "../utils";
 import type { ConversionWorkerMessage } from "./types";
 
 /**
- * Pre-computed Lab values for FIXED_PALETTE (computed once at module load).
+ * Pre-computed OKLab values for FIXED_PALETTE (computed once at module load).
+ * rgbToLab() now uses OKLab math — see lib/pixelate.ts.
  */
 const FIXED_PALETTE_LAB = FIXED_PALETTE.map((c) => rgbToLab(c));
 
 /**
- * findClosestFixedColorIndex — uses pre-computed Lab + deltaE2000 for accuracy.
- * Falls back to fast RGB distance for speed when Lab is unavailable.
+ * findClosestFixedColorIndex — uses pre-computed OKLab + Euclidean distance.
+ * More accurate than CIEDE2000 for most perceptual color matching tasks.
  */
 const findClosestFixedColorIndex = (color: RGB): number => {
   const colorLab = rgbToLab(color);
@@ -38,6 +39,9 @@ const findClosestFixedColorIndex = (color: RGB): number => {
  * agglomerativeMerge — OPTIMIZED:
  * Uses a distance matrix to avoid recomputing all pairwise distances each iteration.
  * Original was O(n³·deltaE2000), now O(n²) amortized for distance lookups.
+ *
+ * Improvement: uses frequency-weighted centroid instead of naive midpoint.
+ * The merged color is pulled toward the dominant color in the cluster.
  */
 const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
   const n = colors.length;
@@ -48,6 +52,8 @@ const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
   const paletteIsWhite = palette.map(
     (c) => c.r >= 245 && c.g >= 245 && c.b >= 245,
   );
+  // Track count (frequency) of each cluster — starts at 1 each, grows on merge
+  const counts = new Int32Array(n).fill(1);
 
   // Build upper-triangular distance matrix
   const size = palette.length;
@@ -89,17 +95,21 @@ const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
 
     if (bestI < 0) break; // Shouldn't happen
 
-    // Merge j into i
+    // Frequency-weighted centroid merge: pull toward the dominant color
+    const wi = counts[bestI];
+    const wj = counts[bestJ];
+    const wTotal = wi + wj;
     const ci = palette[bestI];
     const cj = palette[bestJ];
     const merged = {
-      r: Math.round((ci.r + cj.r) / 2),
-      g: Math.round((ci.g + cj.g) / 2),
-      b: Math.round((ci.b + cj.b) / 2),
+      r: Math.round((ci.r * wi + cj.r * wj) / wTotal),
+      g: Math.round((ci.g * wi + cj.g * wj) / wTotal),
+      b: Math.round((ci.b * wi + cj.b * wj) / wTotal),
     };
 
     palette[bestI] = merged;
     paletteLab[bestI] = rgbToLab(merged);
+    counts[bestI] = wTotal;
     active[bestJ] = 0;
     remaining--;
 
@@ -128,10 +138,19 @@ self.onmessage = (e: MessageEvent) => {
   const { imageData, gridType, cellSize, useDithering, maxColors, cols, rows, removeWhiteBackground } =
     e.data as ConversionWorkerMessage;
 
+  // 0. ENHANCE IMAGE: auto-contrast + saturation boost + sharpen
+  //    Runs directly on the transferred ImageData buffer before quantization.
+  const rawImageData = imageData as unknown as ImageData;
+  const enhancedImageData = enhanceImage(rawImageData, {
+    contrastStrength: 0.8,
+    saturation: 1.25,
+    sharpen: true,
+  });
+
   // 1. EXTRACT DYNAMIC PALETTE
   const overSample = Math.max(maxColors * 3, 48);
   const { palette: initialPalette } = quantizeImage(
-    imageData as unknown as ImageData,
+    enhancedImageData,
     overSample,
   );
 
@@ -151,9 +170,9 @@ self.onmessage = (e: MessageEvent) => {
   // 1b. AGGLOMERATIVE MERGE
   const dynamicPalette = agglomerativeMerge(initialPalette, maxColors);
 
-  // 2. Create mosaic blocks
+  // 2. Create mosaic blocks (use enhanced image for better block averaging)
   let rawBlocks = createMosaicBlocks(
-    imageData as unknown as ImageData,
+    enhancedImageData,
     dynamicPalette,
     cellSize,
     useDithering,
