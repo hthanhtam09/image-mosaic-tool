@@ -5,7 +5,12 @@
  * The grid is centered on the page with padding.
  */
 
-import type { ColorByNumberData, FilledMap, ColorByNumberCell, PageLayout } from "./types";
+import type {
+  ColorByNumberData,
+  FilledMap,
+  ColorByNumberCell,
+  PageLayout,
+} from "./types";
 import {
   getGridDimensions,
   getVisualGridBounds,
@@ -21,7 +26,7 @@ export type PartialColorMode =
   | "horizontal-middle"
   | "horizontal-sides";
 import { getPaletteColorName } from "@/lib/palette";
-
+import { rgbToExtendedColorName } from "@/lib/utils";
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
 const EXPORT_PAGE_W = Math.round(8.5 * EXPORT_DPI); // 2550
@@ -730,15 +735,7 @@ const drawPalSwatch = (
   } else if (shape === "trapezoid") {
     const slant = s * TRAPEZOID_SLANT_FACTOR;
     // For palette, we show a standard trapezoid (representative) centered vertically and shifted up
-    drawTrapezoidPath(
-      ctx,
-      cx - half,
-      cy - (s + slant) / 2,
-      s,
-      s,
-      slant,
-      0,
-    );
+    drawTrapezoidPath(ctx, cx - half, cy - (s + slant) / 2, s, s, slant, 0);
     performFillAndStroke();
   } else if (shape === "islamic") {
     drawIslamicTilePath(ctx, cx, cy, s * 0.7, 0, 0);
@@ -768,6 +765,14 @@ const renderPaletteColumnCBN = (
   ctx: CanvasRenderingContext2D,
   data: ColorByNumberData,
   layout: PaletteLayout,
+  renderOpts?: {
+    /** Draw white/empty swatches instead of filled color swatches */
+    clearSwatches?: boolean;
+    /** Draw color name text in the input box area instead of dotted lines */
+    showColorNames?: boolean;
+    /** Map from code → paletteIndex for color name lookup */
+    codeToPaletteIndex?: Map<string, number>;
+  },
 ) => {
   const {
     codes,
@@ -833,16 +838,22 @@ const renderPaletteColumnCBN = (
     const cx = xPos + itemCx;
     const color = codeToColor.get(code) ?? "#999";
     const swCY = yPos + sSW / 2;
+    const clearSwatches = renderOpts?.clearSwatches ?? false;
 
-    // Swatch
-    drawPalSwatch(ctx, cx, swCY, sSW, shape, color);
+    // Swatch — white when clearSwatches mode, otherwise filled with the actual color
+    drawPalSwatch(ctx, cx, swCY, sSW, shape, clearSwatches ? "#ffffff" : color);
 
     // Label inside swatch
-    ctx.fillStyle = "#ffffff";
+    // In clearSwatches mode, draw black label (visible on white bg); otherwise white
+    const labelFill = clearSwatches ? "#333333" : "#ffffff";
+    const labelStroke = clearSwatches
+      ? "rgba(255,255,255,0.6)"
+      : "rgba(0,0,0,0.5)";
+    ctx.fillStyle = labelFill;
     ctx.font = `400 ${sLbl}px 'Noto Sans', sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeStyle = "rgba(0,0,0,0.5)";
+    ctx.strokeStyle = labelStroke;
     ctx.lineWidth = 3;
     ctx.strokeText(code, cx, swCY);
     ctx.fillText(code, cx, swCY);
@@ -980,20 +991,51 @@ const renderPaletteColumnCBN = (
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Pencil icon (removed)
-
-    // Dotted placeholder line (longer, positioned lower for more space above)
-    const dotCount = 13;
-    const innerW = sInputW - 2 * sInputPad;
-    const dotSpacing = innerW * 0.065;
-    const dotTotalW = (dotCount - 1) * dotSpacing;
-    const dotStartX = cx - dotTotalW / 2;
-    const dotY = inputTop + sInputH * 0.62;
-    ctx.fillStyle = "#999999";
-    for (let i = 0; i < dotCount; i++) {
+    // Input box content: color name (clearSwatches mode) or dotted placeholder
+    if (renderOpts?.showColorNames) {
+      const palIdx = renderOpts.codeToPaletteIndex?.get(code);
+      const colorName = palIdx != null ? getPaletteColorName(palIdx) : code;
+      const nameFontSize = Math.max(12, sInputH * 0.42);
+      ctx.fillStyle = "#222222";
+      ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      // Clip to input box so long names don't overflow
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(dotStartX + i * dotSpacing, dotY, 1.2, 0, Math.PI * 2);
-      ctx.fill();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(
+          inputLeft + sInputPad,
+          inputTop,
+          sInputW - sInputPad * 2,
+          sInputH,
+          2,
+        );
+      } else {
+        ctx.rect(
+          inputLeft + sInputPad,
+          inputTop,
+          sInputW - sInputPad * 2,
+          sInputH,
+        );
+      }
+      ctx.clip();
+      ctx.fillText(colorName, cx, inputTop + sInputH * 0.5);
+      ctx.restore();
+    } else {
+      // Dotted placeholder line
+      const dotCount = 13;
+      const innerW = sInputW - 2 * sInputPad;
+      const dotSpacing = innerW * 0.065;
+      const dotTotalW = (dotCount - 1) * dotSpacing;
+      const dotStartX = cx - dotTotalW / 2;
+      const dotY = inputTop + sInputH * 0.62;
+      ctx.fillStyle = "#999999";
+      for (let i = 0; i < dotCount; i++) {
+        ctx.beginPath();
+        ctx.arc(dotStartX + i * dotSpacing, dotY, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.lineCap = "butt";
   });
@@ -1015,7 +1057,6 @@ export const exportToCanvas = (
     /** Whether to crop the output canvas strictly to the grid bounds (ignoring 8.5x11 logic) */
     tightCrop?: boolean;
   },
-
 ): HTMLCanvasElement => {
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
@@ -1027,7 +1068,8 @@ export const exportToCanvas = (
 
   // Extra padding to prevent puzzle tabs / shape overhangs from being clipped.
   // Puzzle tabs protrude by ~18% of cellSize; we add a proportional pixel buffer.
-  const GRID_CLIP_PADDING = data.gridType === "puzzle" ? data.cellSize * 0.22 : 0;
+  const GRID_CLIP_PADDING =
+    data.gridType === "puzzle" ? data.cellSize * 0.22 : 0;
 
   // Page dimensions: strict 8.5x11 @ 300DPI
   const visualBounds = getVisualGridBounds(data);
@@ -1041,19 +1083,25 @@ export const exportToCanvas = (
     if (tightCrop) {
       // Object Focus: shrink subject further while preserving print clarity.
       const FIXED_MARGIN = 220;
-      pageW = Math.max(EXPORT_PAGE_W, Math.ceil(visualBounds.width + FIXED_MARGIN));
-      pageH = Math.max(EXPORT_PAGE_H, Math.ceil(visualBounds.height + FIXED_MARGIN));
+      pageW = Math.max(
+        EXPORT_PAGE_W,
+        Math.ceil(visualBounds.width + FIXED_MARGIN),
+      );
+      pageH = Math.max(
+        EXPORT_PAGE_H,
+        Math.ceil(visualBounds.height + FIXED_MARGIN),
+      );
       pX = FIXED_MARGIN / 2;
       pY = FIXED_MARGIN / 2;
     }
-    
+
     return { pageW, pageH, padX: pX, padY: pY };
   })();
 
   const needsPalette = showPalette;
   const padX = showPalette ? PAGE_PADDING_X : cropSettings.padX;
   const padY = showPalette ? PAGE_PADDING_Y : cropSettings.padY;
-  
+
   const pageW = cropSettings.pageW;
   const pageH = cropSettings.pageH;
 
@@ -1102,7 +1150,9 @@ export const exportToCanvas = (
   // Grid Top is just gridY
   // When palette is present, we align grid to padY + clip padding to sync with swatches.
   // When palette is absent (transparent mode / tight crop), we center it vertically using offsetY.
-  const gridVisualTopPos = !needsPalette ? gridVisualTop + gridLayout.offsetY : gridVisualTop;
+  const gridVisualTopPos = !needsPalette
+    ? gridVisualTop + gridLayout.offsetY
+    : gridVisualTop;
 
   const canvas = document.createElement("canvas");
   canvas.width = pageW;
@@ -1318,34 +1368,46 @@ export const exportToCanvas = (
 };
 
 /**
- * Export color palette as a vertical list on 8.5×11 letter page.
- * Each row: color swatch box + code label, black text, white background.
+ * Export color palette as a standalone page using the same palette item design
+ * (swatch shape + droplets + arc circles), but:
+ *   - Color name text on the LEFT of each item
+ *   - Swatch is WHITE (no fill color), with code number inside
+ *   - Droplets filled with themeColor
+ *   - NO input box
+ *   - Multi-column grid, wraps to new row when too many colors
+ *   - Extra 30px right padding
  */
 export const exportPaletteToCanvas = (
   data: ColorByNumberData,
-  options?: { bgColor?: string },
+  options?: {
+    bgColor?: string;
+    themeColor?: string;
+    pageNumber?: number;
+    transparentBg?: boolean;
+  },
 ): HTMLCanvasElement => {
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
 
-  // Build unique palette rows (exclude white and empty codes)
+  // ── Collect palette data ──
   const codeToColor = new Map<string, string>();
   const codeToPaletteIndex = new Map<string, number>();
+  const codeToCount = new Map<string, number>();
   for (const cell of data.cells) {
-    if (!cell.code) continue; // skip white cells (no code)
+    if (!cell.code) continue;
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
-      if (cell.fixedPaletteIndex != null) {
+      if (cell.fixedPaletteIndex != null)
         codeToPaletteIndex.set(cell.code, cell.fixedPaletteIndex);
-      }
     }
+    codeToCount.set(cell.code, (codeToCount.get(cell.code) ?? 0) + 1);
   }
   const codes = [...codeToColor.keys()].sort((a, b) => {
-    const aNum = parseInt(a, 10);
-    const bNum = parseInt(b, 10);
-    if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-    if (!isNaN(aNum)) return -1;
-    if (!isNaN(bNum)) return 1;
+    const aN = parseInt(a, 10),
+      bN = parseInt(b, 10);
+    if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
+    if (!isNaN(aN)) return -1;
+    if (!isNaN(bN)) return 1;
     return a.localeCompare(b);
   });
 
@@ -1354,58 +1416,417 @@ export const exportPaletteToCanvas = (
   canvas.height = pageH;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  const bgHex = options?.bgColor ?? "#ffffff";
+  if (!options?.transparentBg) {
+    ctx.fillStyle = bgHex;
+    ctx.fillRect(0, 0, pageW, pageH);
+  }
+  if (codes.length === 0) return canvas;
 
-  // Page background
-  ctx.fillStyle = options?.bgColor ?? "#ffffff";
-  ctx.fillRect(0, 0, pageW, pageH);
+  const maxCount = Math.max(...codes.map((c) => codeToCount.get(c) ?? 0), 1);
+  const themeColor = options?.themeColor ?? "#1a1a1a";
 
-  // Layout constants (scaled for 300 DPI)
-  const padding = PAGE_PADDING_Y; // Use new vertical padding
-  const swatchSize = 64;
-  const rowHeight = 84;
-  const totalContentH = codes.length * rowHeight;
+  // Calculate text and line colors based on background brightness
+  const parseHex = (hex: string) => {
+    const c = hex.replace("#", "");
+    if (c.length === 3)
+      return [
+        parseInt(c[0] + c[0], 16),
+        parseInt(c[1] + c[1], 16),
+        parseInt(c[2] + c[2], 16),
+      ];
+    return [
+      parseInt(c.slice(0, 2), 16) || 255,
+      parseInt(c.slice(2, 4), 16) || 255,
+      parseInt(c.slice(4, 6), 16) || 255,
+    ];
+  };
+  const [bgR, bgG, bgB] = parseHex(bgHex);
+  const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
+  const isDarkBg = bgBrightness < 128;
+  const textColor = isDarkBg ? "#ffffff" : "#111111";
+  const separatorColor = isDarkBg
+    ? "rgba(255,255,255,0.15)"
+    : "rgba(0,0,0,0.07)";
 
-  // Center vertically
-  const startY = Math.max(padding, (pageH - totalContentH) / 2);
-  const startX = 360; // leave room for color names on the left
+  // ── Swatch shape ──
+  const shape:
+    | "circle"
+    | "diamond"
+    | "square"
+    | "pentagon"
+    | "puzzle"
+    | "islamic"
+    | "fish-scale"
+    | "trapezoid" =
+    data.gridType === "honeycomb"
+      ? "circle"
+      : data.gridType === "diamond"
+        ? "diamond"
+        : data.gridType === "pentagon"
+          ? "pentagon"
+          : data.gridType === "puzzle"
+            ? "puzzle"
+            : data.gridType === "islamic"
+              ? "islamic"
+              : data.gridType === "fish-scale"
+                ? "fish-scale"
+                : data.gridType === "trapezoid"
+                  ? "trapezoid"
+                  : "square";
 
-  codes.forEach((code, i) => {
-    const y = startY + i * rowHeight;
-    const swatchY = y + (rowHeight - swatchSize) / 2;
+  // ── Layout constants ──
+  const EXTRA_RIGHT = 30;
+  const padX = PAGE_PADDING_X;
+  const padY = PAGE_PADDING_Y;
+  // Content area: left padding to (page width - right padding - extra)
+  const contentW = pageW - padX - padX - EXTRA_RIGHT;
 
-    // Get exact color name from PALETTE_NAMES
-    const palIdx = codeToPaletteIndex.get(code);
-    const colorName = palIdx != null ? getPaletteColorName(palIdx) : code;
+  // Palette item element sizes (reusing existing PAL_ constants)
+  const sSW = PAL_SWATCH; // swatch size ~80px
+  const sDH = PAL_DROPLET_H; // droplet height ~30px
+  const sDW = PAL_DROPLET_W; // droplet width ~21px
+  const sDGap = PAL_DROPLET_GAP; // gap between droplets ~7.5px
+  const sGap = PAL_SWD_GAP; // swatch→droplets gap
+  const sArcGap = PAL_ARC_GAP;
+  const sArcRadius = PAL_ARC_RADIUS;
+  const sArcCircleR = PAL_ARC_CIRCLE_R;
+  const sLbl = PAL_LABEL_FS;
 
-    // Color name – left of box, right-aligned text near the swatch
-    ctx.fillStyle = "#000000";
-    ctx.font = "400 42px 'Noto Sans', sans-serif";
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillText(
-      colorName,
-      startX - 12,
-      data.gridType === "trapezoid"
-        ? y + rowHeight / 2 - 10
-        : y + rowHeight / 2,
-    );
+  // Arc area extends to the right of swatch center
+  const arcRightExtent = sArcGap + sArcRadius + sArcCircleR; // ~65px right of swatch edge
+  // Total right extent from swatch CENTER = sSW/2 + arcRightExtent
+  const arcTotalW = sSW / 2 + arcRightExtent; // space from swatch center to rightmost arc
 
-    // White box with border
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(startX, swatchY, swatchSize, swatchSize);
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(startX, swatchY, swatchSize, swatchSize);
+  // Name text area (left of swatch center)
+  const nameAreaW = Math.round(0.72 * EXPORT_DPI); // ~216px for color name
+  const nameGap = Math.round(0.16 * EXPORT_DPI); // gap between name and swatch left edge (INCREASED padding)
 
-    // Code number inside the box, centered
-    ctx.fillStyle = "#000000";
-    ctx.font = "400 39px 'Noto Sans', sans-serif";
+  // Item width = nameArea + nameGap + swatch_left_half + arc_total_right
+  // Swatch CENTER is at: itemLeft + nameAreaW + nameGap + sSW/2
+  const itemW = nameAreaW + nameGap + sSW + arcTotalW;
+
+  // Horizontal gap between items
+  const hGap = Math.round(0.06 * EXPORT_DPI);
+  // Items per row
+  const itemsPerRow = Math.max(
+    1,
+    Math.floor((contentW + hGap) / (itemW + hGap)),
+  );
+
+  // Item height (NO input box): swatch + gap + droplets
+  const itemH = sSW + sGap + sDH;
+  const vGap = Math.round(0.14 * EXPORT_DPI); // vertical gap between rows
+
+  const numRows = Math.ceil(codes.length / itemsPerRow);
+  const totalH = numRows * itemH + Math.max(0, numRows - 1) * vGap;
+
+  let bannerHeight = 0;
+  if (options?.pageNumber != null) {
+    bannerHeight = Math.round(0.6 * EXPORT_DPI); // 180px reserved for banner at the top
+  }
+
+  // Scale down if overflowing
+  const availH = pageH - padY * 2 - bannerHeight;
+  const scale = totalH > availH ? availH / totalH : 1;
+  const startY = padY + bannerHeight + (availH - totalH * scale) / 2;
+
+  // ── Draw Banner ──
+  if (options?.pageNumber != null) {
+    const bColor = isDarkBg ? "#ffffff" : "#000000";
+    const tColor = isDarkBg ? "#000000" : "#ffffff";
+    const cx = pageW / 2;
+    const bw = 360; // banner width
+    const bh = 120; // banner height
+    const cy = startY - 120 - bh / 2; // Position 60px above the color blocks (increased from 30px)
+
+    ctx.save();
+
+    // Draw ribbon shape
+    ctx.beginPath();
+    ctx.moveTo(cx - bw / 2, cy - bh / 2);
+    ctx.lineTo(cx + bw / 2, cy - bh / 2);
+    ctx.lineTo(cx + bw / 2 - 40, cy);
+    ctx.lineTo(cx + bw / 2, cy + bh / 2);
+    ctx.lineTo(cx - bw / 2, cy + bh / 2);
+    ctx.lineTo(cx - bw / 2 + 40, cy);
+    ctx.closePath();
+
+    // Banner background
+    ctx.fillStyle = bColor;
+    ctx.fill();
+
+    // Banner border to ensure visibility on all backgrounds
+    ctx.strokeStyle = tColor;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // Banner text (Page number)
+    ctx.fillStyle = tColor;
+    ctx.font = `900 70px 'Noto Sans', sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(code, startX + swatchSize / 2, y + rowHeight / 2);
+    ctx.fillText(options.pageNumber.toString(), cx, cy + 4);
+
+    ctx.restore();
+  }
+
+  codes.forEach((code, i) => {
+    const row = Math.floor(i / itemsPerRow);
+    const col = i % itemsPerRow;
+
+    const ix = padX + col * (itemW + hGap) * scale;
+    const iy = startY + row * (itemH + vGap) * scale;
+
+    const sw = sSW * scale;
+    // Swatch center X = item left + (nameAreaW + nameGap) * scale + sw/2
+    const cx = ix + (nameAreaW + nameGap) * scale + sw / 2;
+    const swCY = iy + sw / 2;
+
+    // ── Color name text (RIGHT-aligned, ending just before swatch) ──
+    const colorHex = codeToColor.get(code) ?? "#000000";
+    const [cR, cG, cB] = parseHex(colorHex);
+    // Use extended color names to prevent duplicates
+    const { name: colorName } = rgbToExtendedColorName({ r: cR, g: cG, b: cB });
+
+    const nameFontSize = Math.max(14, sw * 0.4);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ix, iy, nameAreaW * scale, sw);
+    ctx.clip();
+    ctx.fillStyle = textColor;
+    ctx.font = `600 ${nameFontSize}px 'Noto Sans', sans-serif`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(colorName, ix + nameAreaW * scale, swCY);
+    ctx.restore();
+
+    // ── Swatch: white/empty shape ──
+    drawPalSwatch(ctx, cx, swCY, sw, shape, "#ffffff");
+
+    // Code number inside swatch (dark on white bg)
+    ctx.fillStyle = "#333333";
+    ctx.font = `400 ${Math.max(12, sw * (sLbl / sSW))}px 'Noto Sans', sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 2;
+    ctx.strokeText(code, cx, swCY);
+    ctx.fillText(code, cx, swCY);
+
+    // ── Droplets below swatch (theme-colored) ──
+    const dropTop = iy + sw + sGap * scale;
+    const dW = sDW * scale;
+    const dH = sDH * scale;
+    const dGapS = sDGap * scale;
+    const totalDropW = PAL_DROPLET_COUNT * dW + (PAL_DROPLET_COUNT - 1) * dGapS;
+    const dropStartX = cx - totalDropW / 2 + dW / 2;
+    const count = codeToCount.get(code) ?? 0;
+    const displayDroplets =
+      count > 0 ? Math.max(0.5, (count / maxCount) * PAL_DROPLET_COUNT) : 0;
+    for (let d = 0; d < PAL_DROPLET_COUNT; d++) {
+      let fillType = 0;
+      if (d + 1 <= displayDroplets) fillType = 1;
+      else if (d + 0.5 <= displayDroplets) fillType = 0.5;
+      drawDropletShape(
+        ctx,
+        dropStartX + d * (dW + dGapS),
+        dropTop,
+        dW,
+        dH,
+        fillType,
+        themeColor,
+      );
+    }
+
+    // ── Arc shapes to the right of swatch (outline only, same as palette in main image) ──
+    const arcCenterX = cx + sw / 2 + sArcGap * scale + sArcRadius * scale;
+    const r = sArcCircleR * scale;
+    const rSq = r / Math.SQRT2;
+    const arcAngles = [-80, 0, 80].map((deg) => (deg * Math.PI) / 180);
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#555555";
+    ctx.lineWidth = 1.5;
+    arcAngles.forEach((angle, ai) => {
+      const shapeX = arcCenterX + sArcRadius * scale * Math.cos(angle);
+      let shapeY = swCY + sArcRadius * scale * Math.sin(angle);
+      if (shape === "circle") {
+        ctx.beginPath();
+        ctx.arc(shapeX, shapeY, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "square") {
+        const rx = rSq * 0.12;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function")
+          ctx.roundRect(shapeX - rSq, shapeY - rSq, rSq * 2, rSq * 2, rx);
+        else ctx.rect(shapeX - rSq, shapeY - rSq, rSq * 2, rSq * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "diamond") {
+        const side = r * 2 * 0.707 * 0.9;
+        ctx.save();
+        ctx.translate(shapeX, shapeY);
+        ctx.rotate((45 * Math.PI) / 180);
+        ctx.fillRect(-side / 2, -side / 2, side, side);
+        ctx.strokeRect(-side / 2, -side / 2, side, side);
+        ctx.restore();
+      } else if (shape === "puzzle") {
+        drawPuzzlePiecePath(ctx, shapeX, shapeY, r * 1.4, 0, 2, 3, 3);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "islamic") {
+        drawIslamicTilePath(ctx, shapeX, shapeY, r * 1.4, 0, 0);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "fish-scale") {
+        drawFishScalePath(ctx, shapeX, shapeY, r * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "trapezoid") {
+        if (ai === 1) shapeY += r * 0.2;
+        const size = rSq * 2;
+        const slant = size * TRAPEZOID_SLANT_FACTOR;
+        drawTrapezoidPath(
+          ctx,
+          shapeX - rSq,
+          shapeY - (size + slant) / 2,
+          size,
+          size,
+          slant,
+          0,
+        );
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        const pts = [-90, -30, 30, 90, 150, 210].map((deg) => ({
+          x: shapeX + r * Math.cos((deg * Math.PI) / 180),
+          y: shapeY + r * Math.sin((deg * Math.PI) / 180),
+        }));
+        getRoundedPolygonPath(ctx, pts, r * 0.15);
+        ctx.fill();
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+
+    // ── Separator line between rows ──
+    if (row < numRows - 1 && col === itemsPerRow - 1) {
+      const lineY = iy + itemH * scale + (vGap * scale) / 2;
+      ctx.beginPath();
+      ctx.moveTo(padX, lineY);
+      ctx.lineTo(pageW - padX - EXTRA_RIGHT, lineY);
+      ctx.strokeStyle = separatorColor;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   });
 
   return canvas;
+};
+
+/**
+ * Export a collection of canvases (e.g. colored results) into KDP-compliant pages
+ * arranged in a grid (5 items per row).
+ */
+export const exportCollagePagesToCanvas = (
+  canvases: HTMLCanvasElement[],
+  options?: { bgColor?: string },
+): HTMLCanvasElement[] => {
+  const pageW = EXPORT_PAGE_W; // 2550
+  const pageH = EXPORT_PAGE_H; // 3300
+  const padX = PAGE_PADDING_X;
+  const padY = PAGE_PADDING_Y;
+
+  const contentW = pageW - padX * 2;
+  const contentH = pageH - padY * 2;
+
+  const itemsPerRow = 5;
+  const gap = Math.round(0.15 * EXPORT_DPI); // 45px
+
+  const cellW = (contentW - gap * (itemsPerRow - 1)) / itemsPerRow;
+  const cellH = cellW; // Fit into a square box per item
+  const rowsPerPage = Math.floor((contentH + gap) / (cellH + gap));
+  const itemsPerPage = itemsPerRow * rowsPerPage;
+
+  const pages: HTMLCanvasElement[] = [];
+
+  // Calculate text color based on background brightness
+  const bgHex = options?.bgColor ?? "#ffffff";
+  const parseHex = (hex: string) => {
+    const c = hex.replace("#", "");
+    if (c.length === 3)
+      return [
+        parseInt(c[0] + c[0], 16),
+        parseInt(c[1] + c[1], 16),
+        parseInt(c[2] + c[2], 16),
+      ];
+    return [
+      parseInt(c.slice(0, 2), 16) || 255,
+      parseInt(c.slice(2, 4), 16) || 255,
+      parseInt(c.slice(4, 6), 16) || 255,
+    ];
+  };
+  const [bgR, bgG, bgB] = parseHex(bgHex);
+  const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
+  const isDarkBg = bgBrightness < 128;
+  const textColor = isDarkBg ? "#ffffff" : "#111111";
+
+  for (let i = 0; i < canvases.length; i += itemsPerPage) {
+    const pageCanvases = canvases.slice(i, i + itemsPerPage);
+    const canvas = document.createElement("canvas");
+    canvas.width = pageW;
+    canvas.height = pageH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.fillStyle = bgHex;
+    ctx.fillRect(0, 0, pageW, pageH);
+
+    pageCanvases.forEach((imgCanvas, idx) => {
+      const row = Math.floor(idx / itemsPerRow);
+      const col = idx % itemsPerRow;
+
+      const cx = padX + col * (cellW + gap);
+      const cy = padY + row * (cellH + gap);
+
+      const imageNumber = i + idx + 1;
+      const textHeight = 60; // Space for text at the bottom of the cell
+
+      // Scale to fit within the cell, reserving textHeight at the bottom
+      const scale = Math.min(
+        cellW / imgCanvas.width,
+        (cellH - textHeight) / imgCanvas.height,
+      );
+      const drawW = imgCanvas.width * scale;
+      const drawH = imgCanvas.height * scale;
+
+      const drawX = cx + (cellW - drawW) / 2;
+      const drawY = cy + (cellH - textHeight - drawH) / 2;
+
+      ctx.drawImage(imgCanvas, drawX, drawY, drawW, drawH);
+
+      // Draw number below the image
+      ctx.fillStyle = textColor;
+      ctx.font = `bold 40px 'Noto Sans', sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(
+        imageNumber.toString(),
+        cx + cellW / 2,
+        cy + cellH - textHeight + 10,
+      );
+    });
+
+    pages.push(canvas);
+  }
+
+  return pages;
 };
 
 export const downloadProgressAsJson = (

@@ -2,12 +2,25 @@
 
 import { THEMES } from "@/lib/colorByNumber/themes";
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
+import type { ColorByNumberGridType } from "@/lib/colorByNumber";
 import { useEffect, useRef } from "react";
 
 interface GlobalSettingsProps {
     showSettings: boolean;
     setShowSettings: (show: boolean) => void;
 }
+
+const GRID_TYPE_OPTIONS: { value: ColorByNumberGridType | 'auto'; label: string }[] = [
+    { value: 'auto', label: 'Auto (Cycle)' },
+    { value: 'standard', label: 'Square' },
+    { value: 'honeycomb', label: 'Circle' },
+    { value: 'diamond', label: 'Diamond' },
+    { value: 'pentagon', label: 'Hexagon' },
+    { value: 'puzzle', label: 'Puzzle' },
+    { value: 'islamic', label: 'Islamic' },
+    { value: 'fish-scale', label: 'Fish Scale' },
+    { value: 'trapezoid', label: 'Trapezoid' },
+];
 
 export default function GlobalSettings({
     showSettings,
@@ -18,10 +31,14 @@ export default function GlobalSettings({
         globalShowNumbers,
         globalShowPalette,
         globalTheme,
+        globalExportPalette,
+        globalGridType,
         setGlobalCellSize,
         toggleGlobalShowNumbers,
         toggleGlobalShowPalette,
         setGlobalTheme,
+        toggleGlobalExportPalette,
+        setGlobalGridType,
     } = useColorByNumberStore();
 
     const settingsRef = useRef<HTMLDivElement>(null);
@@ -36,6 +53,15 @@ export default function GlobalSettings({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [setShowSettings]);
+
+    const ToggleSwitch = ({ on, onToggle }: { on: boolean; onToggle: () => void }) => (
+        <div
+            onClick={onToggle}
+            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${on ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'}`}
+        >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
+        </div>
+    );
 
     return (
         <div className="relative" ref={settingsRef}>
@@ -55,7 +81,7 @@ export default function GlobalSettings({
 
             {/* Settings Dropdown */}
             {showSettings && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl shadow-2xl z-50 p-5 space-y-5">
+                <div className="absolute right-0 top-full mt-2 w-80 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl shadow-2xl z-50 p-5 space-y-5 max-h-[85vh] overflow-y-auto">
                     <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="12" cy="12" r="3" />
@@ -88,49 +114,79 @@ export default function GlobalSettings({
                     <div className="space-y-3">
                         <label className="flex items-center justify-between cursor-pointer group">
                             <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">Show Numbers</span>
-                            <div
-                                onClick={toggleGlobalShowNumbers}
-                                className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${globalShowNumbers ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
-                                    }`}
-                            >
-                                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${globalShowNumbers ? 'translate-x-4' : 'translate-x-0.5'
-                                    }`} />
-                            </div>
+                            <ToggleSwitch on={globalShowNumbers} onToggle={toggleGlobalShowNumbers} />
                         </label>
 
                         <label className="flex items-center justify-between cursor-pointer group">
                             <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">Show Palette</span>
-                            <div
-                                onClick={toggleGlobalShowPalette}
-                                className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${globalShowPalette ? 'bg-[var(--accent)]' : 'bg-[var(--border-default)]'
-                                    }`}
-                            >
-                                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${globalShowPalette ? 'translate-x-4' : 'translate-x-0.5'
-                                    }`} />
-                            </div>
+                            <ToggleSwitch on={globalShowPalette} onToggle={toggleGlobalShowPalette} />
                         </label>
 
-
-                        <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-subtle)]">
-                            <span className="text-xs text-[var(--text-secondary)] font-medium">Theme</span>
-                            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                                {THEMES.map((theme) => (
-                                    <button
-                                        key={theme.id}
-                                        onClick={() => setGlobalTheme(theme.id)}
-                                        className={`px-3 py-2 text-[10px] font-medium rounded-lg transition-all flex items-center gap-2 border ${globalTheme === theme.id
-                                            ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] shadow-sm'
-                                            : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)]'
-                                            }`}
-                                    >
-                                        <div
-                                            className="w-3 h-3 rounded-full border border-white/20"
-                                            style={{ backgroundColor: theme.backgroundColor }}
-                                        />
-                                        {theme.name}
-                                    </button>
-                                ))}
+                        {/* Export Palette Toggle */}
+                        <label className="flex items-center justify-between cursor-pointer group">
+                            <div>
+                                <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">Export Palette (per image)</span>
+                                {globalExportPalette && (
+                                    <p className="text-[10px] text-[var(--accent)] mt-0.5">Palette PNG added to zip</p>
+                                )}
                             </div>
+                            <ToggleSwitch on={globalExportPalette} onToggle={toggleGlobalExportPalette} />
+                        </label>
+                    </div>
+
+                    <div className="border-t border-[var(--border-subtle)]" />
+
+                    {/* Pattern Picker */}
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs text-[var(--text-secondary)] font-medium">Import Pattern</span>
+                            {globalGridType !== 'auto' && (
+                                <button
+                                    onClick={() => setGlobalGridType('auto')}
+                                    className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                                >
+                                    Reset to auto
+                                </button>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                            {GRID_TYPE_OPTIONS.map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setGlobalGridType(opt.value)}
+                                    className={`px-3 py-2 text-[10px] font-medium rounded-lg transition-all border ${globalGridType === opt.value
+                                        ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] shadow-sm'
+                                        : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)]'
+                                        }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-[var(--border-subtle)]" />
+
+                    {/* Theme picker */}
+                    <div className="flex flex-col gap-2">
+                        <span className="text-xs text-[var(--text-secondary)] font-medium">Theme</span>
+                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                            {THEMES.map((theme) => (
+                                <button
+                                    key={theme.id}
+                                    onClick={() => setGlobalTheme(theme.id)}
+                                    className={`px-3 py-2 text-[10px] font-medium rounded-lg transition-all flex items-center gap-2 border ${globalTheme === theme.id
+                                        ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] shadow-sm'
+                                        : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)]'
+                                        }`}
+                                >
+                                    <div
+                                        className="w-3 h-3 rounded-full border border-white/20"
+                                        style={{ backgroundColor: theme.backgroundColor }}
+                                    />
+                                    {theme.name}
+                                </button>
+                            ))}
                         </div>
                     </div>
                 </div>

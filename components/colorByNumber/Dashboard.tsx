@@ -7,7 +7,7 @@ import { getThemeById } from "@/lib/colorByNumber/themes";
 
 import ProjectPreviewModal from "./ProjectPreviewModal";
 import { generateBookPdf, parseCSV, PDFCsvRow } from "@/lib/colorByNumber/pdfExport";
-import { exportToCanvas } from "@/lib/colorByNumber/export";
+import { exportToCanvas, exportPaletteToCanvas, exportCollagePagesToCanvas } from "@/lib/colorByNumber/export";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -27,6 +27,8 @@ export default function Dashboard() {
         globalShowPalette,
         globalTheme,
         globalShowNumbers,
+        globalExportPalette,
+        globalGridType,
         setGlobalTheme,
     } = useColorByNumberStore();
 
@@ -49,11 +51,13 @@ export default function Dashboard() {
     const csvInputRef = useRef<HTMLInputElement>(null);
     const prefixInputRef = useRef<HTMLInputElement>(null);
     const suffixInputRef = useRef<HTMLInputElement>(null);
+    const paletteInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const transparentImageInputRef = useRef<HTMLInputElement>(null);
     const dirInputRef = useRef<HTMLInputElement>(null);
-    const [directImages, setDirectImages] = useState<{ name: string; colorUrl: string; uncolorUrl: string }[]>([]);
-    const [uploadedFolders, setUploadedFolders] = useState<{ color: boolean, uncolor: boolean }>({ color: false, uncolor: false });
+    const [directImages, setDirectImages] = useState<{ name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }[]>([]);
+    const [paletteImages, setPaletteImages] = useState<string[]>([]);
+    const [uploadedFolders, setUploadedFolders] = useState<{ color: boolean, uncolor: boolean, palette: boolean }>({ color: false, uncolor: false, palette: false });
     const [showStoryInput, setShowStoryInput] = useState(true);
     const [isProcessingFolder, setIsProcessingFolder] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
@@ -90,7 +94,8 @@ export default function Dashboard() {
                 const fileList = Array.from(files).sort((a, b) =>
                     a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
                 );
-                // Pattern cycle: Square -> Circle -> Diamond -> Pentagon -> Puzzle -> Islamic -> Fish Scale -> Trapezoid
+
+                // Pattern cycle (used when globalGridType is 'auto')
                 const patternCycle: ColorByNumberGridType[] = [
                     "standard",
                     "honeycomb",
@@ -112,8 +117,10 @@ export default function Dashboard() {
                         reader.readAsDataURL(file);
                     });
 
-                    // Calculate pattern based on index
-                    const pattern = patternCycle[index % patternCycle.length];
+                    // Use global grid type if set, otherwise cycle
+                    const pattern: ColorByNumberGridType = globalGridType === 'auto'
+                        ? patternCycle[index % patternCycle.length]
+                        : globalGridType;
 
                     // Add project with assigned pattern
                     addProject(file, dataUrl, {
@@ -127,7 +134,7 @@ export default function Dashboard() {
                 e.target.value = "";
             }
         },
-        [addProject],
+        [addProject, globalGridType],
     );
 
     const handleImportTransparentClick = useCallback(() => {
@@ -212,10 +219,10 @@ export default function Dashboard() {
         setIsProcessingFolder(true);
 
         try {
-            // 1. Better detection logic
             let hasColor = false;
             let hasUncolor = false;
-            const groups: Record<string, { color?: File; uncolor?: File }> = {};
+            let hasPalette = false;
+            const groups: Record<string, { color?: File; uncolor?: File; palette?: File }> = {};
 
             for (const file of files) {
                 const relPath = file.webkitRelativePath.toLowerCase();
@@ -223,24 +230,29 @@ export default function Dashboard() {
 
                 if (!groups[name]) groups[name] = {};
 
-                // Look for 'color' or 'uncolor' anywhere in the path segments
+                // Look for 'color', 'uncolor', or 'palette' anywhere in the path segments
                 if (relPath.includes('/color/') || relPath.startsWith('color/')) {
                     groups[name].color = file;
                     hasColor = true;
                 } else if (relPath.includes('/uncolor/') || relPath.startsWith('uncolor/')) {
                     groups[name].uncolor = file;
                     hasUncolor = true;
-                } else if (relPath.includes('color') || relPath.includes('uncolor')) { // fallback
+                } else if (relPath.includes('/palette/') || relPath.startsWith('palette/')) {
+                    groups[name].palette = file;
+                    hasPalette = true;
+                } else if (relPath.includes('color') || relPath.includes('uncolor') || relPath.includes('palette')) { // fallback
                     const isColor = relPath.includes('color');
-                    groups[name][isColor ? 'color' : 'uncolor'] = file;
-                    if (isColor) hasColor = true; else hasUncolor = true;
+                    const isPalette = relPath.includes('palette');
+                    groups[name][isPalette ? 'palette' : isColor ? 'color' : 'uncolor'] = file;
+                    if (isPalette) hasPalette = true; else if (isColor) hasColor = true; else hasUncolor = true;
                 }
             }
 
             // 2. Update status immediately
             setUploadedFolders(prev => ({
                 color: prev.color || hasColor,
-                uncolor: prev.uncolor || hasUncolor
+                uncolor: prev.uncolor || hasUncolor,
+                palette: prev.palette || hasPalette
             }));
 
             const readFile = (f: File): Promise<string> => new Promise((resolve, reject) => {
@@ -250,14 +262,15 @@ export default function Dashboard() {
                 rd.readAsDataURL(f);
             });
 
-            const newDirectImages: { name: string; colorUrl: string; uncolorUrl: string }[] = [];
+            const newDirectImages: { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }[] = [];
             for (const [name, g] of Object.entries(groups)) {
                 // To move to Step 2, we need at least the uncolor image
                 if (g.uncolor) {
                     newDirectImages.push({
                         name,
                         colorUrl: g.color ? await readFile(g.color) : '',
-                        uncolorUrl: await readFile(g.uncolor)
+                        uncolorUrl: await readFile(g.uncolor),
+                        paletteUrl: g.palette ? await readFile(g.palette) : undefined
                     });
                 }
             }
@@ -269,15 +282,8 @@ export default function Dashboard() {
                     const updated = [...filtered, ...newDirectImages];
                     return updated.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
                 });
-
-                // Small delay to show the "Light Up" effect before transitioning
-                setTimeout(() => {
-                    setCurrentStep(2);
-                    setIsProcessingFolder(false);
-                }, 1000);
-            } else {
-                setIsProcessingFolder(false);
             }
+            setIsProcessingFolder(false);
         } catch (err) {
             console.error("Folder upload failed:", err);
             setIsProcessingFolder(false);
@@ -332,6 +338,13 @@ export default function Dashboard() {
         setSuffixPages(dataUrls);
     };
 
+    const handlePaletteChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        if (files.length === 0) return;
+        const dataUrls = await Promise.all(files.map(readFileAsDataURL));
+        setPaletteImages(dataUrls);
+    };
+
     const handleCsvChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -354,6 +367,45 @@ export default function Dashboard() {
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
+            // ── Generate Solution Gallery Pages ──
+            let solutionPages: string[] = [];
+            const theme = getThemeById(globalTheme);
+
+            if (directImages.length > 0) {
+                // Folder Mode: Load colorUrl from directImages
+                const colorCanvases = await Promise.all(directImages.map(async img => {
+                    return new Promise<HTMLCanvasElement>((resolve) => {
+                        const el = new Image();
+                        el.onload = () => {
+                            const canvas = document.createElement("canvas");
+                            canvas.width = el.width;
+                            canvas.height = el.height;
+                            const ctx = canvas.getContext("2d");
+                            ctx?.drawImage(el, 0, 0);
+                            resolve(canvas);
+                        };
+                        el.src = img.colorUrl;
+                    });
+                }));
+                const collagePages = exportCollagePagesToCanvas(colorCanvases, { bgColor: theme.backgroundColor });
+                solutionPages = collagePages.map(c => c.toDataURL("image/png"));
+            } else {
+                // Standard Mode: Generate colored canvases from projects
+                const colorCanvases = readyProjects.map(p => {
+                    return exportToCanvas(p.data!, p.filled, {
+                        showCodes: false,
+                        colored: true,
+                        showPalette: false,
+                        partialColorMode: p.partialColorMode,
+                        bgColor: theme.backgroundColor,
+                        transparentBg: p.removeBackground,
+                        tightCrop: p.removeBackground
+                    });
+                });
+                const collagePages = exportCollagePagesToCanvas(colorCanvases, { bgColor: theme.backgroundColor });
+                solutionPages = collagePages.map(c => c.toDataURL("image/png"));
+            }
+
             const blob = await generateBookPdf(
                 {
                     projects: readyProjects.map(p => ({
@@ -364,17 +416,21 @@ export default function Dashboard() {
                     })),
                     directImages: directImages.map(img => ({
                         colorUrl: img.colorUrl,
-                        uncolorUrl: img.uncolorUrl
+                        uncolorUrl: img.uncolorUrl,
+                        paletteUrl: img.paletteUrl
                     })),
                     backgroundImages: bgImages,
                     csvData,
                     prefixPages,
                     suffixPages,
+                    solutionPages,
                     globalOptions: {
                         showCodes: globalShowNumbers,
                         showPalette: globalShowPalette,
                         theme: globalTheme,
-                        showStoryInput: showStoryInput
+                        showStoryInput: showStoryInput,
+                        globalExportPalette: directImages.length > 0 ? directImages.some(img => !!img.paletteUrl) : globalExportPalette,
+                        paletteImages: paletteImages
                     },
                 },
                 (current: number, total: number) => {
@@ -404,7 +460,7 @@ export default function Dashboard() {
 
     const handleDownloadAllImages = async () => {
         const readyProjects = [...projects]
-            .filter((p) => p.status === "completed")
+            .filter((p) => p.status === 'completed')
             .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         if (readyProjects.length === 0) return;
 
@@ -413,40 +469,71 @@ export default function Dashboard() {
         const rootFolder = zip.folder("converted_images");
         const colorFolder = rootFolder?.folder("color");
         const uncolorFolder = rootFolder?.folder("uncolor");
+        const collageFolder = rootFolder?.folder("solutions_collage");
+        const paletteFolder = globalExportPalette ? rootFolder?.folder("palette") : null;
+
+        const coloredCanvases: HTMLCanvasElement[] = [];
 
         try {
-            for (const element of readyProjects) {
-                const project = element;
+            for (let i = 0; i < readyProjects.length; i++) {
+                const project = readyProjects[i];
                 const baseName = project.name.replace(/\.[^/.]+$/, "");
+                const theme = getThemeById(globalTheme);
+
+                // When exporting palette separately, hide the inline palette so the image is full-width
+                const shouldShowPalette = project.removeBackground
+                    ? false
+                    : (globalExportPalette ? false : globalShowPalette);
 
                 // Color version
-                const theme = getThemeById(globalTheme);
                 const canvasColor = exportToCanvas(project.data!, project.filled, {
                     showCodes: project.removeBackground ? false : globalShowNumbers,
                     colored: true,
-                    showPalette: project.removeBackground ? false : globalShowPalette,
+                    showPalette: shouldShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
                     tightCrop: project.removeBackground,
                 });
-                const dataUrlColor = canvasColor.toDataURL("image/png");
-                const base64Color = dataUrlColor.split(',')[1];
+                coloredCanvases.push(canvasColor);
+                const base64Color = canvasColor.toDataURL("image/png").split(',')[1];
                 colorFolder?.file(`${baseName}.png`, base64Color, { base64: true });
 
                 // Uncolored version (empty grid with numbers)
                 const canvasUncolor = exportToCanvas(project.data!, project.filled, {
-                    showCodes: !project.removeBackground, // Object Focus keeps outputs number-free
-                    colored: false,  // Uncolored
-                    showPalette: project.removeBackground ? false : globalShowPalette,
+                    showCodes: !project.removeBackground,
+                    colored: false,
+                    showPalette: shouldShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
                     tightCrop: project.removeBackground,
                 });
-                const dataUrlUncolor = canvasUncolor.toDataURL("image/png");
-                const base64Uncolor = dataUrlUncolor.split(',')[1];
+                const base64Uncolor = canvasUncolor.toDataURL("image/png").split(',')[1];
                 uncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
+
+                // Palette export (separate file) — vertical list, swatch right, name left, droplets themed
+                if (globalExportPalette && paletteFolder && project.data) {
+                    const canvasPalette = exportPaletteToCanvas(project.data, {
+                        bgColor: theme.backgroundColor,
+                        themeColor: theme.backgroundColor,
+                        pageNumber: i + 1,
+                    });
+                    const base64Palette = canvasPalette.toDataURL("image/png").split(',')[1];
+                    paletteFolder.file(`${baseName}.png`, base64Palette, { base64: true });
+                }
+            }
+
+            // Generate Collage pages
+            if (collageFolder && coloredCanvases.length > 0) {
+                const theme = getThemeById(globalTheme);
+                const collagePages = exportCollagePagesToCanvas(coloredCanvases, {
+                    bgColor: theme.backgroundColor,
+                });
+                collagePages.forEach((pageCanvas, idx) => {
+                    const base64Page = pageCanvas.toDataURL("image/png").split(',')[1];
+                    collageFolder.file(`collage_page_${idx + 1}.png`, base64Page, { base64: true });
+                });
             }
 
             const content = await zip.generateAsync({ type: "blob" });
@@ -458,8 +545,31 @@ export default function Dashboard() {
         }
     };
 
+
     const handleNextToSetup = async () => {
         setIsPreparingStep2(true);
+
+        // Auto-fill palette images if Export Palette is enabled and we have converted projects (Standard Mode)
+        if (globalExportPalette && projects.some(p => p.status === 'completed') && directImages.length === 0) {
+            const readyProjects = [...projects]
+                .filter(p => p.status === 'completed')
+                .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            
+            const theme = getThemeById(globalTheme);
+            const generatedPalettes = readyProjects.map((project, idx) => {
+                if (!project.data) return "";
+                const canvas = exportPaletteToCanvas(project.data, {
+                    bgColor: theme.backgroundColor,
+                    themeColor: theme.backgroundColor,
+                    pageNumber: idx + 1,
+                    transparentBg: true
+                });
+                return canvas.toDataURL("image/png");
+            }).filter(url => url !== "");
+            
+            setPaletteImages(generatedPalettes);
+        }
+
         // Emulate brief loading for better UX
         await new Promise(resolve => setTimeout(resolve, 600));
         setCurrentStep(2);
@@ -508,7 +618,10 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
         { value: "trapezoid", label: "Trapezoid" },
     ];
 
-    const shouldShowImportScreen = (projects.length === 0 && directImages.length === 0) || keepImportScreen;
+    const isFolderModeActive = directImages.length > 0;
+    const shouldShowImportScreen = keepImportScreen || 
+                                   (projects.length === 0 && !isFolderModeActive) || 
+                                   (isFolderModeActive && currentStep === 1);
 
     if (shouldShowImportScreen) {
         return (
@@ -524,6 +637,8 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
                     handleImageFileChange={handleImageFileChange}
                     transparentImageInputRef={transparentImageInputRef}
                     handleTransparentImageFileChange={handleTransparentImageFileChange}
+                    handleNextToSetup={handleNextToSetup}
+                    isPreparingStep2={isPreparingStep2}
                 />
                 {previewProjectId && (
                     <ProjectPreviewModal
@@ -656,6 +771,11 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
                     handleGeneratePdf={handleGeneratePdf}
                     showStoryInput={showStoryInput}
                     setShowStoryInput={setShowStoryInput}
+                    globalExportPalette={globalExportPalette}
+                    paletteImages={paletteImages}
+                    setPaletteImages={setPaletteImages}
+                    paletteInputRef={paletteInputRef}
+                    handlePaletteChange={handlePaletteChange}
                 />
             )}
 

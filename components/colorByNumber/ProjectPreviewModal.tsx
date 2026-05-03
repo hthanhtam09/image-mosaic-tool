@@ -29,6 +29,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         globalShowPalette,
         globalCellSize,
         globalTheme,
+        globalExportPalette,
     } = useColorByNumberStore();
 
     // Set active project on mount if not already
@@ -68,12 +69,40 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [onClose]);
 
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    useEffect(() => {
+        if (!activeProject || !activeProject.data) return;
+        setIsGenerating(true);
+        // Timeout to allow UI to render
+        setTimeout(() => {
+            const theme = getThemeById(globalTheme);
+            const shouldShowPalette = activeProject.removeBackground
+                ? false
+                : (globalExportPalette ? false : globalShowPalette);
+
+            const canvas = exportToCanvas(activeProject.data!, activeProject.filled, {
+                showCodes: activeProject.removeBackground ? false : globalShowNumbers,
+                colored: true,
+                showPalette: shouldShowPalette,
+                partialColorMode: activeProject.partialColorMode,
+                bgColor: theme.backgroundColor,
+                transparentBg: activeProject.removeBackground,
+                tightCrop: activeProject.removeBackground,
+            });
+            setPreviewUrl(canvas.toDataURL("image/png"));
+            setIsGenerating(false);
+        }, 50);
+    }, [activeProject?.data, activeProject?.filled, activeProject?.partialColorMode, activeProject?.removeBackground, globalShowNumbers, globalShowPalette, globalTheme, globalCellSize, globalExportPalette]);
+
+
     if (!activeProject || !activeProject.data) return null;
 
     /* ── Zoom Controls ── */
-    const handleZoomIn = () => setZoom(activeProject.zoom + 0.15);
-    const handleZoomOut = () => setZoom(activeProject.zoom - 0.15);
-    const handleResetZoom = () => { setZoom(1); setPan(0, 0); };
+    const handleZoomIn = () => setZoom(activeProject.zoom + 0.25);
+    const handleZoomOut = () => setZoom(Math.max(0.25, activeProject.zoom - 0.25));
+    const handleResetZoom = () => setZoom(1);
 
     const handleDownloadBoth = () => {
         if (!activeProject.data) return;
@@ -83,10 +112,14 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
 
         // Colored
         const theme = getThemeById(globalTheme);
+        const shouldShowPalette = activeProject.removeBackground
+            ? false
+            : (globalExportPalette ? false : globalShowPalette);
+
         const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
             showCodes: activeProject.removeBackground ? false : globalShowNumbers,
             colored: true,
-            showPalette: activeProject.removeBackground ? false : globalShowPalette,
+            showPalette: shouldShowPalette,
             partialColorMode: activeProject.partialColorMode,
             bgColor: theme.backgroundColor,
             transparentBg: activeProject.removeBackground,
@@ -100,7 +133,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                 const canvas2 = exportToCanvas(activeProject.data!, activeProject.filled, {
                     showCodes: activeProject.removeBackground ? false : globalShowNumbers,
                     colored: false,
-                    showPalette: globalShowPalette,
+                    showPalette: shouldShowPalette,
                     bgColor: theme.backgroundColor,
                 });
 
@@ -120,7 +153,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                         <div>
                             <h3 className="text-lg font-semibold text-[var(--text-primary)]">{activeProject.name}</h3>
                             <p className="text-sm text-[var(--text-secondary)]">
-                                {activeProject.gridType} • {globalCellSize}px • {activeProject.zoom * 100}%
+                                {activeProject.gridType} • {globalCellSize}px • {Math.round(activeProject.zoom * 100)}%
                             </p>
                         </div>
                     </div>
@@ -143,17 +176,30 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                     </div>
                 </div>
 
-                {/* Content: The Grid */}
+                {/* Content: High-fidelity Canvas Preview */}
                 <div
                     ref={modalContentRef}
-                    className="flex-1 overflow-hidden bg-[var(--bg-primary)] relative"
+                    className="flex-1 overflow-auto bg-[var(--bg-primary)] relative flex items-center justify-center"
                 >
-                    <ColorByNumberGrid
-                        width={viewportSize.width}
-                        height={viewportSize.height}
-                    />
-
-
+                    {isGenerating ? (
+                        <div className="flex flex-col items-center justify-center gap-4">
+                            <div className="w-8 h-8 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin"></div>
+                            <span className="text-sm text-[var(--text-secondary)]">Rendering Preview...</span>
+                        </div>
+                    ) : previewUrl ? (
+                        <div className="w-full h-full overflow-auto flex items-center justify-center p-8 bg-neutral-100">
+                            <img
+                                src={previewUrl}
+                                alt="High-fidelity Preview"
+                                style={{
+                                    width: `${100 * activeProject.zoom}%`,
+                                    minWidth: `${100 * activeProject.zoom}%`,
+                                    transition: 'width 0.2s ease-out'
+                                }}
+                                className="object-contain shadow-2xl bg-white border border-neutral-200"
+                            />
+                        </div>
+                    ) : null}
                 </div>
 
                 {/* Footer */}

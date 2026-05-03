@@ -7,7 +7,7 @@ interface PdfProgressStepProps {
     pdfProgress: { current: number; total: number };
     setCurrentStep: (step: 1 | 2 | 3) => void;
     setDirectImages: (imgs: DirectImage[]) => void;
-    setUploadedFolders: (status: { color: boolean; uncolor: boolean }) => void;
+    setUploadedFolders: (status: { color: boolean; uncolor: boolean; palette: boolean }) => void;
 }
 
 export default function PdfProgressStep({
@@ -45,7 +45,7 @@ export default function PdfProgressStep({
                                     onClick={() => {
                                         setCurrentStep(1);
                                         setDirectImages([]);
-                                        setUploadedFolders({ color: false, uncolor: false });
+                                        setUploadedFolders({ color: false, uncolor: false, palette: false });
                                     }}
                                     className="flex-1 px-6 py-3 text-sm font-medium text-white bg-(--accent) rounded-xl hover:bg-(--accent-hover) transition-colors"
                                 >

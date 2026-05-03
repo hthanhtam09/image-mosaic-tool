@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { ColorByNumberData, FilledMap } from "./types";
-import { exportToCanvas, PartialColorMode } from "./export";
+import { exportToCanvas, exportPaletteToCanvas, PartialColorMode } from "./export";
 import { NOTO_SANS_REGULAR, NOTO_SANS_BOLD } from "./fonts";
 import { getThemeById } from "./themes";
 
@@ -20,16 +20,20 @@ export interface PDFExportOptions {
   directImages?: {
     colorUrl: string;
     uncolorUrl: string;
+    paletteUrl?: string;
   }[];
   backgroundImages: string[]; // Array of Data URLs or URLs
   csvData: PDFCsvRow[];
   prefixPages?: string[]; // Array of image data URLs
   suffixPages?: string[]; // Array of image data URLs
+  solutionPages?: string[]; // Array of image data URLs (collage gallery)
   globalOptions: {
     showCodes: boolean;
     showPalette: boolean;
     theme: string;
     showStoryInput: boolean;
+    globalExportPalette?: boolean;
+    paletteImages?: string[];
   };
 
 }
@@ -52,6 +56,98 @@ const PAGE_H_PT = PAGE_H_IN * PT_PER_IN;
 const PADDING_PT = PADDING_IN * PT_PER_IN;
 const SAFE_W_PT = PAGE_W_PT - PADDING_PT * 2;
 const SAFE_H_PT = PAGE_H_PT - PADDING_PT * 2;
+
+async function removeBackgroundFromDataUrl(dataUrl: string): Promise<string> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                resolve(dataUrl);
+                return;
+            }
+            ctx.drawImage(img, 0, 0);
+            
+            try {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                // If top-left pixel is already transparent, assume it's already a clean PNG
+                if (data[3] < 10) {
+                    resolve(dataUrl);
+                    return;
+                }
+
+                // Sample top-left pixel as the background color
+                const bgR = data[0];
+                const bgG = data[1];
+                const bgB = data[2];
+                const tolerance = 20; // Tolerance for JPG artifacts
+
+                const isBackground = (idx: number) => {
+                    return Math.abs(data[idx] - bgR) <= tolerance && 
+                           Math.abs(data[idx+1] - bgG) <= tolerance && 
+                           Math.abs(data[idx+2] - bgB) <= tolerance &&
+                           data[idx+3] > 0;
+                };
+
+                const visited = new Uint8Array(width * height);
+                const stack: [number, number][] = [];
+
+                // Push edges to stack
+                for (let x = 0; x < width; x++) {
+                    stack.push([x, 0]);
+                    stack.push([x, height - 1]);
+                }
+                for (let y = 0; y < height; y++) {
+                    stack.push([0, y]);
+                    stack.push([width - 1, y]);
+                }
+
+                while (stack.length > 0) {
+                    const [x, y] = stack.pop()!;
+                    const pixelIndex = y * width + x;
+                    
+                    if (visited[pixelIndex]) continue;
+                    visited[pixelIndex] = 1;
+
+                    const dataIndex = pixelIndex * 4;
+                    if (isBackground(dataIndex)) {
+                        data[dataIndex + 3] = 0; // Make transparent
+                        
+                        if (x > 0) stack.push([x - 1, y]);
+                        if (x < width - 1) stack.push([x + 1, y]);
+                        if (y > 0) stack.push([x, y - 1]);
+                        if (y < height - 1) stack.push([x, y + 1]);
+                    }
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                resolve(canvas.toDataURL("image/png"));
+            } catch (e) {
+                console.error("Failed to remove background", e);
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
+const loadImageFromDataUrl = (dataUrl: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = dataUrl;
+    });
+};
 
 export const parseCSV = (csvText: string): PDFCsvRow[] => {
   const lines = csvText.split(/\r?\n/).filter((line) => line.trim());
@@ -105,7 +201,8 @@ export const generateBookPdf = async (
   const totalPairs = directImages.length > 0 ? directImages.length : projects.length;
   const totalPrefix = prefixPages.length;
   const totalSuffix = suffixPages.length;
-  const totalPages = totalPrefix + totalPairs * 2 + totalSuffix;
+  const totalSolution = options.solutionPages?.length || 0;
+  const totalPages = totalPrefix + totalPairs * 2 + totalSolution + totalSuffix;
 
   let currentPageIndex = 0;
 
@@ -172,76 +269,122 @@ export const generateBookPdf = async (
           pdf.rect(0, 0, PAGE_W_PT, PAGE_H_PT, "F");
       }
 
-      // Overlay Text
-      pdf.setTextColor(textColorHex);
-      
-      // Try to use requested custom fonts. 
-      // Note: In jsPDF, custom fonts need to be added to VFS via addFileToVFS and addFont. 
-      // If they aren't, it will fall back to Helvetica automatically, but we set the names here so it's ready.
-      pdf.setFont("Noto Sans", "bold");
-      
-      pdf.setFontSize(38); // 38px (pt in jsPDF)
-      const numText = csvRow.number.toString();
-      const numW = pdf.getTextWidth(numText);
+      let paletteImgData: string | undefined;
 
-      pdf.setFontSize(14); // 14px (pt in jsPDF)
-      
-      // Text constraint: "khoảng 1/3 ở giữa" (middle 1/3 of the page width)
-      const textMaxWidth = PAGE_W_PT / 3;
-      const splitText = pdf.splitTextToSize(csvRow.text, textMaxWidth);
-      const textHeight = splitText.length * 14 * 1.15;
-      
-      // Center vertically in the upper-middle area, shifted up by 20pt
-      let startY = (PAGE_H_PT * 0.45) - 20; 
-      
-      if (!globalOptions.showStoryInput) {
-          // Adjust content for center
-          startY = (PAGE_H_PT / 2) - 10 - (textHeight / 2);
+      if (globalOptions.globalExportPalette) {
+          if (directImages && directImages.length > 0 && directImages[i]?.paletteUrl) {
+              paletteImgData = await removeBackgroundFromDataUrl(directImages[i].paletteUrl!);
+          } else if (globalOptions.paletteImages && globalOptions.paletteImages.length > i && globalOptions.paletteImages[i]) {
+              paletteImgData = await removeBackgroundFromDataUrl(globalOptions.paletteImages[i]);
+          } else if (project?.data) {
+              // Render Palette Image mixed with Background
+              const canvasPalette = exportPaletteToCanvas(project.data, {
+                  bgColor: bgColorHex,
+                  themeColor: bgColorHex,
+                  pageNumber: i + 1,
+                  transparentBg: true,
+              });
+              paletteImgData = canvasPalette.toDataURL("image/png");
+          }
       }
 
-      pdf.setFont("Noto Sans", "bold");
-      pdf.setFontSize(38);
-      pdf.text(numText, (PAGE_W_PT - numW) / 2, startY);
+      if (paletteImgData) {
+          try {
+              const paletteImage = await loadImageFromDataUrl(paletteImgData);
+              
+              // Calculate scale to fit within safe area
+              const scaleX = SAFE_W_PT / paletteImage.width;
+              const scaleY = SAFE_H_PT / paletteImage.height;
+              const scale = Math.min(scaleX, scaleY);
+              
+              const scaledW = paletteImage.width * scale;
+              const scaledH = paletteImage.height * scale;
+              
+              const dx = PADDING_PT + (SAFE_W_PT - scaledW) / 2;
+              const dy = PADDING_PT + (SAFE_H_PT - scaledH) / 2;
 
-      // Decorative line under the number
-      const lineY = startY + 20;
-      const lineLength = 40; // Short decorative line
-      pdf.setDrawColor(textColorHex);
-      pdf.setLineWidth(1.5);
-      pdf.line((PAGE_W_PT - lineLength) / 2, lineY, (PAGE_W_PT + lineLength) / 2, lineY);
+              pdf.addImage(
+                  paletteImgData,
+                  "PNG",
+                  dx,
+                  dy,
+                  scaledW,
+                  scaledH,
+                  undefined,
+                  "FAST"
+              );
+          } catch (e) {
+              console.error(e);
+          }
+      } else {
+          // Overlay Text (Quotes/Riddle)
+          pdf.setTextColor(textColorHex);
+          
+          pdf.setFont("Noto Sans", "bold");
+          
+          pdf.setFontSize(38); // 38px (pt in jsPDF)
+          const numText = csvRow.number.toString();
+          const numW = pdf.getTextWidth(numText);
 
-      pdf.setFont("Noto Sans", "normal");
-      
-      pdf.setFontSize(14); // 14px (pt in jsPDF)
-      
-      // Center the text body horizontally below the line
-      const textStartY = lineY + 30;
-      pdf.text(splitText, PAGE_W_PT / 2, textStartY, { align: "center" });
+          pdf.setFontSize(14); // 14px (pt in jsPDF)
+          
+          // Text constraint: "khoảng 1/3 ở giữa" (middle 1/3 of the page width)
+          const textMaxWidth = PAGE_W_PT / 3;
+          const splitText = pdf.splitTextToSize(csvRow.text, textMaxWidth);
+          const textHeight = splitText.length * 14 * 1.15;
+          
+          // Center vertically in the upper-middle area, shifted up by 20pt
+          let startY = (PAGE_H_PT * 0.45) - 20; 
+          
+          if (!globalOptions.showStoryInput) {
+              // Adjust content for center
+              startY = (PAGE_H_PT / 2) - 10 - (textHeight / 2);
+          }
 
-      if (globalOptions.showStoryInput) {
-          // Add white box with dotted line below the text
-          const textBottomY = textStartY + textHeight;
+          pdf.setFont("Noto Sans", "bold");
+          pdf.setFontSize(38);
+          pdf.text(numText, (PAGE_W_PT - numW) / 2, startY);
 
-          const boxWidth = textMaxWidth; // Match the width of the text constraint
-          const boxHeight = 60; // Make the input a bit taller
-          const boxX = (PAGE_W_PT - boxWidth) / 2;
-          const boxY = textBottomY + 10; // 10pt spacing below text
+          // Decorative line under the number
+          const lineY = startY + 20;
+          const lineLength = 40; // Short decorative line
+          pdf.setDrawColor(textColorHex);
+          pdf.setLineWidth(1.5);
+          pdf.line((PAGE_W_PT - lineLength) / 2, lineY, (PAGE_W_PT + lineLength) / 2, lineY);
 
-          // 1. Draw white rectangle with rounded corners (15px border radius)
-          pdf.setFillColor("#ffffff");
-          pdf.roundedRect(boxX, boxY, boxWidth, boxHeight, 15, 15, "F");
+          pdf.setFont("Noto Sans", "normal");
+          
+          pdf.setFontSize(14); // 14px (pt in jsPDF)
+          
+          // Center the text body horizontally below the line
+          const textStartY = lineY + 30;
+          pdf.text(splitText, PAGE_W_PT / 2, textStartY, { align: "center" });
 
-          // 2. Draw dotted line inside for user to write on
-          pdf.setDrawColor("#666666"); // Dark gray dotted line
-          pdf.setLineWidth(1);
-          pdf.setLineDashPattern([4, 4], 0); // 4pt line, 4pt gap
+          if (globalOptions.showStoryInput) {
+              // Add white box with dotted line below the text
+              const textBottomY = textStartY + textHeight;
 
-          const paddingX = 20;
-          const dottedLineY = boxY + boxHeight - 20; // Near the bottom of the taller box
-          pdf.line(boxX + paddingX, dottedLineY, boxX + boxWidth - paddingX, dottedLineY);
+              const boxWidth = textMaxWidth; // Match the width of the text constraint
+              const boxHeight = 60; // Make the input a bit taller
+              const boxX = (PAGE_W_PT - boxWidth) / 2;
+              const boxY = textBottomY + 10; // 10pt spacing below text
 
-          // Reset line dash for subsequent drawings
-          pdf.setLineDashPattern([], 0);
+              // 1. Draw white rectangle with rounded corners (15px border radius)
+              pdf.setFillColor("#ffffff");
+              pdf.roundedRect(boxX, boxY, boxWidth, boxHeight, 15, 15, "F");
+
+              // 2. Draw dotted line inside for user to write on
+              pdf.setDrawColor("#666666"); // Dark gray dotted line
+              pdf.setLineWidth(1);
+              pdf.setLineDashPattern([4, 4], 0); // 4pt line, 4pt gap
+
+              const paddingX = 20;
+              const dottedLineY = boxY + boxHeight - 20; // Near the bottom of the taller box
+              pdf.line(boxX + paddingX, dottedLineY, boxX + boxWidth - paddingX, dottedLineY);
+
+              // Reset line dash for subsequent drawings
+              pdf.setLineDashPattern([], 0);
+          }
       }
 
       if (onProgress) {
@@ -286,6 +429,29 @@ export const generateBookPdf = async (
     if (onProgress) {
         onProgress(currentPageIndex, totalPages);
         await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  // --- SOLUTION PAGES (Answer Keys) ---
+  if (options.solutionPages && options.solutionPages.length > 0) {
+    for (let i = 0; i < options.solutionPages.length; i++) {
+        pdf.addPage();
+        currentPageIndex++;
+
+        pdf.addImage(
+            options.solutionPages[i],
+            "PNG",
+            0,
+            0,
+            PAGE_W_PT,
+            PAGE_H_PT,
+            undefined,
+            "FAST"
+        );
+        if (onProgress) {
+            onProgress(currentPageIndex, totalPages);
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
     }
   }
 

@@ -49,6 +49,10 @@ export interface ColorByNumberState {
   globalShowNumbers: boolean;
   globalShowPalette: boolean;
   globalTheme: string;
+  /** Export a separate palette PNG per image in the zip */
+  globalExportPalette: boolean;
+  /** Force a specific grid type for all Standard imports. 'auto' = cycle through patterns */
+  globalGridType: ColorByNumberGridType | 'auto';
 
 
   // Projects
@@ -63,6 +67,8 @@ export interface ColorByNumberState {
   toggleGlobalShowNumbers: () => void;
   toggleGlobalShowPalette: () => void;
   setGlobalTheme: (theme: string) => void;
+  toggleGlobalExportPalette: () => void;
+  setGlobalGridType: (gridType: ColorByNumberGridType | 'auto') => void;
 
 
   // Project Management
@@ -92,6 +98,8 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   globalShowNumbers: true,
   globalShowPalette: true,
   globalTheme: "light",
+  globalExportPalette: false,
+  globalGridType: 'auto',
   projects: [],
   activeProjectId: null,
 
@@ -129,6 +137,36 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       projects: state.projects.map((p) =>
         p.status === "completed" ? { ...p, status: "idle" as const } : p,
       ),
+    })),
+
+  toggleGlobalExportPalette: () =>
+    set((state) => {
+      const turningOn = !state.globalExportPalette;
+      return {
+        globalExportPalette: turningOn,
+        // When turning ON palette export, auto-disable show palette for cleaner image output
+        ...(turningOn ? { globalShowPalette: false } : {}),
+        // Reset completed projects so they re-export with the new setting
+        projects: state.projects.map((p) =>
+          p.status === "completed" ? { ...p, status: "idle" as const } : p,
+        ),
+      };
+    }),
+
+  setGlobalGridType: (gridType) =>
+    set((state) => ({
+      globalGridType: gridType,
+      // When a specific pattern is selected (not 'auto'), update ALL existing standard projects
+      // to use the new grid type and reset them so they re-convert
+      projects: gridType === 'auto'
+        ? state.projects
+        : state.projects.map((p) => ({
+            ...p,
+            // Only update non-Object Focus projects
+            gridType: p.removeBackground ? p.gridType : gridType as ColorByNumberGridType,
+            // Reset completed non-Object Focus projects so they re-convert with the new pattern
+            status: (!p.removeBackground && p.status === "completed") ? "idle" as const : p.status,
+          })),
     })),
 
   addProject: (file, dataUrl, options = {}) => {

@@ -48,6 +48,7 @@ export interface DirectImage {
   name: string;
   colorUrl: string;
   uncolorUrl: string;
+  paletteUrl?: string;
 }
 
 export interface ConversionWorkerMessage {
