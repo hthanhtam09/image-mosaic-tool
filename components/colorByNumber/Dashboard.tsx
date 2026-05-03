@@ -494,6 +494,7 @@ export default function Dashboard() {
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
                     tightCrop: project.removeBackground,
+                    removeBgColorCells: globalExportPalette,
                 });
                 coloredCanvases.push(canvasColor);
                 const base64Color = canvasColor.toDataURL("image/png").split(',')[1];
@@ -508,6 +509,7 @@ export default function Dashboard() {
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
                     tightCrop: project.removeBackground,
+                    removeBgColorCells: globalExportPalette,
                 });
                 const base64Uncolor = canvasUncolor.toDataURL("image/png").split(',')[1];
                 uncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
@@ -518,6 +520,8 @@ export default function Dashboard() {
                         bgColor: theme.backgroundColor,
                         themeColor: theme.backgroundColor,
                         pageNumber: i + 1,
+                        transparentBg: true,
+                        removeBgColorCells: true,
                     });
                     const base64Palette = canvasPalette.toDataURL("image/png").split(',')[1];
                     paletteFolder.file(`${baseName}.png`, base64Palette, { base64: true });
@@ -562,7 +566,8 @@ export default function Dashboard() {
                     bgColor: theme.backgroundColor,
                     themeColor: theme.backgroundColor,
                     pageNumber: idx + 1,
-                    transparentBg: true
+                    transparentBg: true,
+                    removeBgColorCells: true
                 });
                 return canvas.toDataURL("image/png");
             }).filter(url => url !== "");

@@ -90,6 +90,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                 bgColor: theme.backgroundColor,
                 transparentBg: activeProject.removeBackground,
                 tightCrop: activeProject.removeBackground,
+                removeBgColorCells: globalExportPalette,
             });
             setPreviewUrl(canvas.toDataURL("image/png"));
             setIsGenerating(false);
@@ -124,6 +125,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
             bgColor: theme.backgroundColor,
             transparentBg: activeProject.removeBackground,
             tightCrop: activeProject.removeBackground,
+            removeBgColorCells: globalExportPalette,
         });
         downloadCanvas(canvas1, `colored-${baseName}.png`);
 
@@ -135,6 +137,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                     colored: false,
                     showPalette: shouldShowPalette,
                     bgColor: theme.backgroundColor,
+                    removeBgColorCells: globalExportPalette,
                 });
 
                 downloadCanvas(canvas2, `uncolored-${baseName}.png`);

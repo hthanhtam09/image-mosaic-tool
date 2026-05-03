@@ -283,6 +283,7 @@ export const generateBookPdf = async (
                   themeColor: bgColorHex,
                   pageNumber: i + 1,
                   transparentBg: true,
+                  removeBgColorCells: true,
               });
               paletteImgData = canvasPalette.toDataURL("image/png");
           }
@@ -410,6 +411,7 @@ export const generateBookPdf = async (
         bgColor: bgColorHex,
         transparentBg: project!.removeBackground,
         tightCrop: project!.removeBackground,
+        removeBgColorCells: globalOptions.globalExportPalette,
       });
 
       imgData = canvas.toDataURL("image/png");

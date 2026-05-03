@@ -26,7 +26,7 @@ export type PartialColorMode =
   | "horizontal-middle"
   | "horizontal-sides";
 import { getPaletteColorName } from "@/lib/palette";
-import { rgbToExtendedColorName } from "@/lib/utils";
+import { rgbToExtendedColorName, paletteIndexToLabel } from "@/lib/utils";
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
 const EXPORT_PAGE_W = Math.round(8.5 * EXPORT_DPI); // 2550
@@ -86,6 +86,44 @@ const isWhiteColor = (hex: string): boolean => {
   const b = parseInt(s.slice(4, 6), 16);
   const brightness = (r * 299 + g * 587 + b * 114) / 1000;
   return brightness >= 250;
+};
+
+const parseHexToRGB = (hex: string) => {
+  const c = hex.replace("#", "");
+  if (c.length === 3)
+    return { r: parseInt(c[0] + c[0], 16), g: parseInt(c[1] + c[1], 16), b: parseInt(c[2] + c[2], 16) };
+  return { r: parseInt(c.slice(0, 2), 16) || 0, g: parseInt(c.slice(2, 4), 16) || 0, b: parseInt(c.slice(4, 6), 16) || 0 };
+};
+
+const getCodeMap = (
+  data: ColorByNumberData,
+  removeBgColorCells: boolean,
+  bgColor: string
+): Map<string, string> => {
+  const map = new Map<string, string>();
+  if (!removeBgColorCells) return map;
+  
+  const codeSet = new Set<string>();
+  for (const cell of data.cells) {
+    if (!cell.code) continue;
+    const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
+    const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
+    if (cellName === bgName || cell.color.toLowerCase() === bgColor.toLowerCase()) continue;
+    codeSet.add(cell.code);
+  }
+  
+  const codes = [...codeSet].sort((a, b) => {
+    const aN = parseInt(a, 10), bN = parseInt(b, 10);
+    if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
+    if (!isNaN(aN)) return -1;
+    if (!isNaN(bN)) return 1;
+    return a.localeCompare(b);
+  });
+  
+  codes.forEach((orig, idx) => {
+    map.set(orig, paletteIndexToLabel(idx));
+  });
+  return map;
 };
 
 const getCellFillColor = (cellColor: string, filledCell: boolean): string =>
@@ -263,13 +301,18 @@ export interface PaletteLayout {
 export const calculatePaletteLayout = (
   data: ColorByNumberData,
   availableWidth: number,
-  options?: { vertical?: boolean },
+  options?: { vertical?: boolean; bgColor?: string; removeBgColorCells?: boolean },
 ): PaletteLayout | null => {
   // Build unique palette entries (skip white / empty codes)
   const codeToColor = new Map<string, string>();
   const codeToCount = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
+    if (options?.removeBgColorCells && options?.bgColor) {
+      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
+      const bgName = rgbToExtendedColorName(parseHexToRGB(options.bgColor)).name;
+      if (cellName === bgName || cell.color.toLowerCase() === options.bgColor.toLowerCase()) continue;
+    }
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
     }
@@ -1056,6 +1099,8 @@ export const exportToCanvas = (
     transparentBg?: boolean;
     /** Whether to crop the output canvas strictly to the grid bounds (ignoring 8.5x11 logic) */
     tightCrop?: boolean;
+    /** Whether to remove cells that match the bgColor */
+    removeBgColorCells?: boolean;
   },
 ): HTMLCanvasElement => {
   const showCodes = options.showCodes ?? true;
@@ -1065,6 +1110,9 @@ export const exportToCanvas = (
   const bgColor = options.bgColor ?? "#ffffff";
   const transparentBg = options.transparentBg ?? false;
   const tightCrop = options.tightCrop ?? false;
+  const removeBgColorCells = options.removeBgColorCells ?? false;
+
+  const codeMap = getCodeMap(data, removeBgColorCells, bgColor);
 
   // Extra padding to prevent puzzle tabs / shape overhangs from being clipped.
   // Puzzle tabs protrude by ~18% of cellSize; we add a proportional pixel buffer.
@@ -1111,7 +1159,11 @@ export const exportToCanvas = (
   // 2. Calculate palette layout (vertical)
   let layout: PaletteLayout | null = null;
   if (needsPalette) {
-    layout = calculatePaletteLayout(data, safeW, { vertical: true });
+    layout = calculatePaletteLayout(data, safeW, { 
+      vertical: true,
+      bgColor,
+      removeBgColorCells
+    });
   }
 
   const PALETTE_GAP = 30; // ~10px visual
@@ -1236,6 +1288,12 @@ export const exportToCanvas = (
     const isBgCell = !cell.code;
     if (transparentBg && isBgCell) return;
 
+    if (removeBgColorCells) {
+      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
+      const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
+      if (cellName === bgName || cell.color.toLowerCase() === bgColor.toLowerCase()) return;
+    }
+
     const fillColor = isCellColored
       ? getCellFillColor(cell.color, filledCell)
       : "#ffffff";
@@ -1345,16 +1403,17 @@ export const exportToCanvas = (
       ctx.textBaseline = "middle";
 
       // Add stroke outline in colored mode so numbers are always readable
+      const displayCode = codeMap.get(cell.code) || cell.code;
       if (isCellColored) {
         ctx.strokeStyle =
           brightness < 128 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)";
         ctx.lineWidth = cl.r * 0.15;
         ctx.lineJoin = "round";
-        ctx.strokeText(cell.code, cl.cx, textY);
+        ctx.strokeText(displayCode, cl.cx, textY);
       }
 
       ctx.fillStyle = textFill;
-      ctx.fillText(cell.code, cl.cx, textY);
+      ctx.fillText(displayCode, cl.cx, textY);
       ctx.restore();
     }
   };
@@ -1384,10 +1443,13 @@ export const exportPaletteToCanvas = (
     themeColor?: string;
     pageNumber?: number;
     transparentBg?: boolean;
+    removeBgColorCells?: boolean;
   },
 ): HTMLCanvasElement => {
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
+
+  const codeMap = getCodeMap(data, options?.removeBgColorCells ?? false, options?.bgColor ?? "#ffffff");
 
   // ── Collect palette data ──
   const codeToColor = new Map<string, string>();
@@ -1395,6 +1457,11 @@ export const exportPaletteToCanvas = (
   const codeToCount = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
+    if (options?.removeBgColorCells && options?.bgColor) {
+      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
+      const bgName = rgbToExtendedColorName(parseHexToRGB(options.bgColor)).name;
+      if (cellName === bgName || cell.color.toLowerCase() === options.bgColor.toLowerCase()) continue;
+    }
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
       if (cell.fixedPaletteIndex != null)
@@ -1613,8 +1680,9 @@ export const exportPaletteToCanvas = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(255,255,255,0.5)";
     ctx.lineWidth = 2;
-    ctx.strokeText(code, cx, swCY);
-    ctx.fillText(code, cx, swCY);
+    const displayCode = codeMap.get(code) || code;
+    ctx.strokeText(displayCode, cx, swCY);
+    ctx.fillText(displayCode, cx, swCY);
 
     // ── Droplets below swatch (theme-colored) ──
     const dropTop = iy + sw + sGap * scale;
