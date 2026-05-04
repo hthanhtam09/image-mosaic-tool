@@ -270,6 +270,66 @@ export const rgbToExtendedColorName = (color: RGB): { name: string; rgb: RGB } =
 };
 
 /**
+ * Restricted palette for Export Palette feature.
+ * Only these 23 colors are valid when export palette is enabled.
+ * Each cell's color is mapped to the nearest color from this set.
+ */
+export const EXPORT_PALETTE_COLORS = [
+  { rgb: { r: 0, g: 0, b: 0 }, name: "Black" },
+  { rgb: { r: 128, g: 128, b: 128 }, name: "Gray" },
+  { rgb: { r: 64, g: 64, b: 64 }, name: "Dark Gray" },
+
+  { rgb: { r: 90, g: 45, b: 0 }, name: "Dark Brown" },
+  { rgb: { r: 150, g: 75, b: 0 }, name: "Brown" },
+  { rgb: { r: 210, g: 140, b: 60 }, name: "Tan" },
+  { rgb: { r: 255, g: 170, b: 120 }, name: "Peach" },
+
+  { rgb: { r: 255, g: 0, b: 0 }, name: "Red" },
+  { rgb: { r: 255, g: 80, b: 0 }, name: "Red Orange" },
+  { rgb: { r: 255, g: 140, b: 0 }, name: "Orange" },
+
+  { rgb: { r: 255, g: 200, b: 0 }, name: "Yellow Orange" },
+  { rgb: { r: 255, g: 255, b: 0 }, name: "Yellow" },
+  { rgb: { r: 180, g: 255, b: 0 }, name: "Yellow Green" },
+
+  { rgb: { r: 0, g: 180, b: 0 }, name: "Green" },
+  { rgb: { r: 0, g: 100, b: 0 }, name: "Dark Green" },
+  { rgb: { r: 0, g: 255, b: 200 }, name: "Aqua Green" },
+
+  { rgb: { r: 100, g: 200, b: 255 }, name: "Light Blue" },
+  { rgb: { r: 0, g: 0, b: 255 }, name: "Blue" },
+  { rgb: { r: 0, g: 0, b: 139 }, name: "Dark Blue" },
+
+  { rgb: { r: 255, g: 105, b: 180 }, name: "Pink" },
+
+  { rgb: { r: 148, g: 0, b: 211 }, name: "Violet" },
+  { rgb: { r: 75, g: 0, b: 130 }, name: "Dark Violet" },
+
+  { rgb: { r: 255, g: 0, b: 255 }, name: "Magenta" },
+];
+
+/**
+ * Map any RGB color to the nearest color from EXPORT_PALETTE_COLORS (23 allowed colors).
+ * Returns both the name and the canonical RGB of the matched color.
+ * Used only when the Export Palette feature is enabled.
+ */
+export const rgbToExportPaletteColor = (color: RGB): { name: string; rgb: RGB } => {
+  let minDist = Infinity;
+  let best = EXPORT_PALETTE_COLORS[0];
+  for (const entry of EXPORT_PALETTE_COLORS) {
+    const dr = color.r - entry.rgb.r;
+    const dg = color.g - entry.rgb.g;
+    const db = color.b - entry.rgb.b;
+    const dist = dr * dr + dg * dg + db * db;
+    if (dist < minDist) {
+      minDist = dist;
+      best = entry;
+    }
+  }
+  return { name: best.name, rgb: best.rgb };
+};
+
+/**
  * Get label for palette index (1-9, then A, B, …, N for color-by-number)
  */
 export const paletteIndexToLabel = (index: number): string => {

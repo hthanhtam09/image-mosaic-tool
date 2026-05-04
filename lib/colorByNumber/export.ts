@@ -26,7 +26,7 @@ export type PartialColorMode =
   | "horizontal-middle"
   | "horizontal-sides";
 import { getPaletteColorName } from "@/lib/palette";
-import { rgbToExtendedColorName, paletteIndexToLabel } from "@/lib/utils";
+import { rgbToExtendedColorName, rgbToExportPaletteColor, paletteIndexToLabel, rgbToHex, type RGB } from "@/lib/utils";
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
 const EXPORT_PAGE_W = Math.round(8.5 * EXPORT_DPI); // 2550
@@ -103,16 +103,20 @@ const getCodeMap = (
   const map = new Map<string, string>();
   if (!removeBgColorCells) return map;
   
-  const codeSet = new Set<string>();
+  // Collect unique codes and their colors (skip bg cells)
+  const codeToColor = new Map<string, string>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
     const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
     const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
     if (cellName === bgName || cell.color.toLowerCase() === bgColor.toLowerCase()) continue;
-    codeSet.add(cell.code);
+    if (!codeToColor.has(cell.code)) {
+      codeToColor.set(cell.code, cell.color);
+    }
   }
   
-  const codes = [...codeSet].sort((a, b) => {
+  // Sort codes
+  const codes = [...codeToColor.keys()].sort((a, b) => {
     const aN = parseInt(a, 10), bN = parseInt(b, 10);
     if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
     if (!isNaN(aN)) return -1;
@@ -120,9 +124,29 @@ const getCodeMap = (
     return a.localeCompare(b);
   });
   
-  codes.forEach((orig, idx) => {
-    map.set(orig, paletteIndexToLabel(idx));
-  });
+  // Map each code to its restricted export palette color name, then assign sequential labels
+  // Codes that map to the same color name get the same label
+  const nameToLabel = new Map<string, string>();
+  let labelIdx = 0;
+  
+  for (const code of codes) {
+    const hex = codeToColor.get(code)!;
+    const rgb = parseHexToRGB(hex);
+    const exportColor = rgbToExportPaletteColor(rgb);
+    const colorName = exportColor.name;
+    
+    if (nameToLabel.has(colorName)) {
+      // Same restricted palette color as a previous code — reuse label
+      map.set(code, nameToLabel.get(colorName)!);
+    } else {
+      // New color — assign new sequential label
+      const label = paletteIndexToLabel(labelIdx);
+      nameToLabel.set(colorName, label);
+      map.set(code, label);
+      labelIdx++;
+    }
+  }
+  
   return map;
 };
 
@@ -304,8 +328,9 @@ export const calculatePaletteLayout = (
   options?: { vertical?: boolean; bgColor?: string; removeBgColorCells?: boolean },
 ): PaletteLayout | null => {
   // Build unique palette entries (skip white / empty codes)
-  const codeToColor = new Map<string, string>();
-  const codeToCount = new Map<string, number>();
+  // When removeBgColorCells is on (export palette mode), remap to 23 restricted colors
+  const rawCodeToColor = new Map<string, string>();
+  const rawCodeToCount = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
@@ -313,11 +338,51 @@ export const calculatePaletteLayout = (
       const bgName = rgbToExtendedColorName(parseHexToRGB(options.bgColor)).name;
       if (cellName === bgName || cell.color.toLowerCase() === options.bgColor.toLowerCase()) continue;
     }
-    if (!codeToColor.has(cell.code)) {
-      codeToColor.set(cell.code, cell.color);
+    if (!rawCodeToColor.has(cell.code)) {
+      rawCodeToColor.set(cell.code, cell.color);
     }
-    codeToCount.set(cell.code, (codeToCount.get(cell.code) ?? 0) + 1);
+    rawCodeToCount.set(cell.code, (rawCodeToCount.get(cell.code) ?? 0) + 1);
   }
+
+  let codeToColor: Map<string, string>;
+  let codeToCount: Map<string, number>;
+
+  if (options?.removeBgColorCells) {
+    // Export palette mode: remap to 23 restricted colors and merge duplicates
+    codeToColor = new Map<string, string>();
+    codeToCount = new Map<string, number>();
+    const nameToCode = new Map<string, string>();
+
+    const sortedRawCodes = [...rawCodeToColor.keys()].sort((a, b) => {
+      const aN = parseInt(a, 10), bN = parseInt(b, 10);
+      if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
+      if (!isNaN(aN)) return -1;
+      if (!isNaN(bN)) return 1;
+      return a.localeCompare(b);
+    });
+
+    for (const code of sortedRawCodes) {
+      const hex = rawCodeToColor.get(code)!;
+      const rgb = parseHexToRGB(hex);
+      const exportColor = rgbToExportPaletteColor(rgb);
+      const canonicalHex = rgbToHex(exportColor.rgb);
+      const colorName = exportColor.name;
+
+      if (nameToCode.has(colorName)) {
+        const existingCode = nameToCode.get(colorName)!;
+        codeToCount.set(existingCode, (codeToCount.get(existingCode) ?? 0) + (rawCodeToCount.get(code) ?? 0));
+      } else {
+        nameToCode.set(colorName, code);
+        codeToColor.set(code, canonicalHex);
+        codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
+      }
+    }
+  } else {
+    // Normal mode: use original colors
+    codeToColor = rawCodeToColor;
+    codeToCount = rawCodeToCount;
+  }
+
   const codes = [...codeToColor.keys()].sort((a, b) => {
     const aN = parseInt(a, 10),
       bN = parseInt(b, 10);
@@ -815,6 +880,8 @@ const renderPaletteColumnCBN = (
     showColorNames?: boolean;
     /** Map from code → paletteIndex for color name lookup */
     codeToPaletteIndex?: Map<string, number>;
+    /** Map from original code → display code (for export palette mode) */
+    codeMap?: Map<string, string>;
   },
 ) => {
   const {
@@ -898,8 +965,9 @@ const renderPaletteColumnCBN = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = labelStroke;
     ctx.lineWidth = 3;
-    ctx.strokeText(code, cx, swCY);
-    ctx.fillText(code, cx, swCY);
+    const displayCode = renderOpts?.codeMap?.get(code) || code;
+    ctx.strokeText(displayCode, cx, swCY);
+    ctx.fillText(displayCode, cx, swCY);
 
     // 5 droplet icons
     const dropTop = yPos + sSW + sGap;
@@ -1229,7 +1297,9 @@ export const exportToCanvas = (
     const paletteX = padX + PALETTE_X_OFFSET;
 
     ctx.translate(paletteX, paletteY);
-    renderPaletteColumnCBN(ctx, data, layout);
+    renderPaletteColumnCBN(ctx, data, layout, {
+      codeMap: removeBgColorCells ? codeMap : undefined,
+    });
     ctx.restore();
   }
 
@@ -1294,8 +1364,13 @@ export const exportToCanvas = (
       if (cellName === bgName || cell.color.toLowerCase() === bgColor.toLowerCase()) return;
     }
 
+    // When export palette mode is on, remap cell colors to the 23 restricted palette colors
+    const effectiveCellColor = removeBgColorCells
+      ? rgbToHex(rgbToExportPaletteColor(parseHexToRGB(cell.color)).rgb)
+      : cell.color;
+
     const fillColor = isCellColored
-      ? getCellFillColor(cell.color, filledCell)
+      ? getCellFillColor(effectiveCellColor, filledCell)
       : "#ffffff";
 
     ctx.fillStyle = fillColor;
@@ -1451,10 +1526,10 @@ export const exportPaletteToCanvas = (
 
   const codeMap = getCodeMap(data, options?.removeBgColorCells ?? false, options?.bgColor ?? "#ffffff");
 
-  // ── Collect palette data ──
-  const codeToColor = new Map<string, string>();
-  const codeToPaletteIndex = new Map<string, number>();
-  const codeToCount = new Map<string, number>();
+  // ── Collect palette data (restricted to 23 export palette colors) ──
+  // Step 1: Collect raw code → color mappings (skip bg cells)
+  const rawCodeToColor = new Map<string, string>();
+  const rawCodeToCount = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
@@ -1462,13 +1537,50 @@ export const exportPaletteToCanvas = (
       const bgName = rgbToExtendedColorName(parseHexToRGB(options.bgColor)).name;
       if (cellName === bgName || cell.color.toLowerCase() === options.bgColor.toLowerCase()) continue;
     }
-    if (!codeToColor.has(cell.code)) {
-      codeToColor.set(cell.code, cell.color);
-      if (cell.fixedPaletteIndex != null)
-        codeToPaletteIndex.set(cell.code, cell.fixedPaletteIndex);
+    if (!rawCodeToColor.has(cell.code)) {
+      rawCodeToColor.set(cell.code, cell.color);
     }
-    codeToCount.set(cell.code, (codeToCount.get(cell.code) ?? 0) + 1);
+    rawCodeToCount.set(cell.code, (rawCodeToCount.get(cell.code) ?? 0) + 1);
   }
+
+  // Step 2: Remap each code's color to the nearest restricted export palette color
+  //         and merge codes that map to the same color name (no duplicate names)
+  const codeToColor = new Map<string, string>();
+  const codeToPaletteIndex = new Map<string, number>();
+  const codeToCount = new Map<string, number>();
+  const codeToName = new Map<string, string>(); // code → export palette color name (correct, computed during merge)
+  const nameToCode = new Map<string, string>(); // export palette name → first code that mapped to it
+
+  // Sort raw codes first so merging picks consistent representative codes
+  const rawCodes = [...rawCodeToColor.keys()].sort((a, b) => {
+    const aN = parseInt(a, 10), bN = parseInt(b, 10);
+    if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
+    if (!isNaN(aN)) return -1;
+    if (!isNaN(bN)) return 1;
+    return a.localeCompare(b);
+  });
+
+  for (const code of rawCodes) {
+    const hex = rawCodeToColor.get(code)!;
+    const rgb = parseHexToRGB(hex);
+    // Map to the nearest of the 23 allowed colors
+    const exportColor = rgbToExportPaletteColor(rgb);
+    const canonicalHex = rgbToHex(exportColor.rgb);
+    const colorName = exportColor.name;
+
+    if (nameToCode.has(colorName)) {
+      // This color name already exists → merge count into the first code
+      const existingCode = nameToCode.get(colorName)!;
+      codeToCount.set(existingCode, (codeToCount.get(existingCode) ?? 0) + (rawCodeToCount.get(code) ?? 0));
+    } else {
+      // New color name → register this code
+      nameToCode.set(colorName, code);
+      codeToColor.set(code, canonicalHex);
+      codeToName.set(code, colorName);
+      codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
+    }
+  }
+
   const codes = [...codeToColor.keys()].sort((a, b) => {
     const aN = parseInt(a, 10),
       bN = parseInt(b, 10);
@@ -1512,11 +1624,9 @@ export const exportPaletteToCanvas = (
   };
   const [bgR, bgG, bgB] = parseHex(bgHex);
   const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
-  const isDarkBg = bgBrightness < 128;
-  const textColor = isDarkBg ? "#ffffff" : "#111111";
-  const separatorColor = isDarkBg
-    ? "rgba(255,255,255,0.15)"
-    : "rgba(0,0,0,0.07)";
+  const isDarkBg = options?.transparentBg ? false : bgBrightness < 128;
+  const textColor = "#ffffff";
+  const separatorColor = "rgba(255,255,255,0.15)";
 
   // ── Swatch shape ──
   const shape:
@@ -1653,10 +1763,8 @@ export const exportPaletteToCanvas = (
     const swCY = iy + sw / 2;
 
     // ── Color name text (RIGHT-aligned, ending just before swatch) ──
-    const colorHex = codeToColor.get(code) ?? "#000000";
-    const [cR, cG, cB] = parseHex(colorHex);
-    // Use extended color names to prevent duplicates
-    const { name: colorName } = rgbToExtendedColorName({ r: cR, g: cG, b: cB });
+    // Use pre-computed name from merge phase (avoids buggy parseHex with 0-channel values)
+    const colorName = codeToName.get(code) ?? "";
 
     const nameFontSize = Math.max(14, sw * 0.4);
     ctx.save();
