@@ -26,30 +26,33 @@ const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
   });
 
 /**
- * Crop image to exact aspect ratio (center crop).
+ * Soft crop: only trims excess if the image is significantly wider or taller
+ * than the target portrait ratio. Allows up to 20% tolerance before cropping.
+ * This preserves the full image content in most cases.
  * Accepts any CanvasImageSource (HTMLImageElement or HTMLCanvasElement).
  */
-const cropToAspectRatio = (
+const softCropToPortrait = (
   img: HTMLImageElement | HTMLCanvasElement,
   targetRatio: number,
 ): HTMLCanvasElement => {
   const srcW = img instanceof HTMLCanvasElement ? img.width : img.width;
   const srcH = img instanceof HTMLCanvasElement ? img.height : img.height;
   const currentRatio = srcW / srcH;
-  let sx = 0,
-    sy = 0,
-    sw = srcW,
-    sh = srcH;
 
-  if (currentRatio > targetRatio) {
-    // Too wide: Crop width
+  // Allow up to 20% ratio deviation before cropping — preserves full image for most photos
+  const TOLERANCE = 0.20;
+  let sx = 0, sy = 0, sw = srcW, sh = srcH;
+
+  if (currentRatio > targetRatio * (1 + TOLERANCE)) {
+    // Image is significantly wider than portrait target: trim sides only
     sw = srcH * targetRatio;
     sx = (srcW - sw) / 2;
-  } else {
-    // Too tall: Crop height
+  } else if (currentRatio < targetRatio * (1 - TOLERANCE)) {
+    // Image is significantly taller than portrait target: trim top/bottom only
     sh = srcW / targetRatio;
     sy = (srcH - sh) / 2;
   }
+  // Otherwise: keep the full image as-is
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(sw);
@@ -62,38 +65,20 @@ const cropToAspectRatio = (
 };
 
 /**
- * Remove Gemini watermark from the image.
- * The watermark is usually at the bottom right corner.
- * To maintain the image's center, we crop equally from all 4 sides.
- * Accepts any CanvasImageSource (HTMLImageElement or HTMLCanvasElement).
+ * Copy image to a canvas without any cropping.
+ * Used to normalize HTMLImageElement → HTMLCanvasElement.
  */
-const removeGeminiWatermark = (
+const copyToCanvas = (
   img: HTMLImageElement | HTMLCanvasElement,
 ): HTMLCanvasElement => {
   const srcW = img instanceof HTMLCanvasElement ? img.width : img.width;
   const srcH = img instanceof HTMLCanvasElement ? img.height : img.height;
   const canvas = document.createElement("canvas");
-  // Crop about 6% from each side, which is enough to remove the bottom-right watermark
-  const cropX = Math.max(srcW * 0.06, 80);
-  const cropY = Math.max(srcH * 0.06, 80);
-
-  canvas.width = srcW - cropX * 2;
-  canvas.height = srcH - cropY * 2;
-
+  canvas.width = srcW;
+  canvas.height = srcH;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not get crop context");
-
-  ctx.drawImage(
-    img,
-    cropX,
-    cropY,
-    canvas.width,
-    canvas.height,
-    0,
-    0,
-    canvas.width,
-    canvas.height,
-  );
+  if (!ctx) throw new Error("Could not get copy context");
+  ctx.drawImage(img, 0, 0);
   return canvas;
 };
 
@@ -126,13 +111,14 @@ export const imageToColorByNumber = async (
     cellSize = 25,
     maxWidth = 1800,
     useDithering = true,
-    maxColors = 16,
+    maxColors = 20,
     removeWhiteBackground = true,
   } = options;
 
-  // 1. Load + Rotate (if landscape) + Crop Watermark + Crop to Aspect Ratio + Resize
-  // We want everything to be Portrait (7 x 10.2 inch aspect ratio ≈ 0.686).
+  // 1. Load + Rotate (if landscape) + Soft-Crop to Portrait + Resize
+  // We want everything to be Portrait orientation (portrait = height > width).
   // OPTIMIZED: No more toDataURL() / re-decode — pure canvas-to-canvas operations.
+  // NOTE: We NO LONGER crop watermarks (causes content loss) or force strict aspect ratio.
 
   const rawImg = await loadImageFromFile(file);
 
@@ -154,14 +140,14 @@ export const imageToColorByNumber = async (
 
   const TARGET_ASPECT = 7.0 / 10.2;
 
-  // Remove Gemini watermark — canvas to canvas (no toDataURL!)
-  const watermarkRemovedCanvas = removeGeminiWatermark(currentSource);
+  // Normalize to canvas (no crop, no watermark removal — preserves full image)
+  const sourceCanvas =
+    currentSource instanceof HTMLCanvasElement
+      ? currentSource
+      : copyToCanvas(currentSource);
 
-  // Crop to ensure aspect ratio — canvas to canvas (no toDataURL!)
-  const croppedCanvas = cropToAspectRatio(
-    watermarkRemovedCanvas,
-    TARGET_ASPECT,
-  );
+  // Soft crop: only trims if image is >20% off from portrait ratio
+  const croppedCanvas = softCropToPortrait(sourceCanvas, TARGET_ASPECT);
 
   // Resize using canvas directly (resizeImageFromCanvas avoids toDataURL)
   const baseData = resizeImageFromCanvas(croppedCanvas, maxWidth);

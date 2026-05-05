@@ -142,8 +142,8 @@ self.onmessage = (e: MessageEvent) => {
   //    Runs directly on the transferred ImageData buffer before quantization.
   const rawImageData = imageData as unknown as ImageData;
   const enhancedImageData = enhanceImage(rawImageData, {
-    contrastStrength: 0.8,
-    saturation: 1.25,
+    contrastStrength: 0.6,  // Less aggressive to avoid clipping highlights/shadows
+    saturation: 1.35,       // Slightly stronger saturation for better color separation
     sharpen: true,
   });
 

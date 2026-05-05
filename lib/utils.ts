@@ -253,7 +253,9 @@ export const EXTENDED_COLORS_EN: { rgb: RGB; name: string }[] = [
  * Extended color name: closest match from EXTENDED_COLORS_EN (~70 colors).
  * Used for palette chart exports only.
  */
-export const rgbToExtendedColorName = (color: RGB): { name: string; rgb: RGB } => {
+export const rgbToExtendedColorName = (
+  color: RGB,
+): { name: string; rgb: RGB } => {
   let minDist = Infinity;
   let best = EXTENDED_COLORS_EN[0];
   for (const entry of EXTENDED_COLORS_EN) {
@@ -271,56 +273,124 @@ export const rgbToExtendedColorName = (color: RGB): { name: string; rgb: RGB } =
 
 /**
  * Restricted palette for Export Palette feature.
- * Only these 23 colors are valid when export palette is enabled.
+ * Only these colors are valid when export palette is enabled.
  * Each cell's color is mapped to the nearest color from this set.
+ * Extended with more intermediate tones for better photo accuracy.
  */
 export const EXPORT_PALETTE_COLORS = [
+  // Neutrals
   { rgb: { r: 0, g: 0, b: 0 }, name: "Black" },
-  { rgb: { r: 128, g: 128, b: 128 }, name: "Gray" },
   { rgb: { r: 64, g: 64, b: 64 }, name: "Dark Gray" },
+  { rgb: { r: 128, g: 128, b: 128 }, name: "Gray" },
+  { rgb: { r: 192, g: 192, b: 192 }, name: "Silver" },
+  { rgb: { r: 255, g: 255, b: 255 }, name: "White" },
 
+  // Browns / Skin / Warm Neutrals
+  { rgb: { r: 60, g: 20, b: 0 }, name: "Espresso" },
   { rgb: { r: 90, g: 45, b: 0 }, name: "Dark Brown" },
-  { rgb: { r: 150, g: 75, b: 0 }, name: "Brown" },
+  { rgb: { r: 101, g: 55, b: 0 }, name: "Chocolate" },
+  { rgb: { r: 139, g: 69, b: 19 }, name: "Brown" },
+  { rgb: { r: 160, g: 82, b: 45 }, name: "Sienna" },
+  { rgb: { r: 180, g: 100, b: 40 }, name: "Warm Brown" },
   { rgb: { r: 210, g: 140, b: 60 }, name: "Tan" },
+  { rgb: { r: 205, g: 133, b: 63 }, name: "Sandy" },
+  { rgb: { r: 222, g: 170, b: 100 }, name: "Caramel" },
+  { rgb: { r: 245, g: 220, b: 170 }, name: "Beige" },
   { rgb: { r: 255, g: 170, b: 120 }, name: "Peach" },
+  { rgb: { r: 240, g: 200, b: 160 }, name: "Skin" },
 
+  // Reds / Oranges
+  { rgb: { r: 178, g: 34, b: 34 }, name: "Dark Red" },
   { rgb: { r: 255, g: 0, b: 0 }, name: "Red" },
   { rgb: { r: 255, g: 80, b: 0 }, name: "Red Orange" },
+  { rgb: { r: 255, g: 120, b: 30 }, name: "Burnt Orange" },
   { rgb: { r: 255, g: 140, b: 0 }, name: "Orange" },
 
+  // Yellows / Golds
+  { rgb: { r: 255, g: 185, b: 15 }, name: "Gold" },
   { rgb: { r: 255, g: 200, b: 0 }, name: "Yellow Orange" },
-  { rgb: { r: 255, g: 255, b: 0 }, name: "Yellow" },
-  { rgb: { r: 180, g: 255, b: 0 }, name: "Yellow Green" },
+  { rgb: { r: 255, g: 230, b: 0 }, name: "Yellow" },
+  { rgb: { r: 150, g: 205, b: 50 }, name: "Yellow Green" },
 
-  { rgb: { r: 0, g: 180, b: 0 }, name: "Green" },
+  // Greens
   { rgb: { r: 0, g: 100, b: 0 }, name: "Dark Green" },
-  { rgb: { r: 0, g: 255, b: 200 }, name: "Aqua Green" },
+  { rgb: { r: 34, g: 139, b: 34 }, name: "Forest Green" },
+  { rgb: { r: 0, g: 180, b: 0 }, name: "Green" },
+  { rgb: { r: 100, g: 220, b: 100 }, name: "Light Green" },
+  { rgb: { r: 0, g: 180, b: 180 }, name: "Teal" },
+  { rgb: { r: 0, g: 220, b: 180 }, name: "Aqua Green" },
 
-  { rgb: { r: 100, g: 200, b: 255 }, name: "Light Blue" },
-  { rgb: { r: 0, g: 0, b: 255 }, name: "Blue" },
+  // Blues
   { rgb: { r: 0, g: 0, b: 139 }, name: "Dark Blue" },
+  { rgb: { r: 0, g: 0, b: 255 }, name: "Blue" },
+  { rgb: { r: 65, g: 105, b: 225 }, name: "Royal Blue" },
+  { rgb: { r: 30, g: 144, b: 255 }, name: "Sky Blue" },
+  { rgb: { r: 100, g: 200, b: 255 }, name: "Light Blue" },
 
+  // Pinks / Purples
   { rgb: { r: 255, g: 105, b: 180 }, name: "Pink" },
-
+  { rgb: { r: 255, g: 0, b: 255 }, name: "Magenta" },
+  { rgb: { r: 186, g: 85, b: 211 }, name: "Medium Purple" },
   { rgb: { r: 148, g: 0, b: 211 }, name: "Violet" },
   { rgb: { r: 75, g: 0, b: 130 }, name: "Dark Violet" },
-
-  { rgb: { r: 255, g: 0, b: 255 }, name: "Magenta" },
 ];
 
 /**
- * Map any RGB color to the nearest color from EXPORT_PALETTE_COLORS (23 allowed colors).
+ * Convert sRGB [0..255] channel to linear light for OKLab conversion.
+ */
+const srgbToLinear = (c: number): number => {
+  const v = c / 255;
+  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+};
+
+/**
+ * Approximate OKLab L, a, b from sRGB.
+ * OKLab is a perceptually uniform color space — distances correspond
+ * much better to human perception than raw RGB Euclidean.
+ */
+const rgbToOKLab = (color: RGB): [number, number, number] => {
+  // sRGB → Linear RGB
+  const lr = srgbToLinear(color.r);
+  const lg = srgbToLinear(color.g);
+  const lb = srgbToLinear(color.b);
+
+  // Linear RGB → LMS (Oklab matrix)
+  const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+  const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+  const s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+
+  // Cube root
+  const l_ = Math.cbrt(l);
+  const m_ = Math.cbrt(m);
+  const s_ = Math.cbrt(s);
+
+  return [
+    0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
+    1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
+    0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_,
+  ];
+};
+
+/**
+ * Map any RGB color to the nearest color from EXPORT_PALETTE_COLORS.
+ * Uses OKLab perceptual distance for accurate color matching —
+ * much better than RGB Euclidean, especially for warm/brown tones.
  * Returns both the name and the canonical RGB of the matched color.
  * Used only when the Export Palette feature is enabled.
  */
-export const rgbToExportPaletteColor = (color: RGB): { name: string; rgb: RGB } => {
+export const rgbToExportPaletteColor = (
+  color: RGB,
+): { name: string; rgb: RGB } => {
+  const labColor = rgbToOKLab(color);
   let minDist = Infinity;
   let best = EXPORT_PALETTE_COLORS[0];
   for (const entry of EXPORT_PALETTE_COLORS) {
-    const dr = color.r - entry.rgb.r;
-    const dg = color.g - entry.rgb.g;
-    const db = color.b - entry.rgb.b;
-    const dist = dr * dr + dg * dg + db * db;
+    const labEntry = rgbToOKLab(entry.rgb);
+    const dL = labColor[0] - labEntry[0];
+    const da = labColor[1] - labEntry[1];
+    const db = labColor[2] - labEntry[2];
+    // Weight lightness less — hue/chroma differences matter more for coloring
+    const dist = dL * dL * 0.5 + da * da + db * db;
     if (dist < minDist) {
       minDist = dist;
       best = entry;
@@ -359,11 +429,7 @@ export const enhanceImage = (
   imageData: ImageData,
   options: EnhanceOptions = {},
 ): ImageData => {
-  const {
-    contrastStrength = 0.8,
-    saturation = 1.25,
-    sharpen = true,
-  } = options;
+  const { contrastStrength = 0.8, saturation = 1.25, sharpen = true } = options;
 
   const { width, height, data } = imageData;
   const n = width * height;
@@ -374,25 +440,45 @@ export const enhanceImage = (
     const minR = new Array(256).fill(0);
     const minG = new Array(256).fill(0);
     const minB = new Array(256).fill(0);
-    let rMin = 255, rMax = 0, gMin = 255, gMax = 0, bMin = 255, bMax = 0;
+    let rMin = 255,
+      rMax = 0,
+      gMin = 255,
+      gMax = 0,
+      bMin = 255,
+      bMax = 0;
     for (let i = 0; i < n; i++) {
       const j = i * 4;
-      const r = data[j], g = data[j + 1], b = data[j + 2];
-      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
-      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
-      if (b < bMin) bMin = b; if (b > bMax) bMax = b;
-      void minR; void minG; void minB;
+      const r = data[j],
+        g = data[j + 1],
+        b = data[j + 2];
+      if (r < rMin) rMin = r;
+      if (r > rMax) rMax = r;
+      if (g < gMin) gMin = g;
+      if (g > gMax) gMax = g;
+      if (b < bMin) bMin = b;
+      if (b > bMax) bMax = b;
+      void minR;
+      void minG;
+      void minB;
     }
     const rRange = Math.max(1, rMax - rMin);
     const gRange = Math.max(1, gMax - gMin);
     const bRange = Math.max(1, bMax - bMin);
     for (let i = 0; i < n; i++) {
       const j = i * 4;
-      const r = data[j], g = data[j + 1], b = data[j + 2];
+      const r = data[j],
+        g = data[j + 1],
+        b = data[j + 2];
       // Blend between original and fully-stretched: strength controls blend
-      out[j]     = Math.round(r + contrastStrength * (((r - rMin) / rRange) * 255 - r));
-      out[j + 1] = Math.round(g + contrastStrength * (((g - gMin) / gRange) * 255 - g));
-      out[j + 2] = Math.round(b + contrastStrength * (((b - bMin) / bRange) * 255 - b));
+      out[j] = Math.round(
+        r + contrastStrength * (((r - rMin) / rRange) * 255 - r),
+      );
+      out[j + 1] = Math.round(
+        g + contrastStrength * (((g - gMin) / gRange) * 255 - g),
+      );
+      out[j + 2] = Math.round(
+        b + contrastStrength * (((b - bMin) / bRange) * 255 - b),
+      );
     }
   }
 
@@ -429,7 +515,7 @@ export const enhanceImage = (
       else h = (r - g) / d + 4;
       h /= 6;
 
-      out[j]     = Math.round(hue2rgb(p, q, h + 1 / 3) * 255);
+      out[j] = Math.round(hue2rgb(p, q, h + 1 / 3) * 255);
       out[j + 1] = Math.round(hue2rgb(p, q, h) * 255);
       out[j + 2] = Math.round(hue2rgb(p, q, h - 1 / 3) * 255);
     }
@@ -445,13 +531,13 @@ export const enhanceImage = (
         for (let c = 0; c < 3; c++) {
           const center = src[idx + c];
           // 3x3 box blur approximation (neighbors)
-          const blurred = (
-            src[((y - 1) * width + x) * 4 + c] +
-            src[((y + 1) * width + x) * 4 + c] +
-            src[(y * width + x - 1) * 4 + c] +
-            src[(y * width + x + 1) * 4 + c] +
-            center * 4
-          ) / 8;
+          const blurred =
+            (src[((y - 1) * width + x) * 4 + c] +
+              src[((y + 1) * width + x) * 4 + c] +
+              src[(y * width + x - 1) * 4 + c] +
+              src[(y * width + x + 1) * 4 + c] +
+              center * 4) /
+            8;
           const sharpened = center + amount * (center - blurred);
           out[idx + c] = Math.max(0, Math.min(255, Math.round(sharpened)));
         }
