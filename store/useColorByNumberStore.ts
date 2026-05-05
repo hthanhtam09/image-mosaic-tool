@@ -224,7 +224,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     })),
 
   convertAllIdleProjects: async () => {
-    const { projects, updateProject, globalCellSize } = get();
+    const { projects, updateProject, globalCellSize, globalExportPalette } = get();
 
     // Filter projects that need processing
     const idleProjects = projects.filter(
@@ -254,6 +254,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
             cellSize: globalCellSize,
             useDithering: p.useDithering,
             removeWhiteBackground: p.removeBackground,
+            removeBottomWatermark: globalExportPalette,
           });
           updateProject(p.id, { data: result, status: "completed" });
         } catch (e) {

@@ -34,9 +34,15 @@ const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
 const softCropToPortrait = (
   img: HTMLImageElement | HTMLCanvasElement,
   targetRatio: number,
+  cropBottom: boolean = false,
 ): HTMLCanvasElement => {
   const srcW = img instanceof HTMLCanvasElement ? img.width : img.width;
-  const srcH = img instanceof HTMLCanvasElement ? img.height : img.height;
+  let srcH = img instanceof HTMLCanvasElement ? img.height : img.height;
+
+  // Crop bottom 8% to remove watermarks (like Gemini logo which includes stars above text)
+  const bottomCrop = cropBottom ? Math.floor(srcH * 0.08) : 0;
+  srcH = srcH - bottomCrop;
+
   const currentRatio = srcW / srcH;
 
   // Allow up to 20% ratio deviation before cropping — preserves full image for most photos
@@ -95,6 +101,8 @@ export interface ImageToColorByNumberOptions {
   maxColors?: number;
   /** Remove white/near-white backgrounds by flood-fill from edges (default: false). */
   removeWhiteBackground?: boolean;
+  /** Remove bottom watermark (e.g. Gemini logo) by cropping a small portion at the bottom. */
+  removeBottomWatermark?: boolean;
 }
 
 /**
@@ -113,6 +121,7 @@ export const imageToColorByNumber = async (
     useDithering = true,
     maxColors = 20,
     removeWhiteBackground = true,
+    removeBottomWatermark = false,
   } = options;
 
   // 1. Load + Rotate (if landscape) + Soft-Crop to Portrait + Resize
@@ -147,7 +156,7 @@ export const imageToColorByNumber = async (
       : copyToCanvas(currentSource);
 
   // Soft crop: only trims if image is >20% off from portrait ratio
-  const croppedCanvas = softCropToPortrait(sourceCanvas, TARGET_ASPECT);
+  const croppedCanvas = softCropToPortrait(sourceCanvas, TARGET_ASPECT, removeBottomWatermark);
 
   // Resize using canvas directly (resizeImageFromCanvas avoids toDataURL)
   const baseData = resizeImageFromCanvas(croppedCanvas, maxWidth);

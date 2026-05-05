@@ -1106,7 +1106,7 @@ const renderPaletteColumnCBN = (
     if (renderOpts?.showColorNames) {
       const palIdx = renderOpts.codeToPaletteIndex?.get(code);
       const colorName = palIdx != null ? getPaletteColorName(palIdx) : code;
-      const nameFontSize = Math.max(12, sInputH * 0.42);
+      let nameFontSize = Math.max(11, sInputH * 0.38);
       ctx.fillStyle = "#222222";
       ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
       ctx.textAlign = "center";
@@ -1131,7 +1131,35 @@ const renderPaletteColumnCBN = (
         );
       }
       ctx.clip();
-      ctx.fillText(colorName, cx, inputTop + sInputH * 0.5);
+      
+      const words = colorName.split(' ');
+      const lines = [];
+      let currentLine = words[0] || '';
+      for (let j = 1; j < words.length; j++) {
+        const word = words[j];
+        const width = ctx.measureText(currentLine + " " + word).width;
+        if (width < sInputW - sInputPad * 2 - 4) {
+          currentLine += " " + word;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+      
+      // If it takes more than 2 lines, scale down font slightly to fit better
+      if (lines.length > 2) {
+         nameFontSize = Math.max(10, sInputH * 0.3);
+         ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
+      }
+      
+      const lineHeight = nameFontSize * 1.15;
+      const totalTextHeight = lines.length * lineHeight;
+      const startY = inputTop + sInputH / 2 - totalTextHeight / 2 + lineHeight / 2;
+      
+      lines.forEach((line, lineIdx) => {
+        ctx.fillText(line, cx, startY + lineIdx * lineHeight);
+      });
       ctx.restore();
     } else {
       // Dotted placeholder line
@@ -1625,9 +1653,9 @@ export const exportPaletteToCanvas = (
   const [bgR, bgG, bgB] = parseHex(bgHex);
   const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
   const isDarkBg = options?.transparentBg ? false : bgBrightness < 128;
-  const textColor = "#ffffff";
+    const textColor = "#ffffff";
   const separatorColor = "rgba(255,255,255,0.15)";
-
+  
   // ── Swatch shape ──
   const shape:
     | "circle"
@@ -1766,16 +1794,40 @@ export const exportPaletteToCanvas = (
     // Use pre-computed name from merge phase (avoids buggy parseHex with 0-channel values)
     const colorName = codeToName.get(code) ?? "";
 
-    const nameFontSize = Math.max(14, sw * 0.4);
+    const nameFontSize = Math.max(14, sw * 0.35); // Slightly smaller to fit better
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(ix, iy, nameAreaW * scale, sw);
-    ctx.clip();
     ctx.fillStyle = textColor;
     ctx.font = `600 ${nameFontSize}px 'Noto Sans', sans-serif`;
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    ctx.fillText(colorName, ix + nameAreaW * scale, swCY);
+    
+    // Text wrapping logic
+    const words = colorName.split(' ');
+    const lines = [];
+    let currentLine = words[0] || '';
+
+    for (let j = 1; j < words.length; j++) {
+      const word = words[j];
+      const width = ctx.measureText(currentLine + " " + word).width;
+      if (width < nameAreaW * scale - 10) {
+        currentLine += " " + word;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    const lineHeight = nameFontSize * 1.25;
+    const totalTextHeight = lines.length * lineHeight;
+    const lineStartY = swCY - totalTextHeight / 2 + lineHeight / 2;
+
+    lines.forEach((line, lineIdx) => {
+      ctx.fillText(line, ix + nameAreaW * scale - 5, lineStartY + lineIdx * lineHeight);
+    });
+
     ctx.restore();
 
     // ── Swatch: white/empty shape ──
