@@ -26,7 +26,13 @@ export type PartialColorMode =
   | "horizontal-middle"
   | "horizontal-sides";
 import { getPaletteColorName } from "@/lib/palette";
-import { rgbToExtendedColorName, rgbToExportPaletteColor, paletteIndexToLabel, rgbToHex, type RGB } from "@/lib/utils";
+import {
+  rgbToExtendedColorName,
+  rgbToExportPaletteColor,
+  paletteIndexToLabel,
+  rgbToHex,
+  type RGB,
+} from "@/lib/utils";
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
 const EXPORT_PAGE_W = Math.round(8.5 * EXPORT_DPI); // 2550
@@ -91,50 +97,63 @@ const isWhiteColor = (hex: string): boolean => {
 const parseHexToRGB = (hex: string) => {
   const c = hex.replace("#", "");
   if (c.length === 3)
-    return { r: parseInt(c[0] + c[0], 16), g: parseInt(c[1] + c[1], 16), b: parseInt(c[2] + c[2], 16) };
-  return { r: parseInt(c.slice(0, 2), 16) || 0, g: parseInt(c.slice(2, 4), 16) || 0, b: parseInt(c.slice(4, 6), 16) || 0 };
+    return {
+      r: parseInt(c[0] + c[0], 16),
+      g: parseInt(c[1] + c[1], 16),
+      b: parseInt(c[2] + c[2], 16),
+    };
+  return {
+    r: parseInt(c.slice(0, 2), 16) || 0,
+    g: parseInt(c.slice(2, 4), 16) || 0,
+    b: parseInt(c.slice(4, 6), 16) || 0,
+  };
 };
 
 const getCodeMap = (
   data: ColorByNumberData,
   removeBgColorCells: boolean,
-  bgColor: string
+  bgColor: string,
 ): Map<string, string> => {
   const map = new Map<string, string>();
   if (!removeBgColorCells) return map;
-  
+
   // Collect unique codes and their colors (skip bg cells)
   const codeToColor = new Map<string, string>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
     const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
     const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
-    if (cellName === bgName || cell.color.toLowerCase() === bgColor.toLowerCase()) continue;
+    if (
+      cellName === bgName ||
+      cell.color.toLowerCase() === bgColor.toLowerCase()
+    )
+      continue;
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
     }
   }
-  
+
   // Sort codes
   const codes = [...codeToColor.keys()].sort((a, b) => {
-    const aN = parseInt(a, 10), bN = parseInt(b, 10);
+    const aN = parseInt(a, 10),
+      bN = parseInt(b, 10);
     if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
     if (!isNaN(aN)) return -1;
     if (!isNaN(bN)) return 1;
     return a.localeCompare(b);
   });
-  
+
   // Map each code to its restricted export palette color name, then assign sequential labels
   // Codes that map to the same color name get the same label
   const nameToLabel = new Map<string, string>();
   let labelIdx = 0;
-  
+
   for (const code of codes) {
     const hex = codeToColor.get(code)!;
     const rgb = parseHexToRGB(hex);
     const exportColor = rgbToExportPaletteColor(rgb);
     const colorName = exportColor.name;
-    
+
     if (nameToLabel.has(colorName)) {
       // Same restricted palette color as a previous code — reuse label
       map.set(code, nameToLabel.get(colorName)!);
@@ -146,7 +165,7 @@ const getCodeMap = (
       labelIdx++;
     }
   }
-  
+
   return map;
 };
 
@@ -325,7 +344,11 @@ export interface PaletteLayout {
 export const calculatePaletteLayout = (
   data: ColorByNumberData,
   availableWidth: number,
-  options?: { vertical?: boolean; bgColor?: string; removeBgColorCells?: boolean },
+  options?: {
+    vertical?: boolean;
+    bgColor?: string;
+    removeBgColorCells?: boolean;
+  },
 ): PaletteLayout | null => {
   // Build unique palette entries (skip white / empty codes)
   // When removeBgColorCells is on (export palette mode), remap to 23 restricted colors
@@ -335,8 +358,14 @@ export const calculatePaletteLayout = (
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
       const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
-      const bgName = rgbToExtendedColorName(parseHexToRGB(options.bgColor)).name;
-      if (cellName === bgName || cell.color.toLowerCase() === options.bgColor.toLowerCase()) continue;
+      const bgName = rgbToExtendedColorName(
+        parseHexToRGB(options.bgColor),
+      ).name;
+      if (
+        cellName === bgName ||
+        cell.color.toLowerCase() === options.bgColor.toLowerCase()
+      )
+        continue;
     }
     if (!rawCodeToColor.has(cell.code)) {
       rawCodeToColor.set(cell.code, cell.color);
@@ -354,7 +383,8 @@ export const calculatePaletteLayout = (
     const nameToCode = new Map<string, string>();
 
     const sortedRawCodes = [...rawCodeToColor.keys()].sort((a, b) => {
-      const aN = parseInt(a, 10), bN = parseInt(b, 10);
+      const aN = parseInt(a, 10),
+        bN = parseInt(b, 10);
       if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
       if (!isNaN(aN)) return -1;
       if (!isNaN(bN)) return 1;
@@ -370,7 +400,11 @@ export const calculatePaletteLayout = (
 
       if (nameToCode.has(colorName)) {
         const existingCode = nameToCode.get(colorName)!;
-        codeToCount.set(existingCode, (codeToCount.get(existingCode) ?? 0) + (rawCodeToCount.get(code) ?? 0));
+        codeToCount.set(
+          existingCode,
+          (codeToCount.get(existingCode) ?? 0) +
+            (rawCodeToCount.get(code) ?? 0),
+        );
       } else {
         nameToCode.set(colorName, code);
         codeToColor.set(code, canonicalHex);
@@ -1131,10 +1165,10 @@ const renderPaletteColumnCBN = (
         );
       }
       ctx.clip();
-      
-      const words = colorName.split(' ');
+
+      const words = colorName.split(" ");
       const lines = [];
-      let currentLine = words[0] || '';
+      let currentLine = words[0] || "";
       for (let j = 1; j < words.length; j++) {
         const word = words[j];
         const width = ctx.measureText(currentLine + " " + word).width;
@@ -1146,17 +1180,18 @@ const renderPaletteColumnCBN = (
         }
       }
       if (currentLine) lines.push(currentLine);
-      
+
       // If it takes more than 2 lines, scale down font slightly to fit better
       if (lines.length > 2) {
-         nameFontSize = Math.max(10, sInputH * 0.3);
-         ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
+        nameFontSize = Math.max(10, sInputH * 0.3);
+        ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
       }
-      
+
       const lineHeight = nameFontSize * 1.15;
       const totalTextHeight = lines.length * lineHeight;
-      const startY = inputTop + sInputH / 2 - totalTextHeight / 2 + lineHeight / 2;
-      
+      const startY =
+        inputTop + sInputH / 2 - totalTextHeight / 2 + lineHeight / 2;
+
       lines.forEach((line, lineIdx) => {
         ctx.fillText(line, cx, startY + lineIdx * lineHeight);
       });
@@ -1255,10 +1290,10 @@ export const exportToCanvas = (
   // 2. Calculate palette layout (vertical)
   let layout: PaletteLayout | null = null;
   if (needsPalette) {
-    layout = calculatePaletteLayout(data, safeW, { 
+    layout = calculatePaletteLayout(data, safeW, {
       vertical: true,
       bgColor,
-      removeBgColorCells
+      removeBgColorCells,
     });
   }
 
@@ -1389,7 +1424,11 @@ export const exportToCanvas = (
     if (removeBgColorCells) {
       const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
       const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
-      if (cellName === bgName || cell.color.toLowerCase() === bgColor.toLowerCase()) return;
+      if (
+        cellName === bgName ||
+        cell.color.toLowerCase() === bgColor.toLowerCase()
+      )
+        return;
     }
 
     // When export palette mode is on, remap cell colors to the 23 restricted palette colors
@@ -1552,7 +1591,11 @@ export const exportPaletteToCanvas = (
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
 
-  const codeMap = getCodeMap(data, options?.removeBgColorCells ?? false, options?.bgColor ?? "#ffffff");
+  const codeMap = getCodeMap(
+    data,
+    options?.removeBgColorCells ?? false,
+    options?.bgColor ?? "#ffffff",
+  );
 
   // ── Collect palette data (restricted to 23 export palette colors) ──
   // Step 1: Collect raw code → color mappings (skip bg cells)
@@ -1562,8 +1605,14 @@ export const exportPaletteToCanvas = (
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
       const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
-      const bgName = rgbToExtendedColorName(parseHexToRGB(options.bgColor)).name;
-      if (cellName === bgName || cell.color.toLowerCase() === options.bgColor.toLowerCase()) continue;
+      const bgName = rgbToExtendedColorName(
+        parseHexToRGB(options.bgColor),
+      ).name;
+      if (
+        cellName === bgName ||
+        cell.color.toLowerCase() === options.bgColor.toLowerCase()
+      )
+        continue;
     }
     if (!rawCodeToColor.has(cell.code)) {
       rawCodeToColor.set(cell.code, cell.color);
@@ -1581,7 +1630,8 @@ export const exportPaletteToCanvas = (
 
   // Sort raw codes first so merging picks consistent representative codes
   const rawCodes = [...rawCodeToColor.keys()].sort((a, b) => {
-    const aN = parseInt(a, 10), bN = parseInt(b, 10);
+    const aN = parseInt(a, 10),
+      bN = parseInt(b, 10);
     if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
     if (!isNaN(aN)) return -1;
     if (!isNaN(bN)) return 1;
@@ -1599,7 +1649,10 @@ export const exportPaletteToCanvas = (
     if (nameToCode.has(colorName)) {
       // This color name already exists → merge count into the first code
       const existingCode = nameToCode.get(colorName)!;
-      codeToCount.set(existingCode, (codeToCount.get(existingCode) ?? 0) + (rawCodeToCount.get(code) ?? 0));
+      codeToCount.set(
+        existingCode,
+        (codeToCount.get(existingCode) ?? 0) + (rawCodeToCount.get(code) ?? 0),
+      );
     } else {
       // New color name → register this code
       nameToCode.set(colorName, code);
@@ -1653,9 +1706,9 @@ export const exportPaletteToCanvas = (
   const [bgR, bgG, bgB] = parseHex(bgHex);
   const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
   const isDarkBg = options?.transparentBg ? false : bgBrightness < 128;
-    const textColor = "#ffffff";
+  const textColor = "#ffffff";
   const separatorColor = "rgba(255,255,255,0.15)";
-  
+
   // ── Swatch shape ──
   const shape:
     | "circle"
@@ -1690,7 +1743,7 @@ export const exportPaletteToCanvas = (
   const contentW = pageW - padX - padX - EXTRA_RIGHT;
 
   // Palette item element sizes (reusing existing PAL_ constants)
-  const sSW = PAL_SWATCH; // swatch size ~80px
+  const sSW = PAL_SWATCH * 1.5; // Expand color swatch for better recognition
   const sDH = PAL_DROPLET_H; // droplet height ~30px
   const sDW = PAL_DROPLET_W; // droplet width ~21px
   const sDGap = PAL_DROPLET_GAP; // gap between droplets ~7.5px
@@ -1701,29 +1754,34 @@ export const exportPaletteToCanvas = (
   const sLbl = PAL_LABEL_FS;
 
   // Arc area extends to the right of swatch center
-  const arcRightExtent = sArcGap + sArcRadius + sArcCircleR; // ~65px right of swatch edge
+  const arcRightExtent = sArcGap + sArcRadius + sArcCircleR;
   // Total right extent from swatch CENTER = sSW/2 + arcRightExtent
-  const arcTotalW = sSW / 2 + arcRightExtent; // space from swatch center to rightmost arc
+  const arcTotalW = sSW / 2 + arcRightExtent;
 
-  // Name text area (left of swatch center)
-  const nameAreaW = Math.round(0.72 * EXPORT_DPI); // ~216px for color name
-  const nameGap = Math.round(0.16 * EXPORT_DPI); // gap between name and swatch left edge (INCREASED padding)
+  // Name text area removed
 
-  // Item width = nameArea + nameGap + swatch_left_half + arc_total_right
-  // Swatch CENTER is at: itemLeft + nameAreaW + nameGap + sSW/2
-  const itemW = nameAreaW + nameGap + sSW + arcTotalW;
+  // Input area below droplets
+  const sInputGap = PAL_INPUT_GAP;
+  const sInputH = PAL_INPUT_H * 1.2; // slightly taller input
+  const sInputW = Math.max(sSW * 1.5, PAL_INPUT_W * 1.2); // wider input
+  const sInputPad = PAL_INPUT_PAD;
+
+  // We need to make sure itemW is wide enough for the input box
+  // Swatch center is at: max(sInputW / 2, sSW / 2)
+  const itemCx = Math.max(sInputW / 2, sSW / 2);
+  const itemW = itemCx + Math.max(sInputW / 2, arcTotalW);
 
   // Horizontal gap between items
-  const hGap = Math.round(0.06 * EXPORT_DPI);
+  const hGap = Math.round(0.4 * EXPORT_DPI); // Increased horizontal gap for spacious layout
   // Items per row
   const itemsPerRow = Math.max(
     1,
     Math.floor((contentW + hGap) / (itemW + hGap)),
   );
 
-  // Item height (NO input box): swatch + gap + droplets
-  const itemH = sSW + sGap + sDH;
-  const vGap = Math.round(0.14 * EXPORT_DPI); // vertical gap between rows
+  // Item height: swatch + gap + droplets + inputGap + inputH
+  const itemH = sSW + sGap + sDH + sInputGap + sInputH;
+  const vGap = Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
 
   const numRows = Math.ceil(codes.length / itemsPerRow);
   const totalH = numRows * itemH + Math.max(0, numRows - 1) * vGap;
@@ -1786,59 +1844,22 @@ export const exportPaletteToCanvas = (
     const iy = startY + row * (itemH + vGap) * scale;
 
     const sw = sSW * scale;
-    // Swatch center X = item left + (nameAreaW + nameGap) * scale + sw/2
-    const cx = ix + (nameAreaW + nameGap) * scale + sw / 2;
+    const cx = ix + itemCx * scale;
     const swCY = iy + sw / 2;
 
-    // ── Color name text (RIGHT-aligned, ending just before swatch) ──
-    // Use pre-computed name from merge phase (avoids buggy parseHex with 0-channel values)
-    const colorName = codeToName.get(code) ?? "";
+    const color = codeToColor.get(code) ?? "#999999";
 
-    const nameFontSize = Math.max(14, sw * 0.35); // Slightly smaller to fit better
-    ctx.save();
-    ctx.fillStyle = textColor;
-    ctx.font = `600 ${nameFontSize}px 'Noto Sans', sans-serif`;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    
-    // Text wrapping logic
-    const words = colorName.split(' ');
-    const lines = [];
-    let currentLine = words[0] || '';
+    // ── Swatch: filled shape ──
+    drawPalSwatch(ctx, cx, swCY, sw, shape, color);
 
-    for (let j = 1; j < words.length; j++) {
-      const word = words[j];
-      const width = ctx.measureText(currentLine + " " + word).width;
-      if (width < nameAreaW * scale - 10) {
-        currentLine += " " + word;
-      } else {
-        lines.push(currentLine);
-        currentLine = word;
-      }
-    }
-    if (currentLine) {
-      lines.push(currentLine);
-    }
-
-    const lineHeight = nameFontSize * 1.25;
-    const totalTextHeight = lines.length * lineHeight;
-    const lineStartY = swCY - totalTextHeight / 2 + lineHeight / 2;
-
-    lines.forEach((line, lineIdx) => {
-      ctx.fillText(line, ix + nameAreaW * scale - 5, lineStartY + lineIdx * lineHeight);
-    });
-
-    ctx.restore();
-
-    // ── Swatch: white/empty shape ──
-    drawPalSwatch(ctx, cx, swCY, sw, shape, "#ffffff");
-
-    // Code number inside swatch (dark on white bg)
-    ctx.fillStyle = "#333333";
+    // Code number inside swatch (visible on color)
+    const brightness = getBrightness(color);
+    ctx.fillStyle = brightness < 128 ? "#ffffff" : "#333333";
     ctx.font = `400 ${Math.max(12, sw * (sLbl / sSW))}px 'Noto Sans', sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.strokeStyle =
+      brightness < 128 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)";
     ctx.lineWidth = 2;
     const displayCode = codeMap.get(code) || code;
     ctx.strokeText(displayCode, cx, swCY);
@@ -1940,6 +1961,45 @@ export const exportPaletteToCanvas = (
       }
     });
     ctx.restore();
+
+    // ── Input box below droplets ──
+    const scaledInputH = sInputH * scale;
+    const scaledInputW = sInputW * scale;
+    const inputTop = iy + (sSW + sGap + sDH + sInputGap) * scale;
+    const inputLeft = cx - scaledInputW / 2;
+    const inputRadius = Math.min(scaledInputH * 0.25, 6);
+
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(
+        inputLeft,
+        inputTop,
+        scaledInputW,
+        scaledInputH,
+        inputRadius,
+      );
+    } else {
+      ctx.rect(inputLeft, inputTop, scaledInputW, scaledInputH);
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.15)"; // Slightly darker stroke for visibility
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Dotted placeholder line inside input box
+    const dotCount = 13;
+    const innerW = scaledInputW - 2 * sInputPad * scale;
+    const dotSpacing = innerW * 0.065;
+    const dotTotalW = (dotCount - 1) * dotSpacing;
+    const dotStartX = cx - dotTotalW / 2;
+    const dotY = inputTop + scaledInputH * 0.62;
+    ctx.fillStyle = "#999999";
+    for (let di = 0; di < dotCount; di++) {
+      ctx.beginPath();
+      ctx.arc(dotStartX + di * dotSpacing, dotY, 1.2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // ── Separator line between rows ──
     if (row < numRows - 1 && col === itemsPerRow - 1) {
