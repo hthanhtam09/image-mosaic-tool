@@ -278,61 +278,37 @@ export const rgbToExtendedColorName = (
  * Extended with more intermediate tones for better photo accuracy.
  */
 export const EXPORT_PALETTE_COLORS = [
-  // Neutrals
   { rgb: { r: 0, g: 0, b: 0 }, name: "Black" },
-  { rgb: { r: 64, g: 64, b: 64 }, name: "Dark Gray" },
   { rgb: { r: 128, g: 128, b: 128 }, name: "Gray" },
-  { rgb: { r: 192, g: 192, b: 192 }, name: "Silver" },
-  { rgb: { r: 255, g: 255, b: 255 }, name: "White" },
+  { rgb: { r: 64, g: 64, b: 64 }, name: "Dark Gray" },
 
-  // Browns / Skin / Warm Neutrals
-  { rgb: { r: 60, g: 20, b: 0 }, name: "Espresso" },
   { rgb: { r: 90, g: 45, b: 0 }, name: "Dark Brown" },
-  { rgb: { r: 101, g: 55, b: 0 }, name: "Chocolate" },
-  { rgb: { r: 139, g: 69, b: 19 }, name: "Brown" },
-  { rgb: { r: 160, g: 82, b: 45 }, name: "Sienna" },
-  { rgb: { r: 180, g: 100, b: 40 }, name: "Warm Brown" },
+  { rgb: { r: 150, g: 75, b: 0 }, name: "Brown" },
   { rgb: { r: 210, g: 140, b: 60 }, name: "Tan" },
-  { rgb: { r: 205, g: 133, b: 63 }, name: "Sandy" },
-  { rgb: { r: 222, g: 170, b: 100 }, name: "Caramel" },
-  { rgb: { r: 245, g: 220, b: 170 }, name: "Beige" },
   { rgb: { r: 255, g: 170, b: 120 }, name: "Peach" },
-  { rgb: { r: 240, g: 200, b: 160 }, name: "Skin" },
 
-  // Reds / Oranges
-  { rgb: { r: 178, g: 34, b: 34 }, name: "Dark Red" },
   { rgb: { r: 255, g: 0, b: 0 }, name: "Red" },
   { rgb: { r: 255, g: 80, b: 0 }, name: "Red Orange" },
-  { rgb: { r: 255, g: 120, b: 30 }, name: "Burnt Orange" },
   { rgb: { r: 255, g: 140, b: 0 }, name: "Orange" },
 
-  // Yellows / Golds
-  { rgb: { r: 255, g: 185, b: 15 }, name: "Gold" },
   { rgb: { r: 255, g: 200, b: 0 }, name: "Yellow Orange" },
-  { rgb: { r: 255, g: 230, b: 0 }, name: "Yellow" },
-  { rgb: { r: 150, g: 205, b: 50 }, name: "Yellow Green" },
+  { rgb: { r: 255, g: 255, b: 0 }, name: "Yellow" },
+  { rgb: { r: 180, g: 255, b: 0 }, name: "Yellow Green" },
 
-  // Greens
-  { rgb: { r: 0, g: 100, b: 0 }, name: "Dark Green" },
-  { rgb: { r: 34, g: 139, b: 34 }, name: "Forest Green" },
   { rgb: { r: 0, g: 180, b: 0 }, name: "Green" },
-  { rgb: { r: 100, g: 220, b: 100 }, name: "Light Green" },
-  { rgb: { r: 0, g: 180, b: 180 }, name: "Teal" },
-  { rgb: { r: 0, g: 220, b: 180 }, name: "Aqua Green" },
+  { rgb: { r: 0, g: 100, b: 0 }, name: "Dark Green" },
+  { rgb: { r: 0, g: 255, b: 200 }, name: "Aqua Green" },
 
-  // Blues
-  { rgb: { r: 0, g: 0, b: 139 }, name: "Dark Blue" },
-  { rgb: { r: 0, g: 0, b: 255 }, name: "Blue" },
-  { rgb: { r: 65, g: 105, b: 225 }, name: "Royal Blue" },
-  { rgb: { r: 30, g: 144, b: 255 }, name: "Sky Blue" },
   { rgb: { r: 100, g: 200, b: 255 }, name: "Light Blue" },
+  { rgb: { r: 0, g: 0, b: 255 }, name: "Blue" },
+  { rgb: { r: 0, g: 0, b: 139 }, name: "Dark Blue" },
 
-  // Pinks / Purples
   { rgb: { r: 255, g: 105, b: 180 }, name: "Pink" },
-  { rgb: { r: 255, g: 0, b: 255 }, name: "Magenta" },
-  { rgb: { r: 186, g: 85, b: 211 }, name: "Medium Purple" },
+
   { rgb: { r: 148, g: 0, b: 211 }, name: "Violet" },
   { rgb: { r: 75, g: 0, b: 130 }, name: "Dark Violet" },
+
+  { rgb: { r: 255, g: 0, b: 255 }, name: "Magenta" },
 ];
 
 /**

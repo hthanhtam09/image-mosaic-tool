@@ -312,6 +312,7 @@ export interface PaletteLayout {
   codes: string[];
   codeToColor: Map<string, string>;
   codeToCount: Map<string, number>;
+  codeToName?: Map<string, string>;
   maxCount: number;
   sRH: number;
   sSW: number;
@@ -375,6 +376,7 @@ export const calculatePaletteLayout = (
 
   let codeToColor: Map<string, string>;
   let codeToCount: Map<string, number>;
+  let codeToName = new Map<string, string>();
 
   if (options?.removeBgColorCells) {
     // Export palette mode: remap to 23 restricted colors and merge duplicates
@@ -409,6 +411,7 @@ export const calculatePaletteLayout = (
         nameToCode.set(colorName, code);
         codeToColor.set(code, canonicalHex);
         codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
+        codeToName.set(code, colorName);
       }
     }
   } else {
@@ -477,6 +480,7 @@ export const calculatePaletteLayout = (
     codes,
     codeToColor,
     codeToCount,
+    codeToName,
     maxCount,
     sRH: itemHeight * sc,
     sSW: PAL_SWATCH * sc,
@@ -922,6 +926,7 @@ const renderPaletteColumnCBN = (
     codes,
     codeToColor,
     codeToCount,
+    codeToName,
     maxCount,
     sSW,
     sGap,
@@ -1138,8 +1143,13 @@ const renderPaletteColumnCBN = (
 
     // Input box content: color name (clearSwatches mode) or dotted placeholder
     if (renderOpts?.showColorNames) {
-      const palIdx = renderOpts.codeToPaletteIndex?.get(code);
-      const colorName = palIdx != null ? getPaletteColorName(palIdx) : code;
+      let colorName = code;
+      if (codeToName && codeToName.has(code)) {
+        colorName = codeToName.get(code)!;
+      } else if (renderOpts.codeToPaletteIndex) {
+        const palIdx = renderOpts.codeToPaletteIndex.get(code);
+        colorName = palIdx != null ? getPaletteColorName(palIdx) : code;
+      }
       let nameFontSize = Math.max(11, sInputH * 0.38);
       ctx.fillStyle = "#222222";
       ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
@@ -1361,6 +1371,8 @@ export const exportToCanvas = (
 
     ctx.translate(paletteX, paletteY);
     renderPaletteColumnCBN(ctx, data, layout, {
+      clearSwatches: removeBgColorCells,
+      showColorNames: removeBgColorCells,
       codeMap: removeBgColorCells ? codeMap : undefined,
     });
     ctx.restore();
@@ -1849,17 +1861,15 @@ export const exportPaletteToCanvas = (
 
     const color = codeToColor.get(code) ?? "#999999";
 
-    // ── Swatch: filled shape ──
-    drawPalSwatch(ctx, cx, swCY, sw, shape, color);
+    // ── Swatch: white shape ──
+    drawPalSwatch(ctx, cx, swCY, sw, shape, "#ffffff");
 
-    // Code number inside swatch (visible on color)
-    const brightness = getBrightness(color);
-    ctx.fillStyle = brightness < 128 ? "#ffffff" : "#333333";
+    // Code number inside swatch (visible on white)
+    ctx.fillStyle = "#333333";
     ctx.font = `400 ${Math.max(12, sw * (sLbl / sSW))}px 'Noto Sans', sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeStyle =
-      brightness < 128 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)";
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
     ctx.lineWidth = 2;
     const displayCode = codeMap.get(code) || code;
     ctx.strokeText(displayCode, cx, swCY);
@@ -1987,19 +1997,62 @@ export const exportPaletteToCanvas = (
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Dotted placeholder line inside input box
-    const dotCount = 13;
-    const innerW = scaledInputW - 2 * sInputPad * scale;
-    const dotSpacing = innerW * 0.065;
-    const dotTotalW = (dotCount - 1) * dotSpacing;
-    const dotStartX = cx - dotTotalW / 2;
-    const dotY = inputTop + scaledInputH * 0.62;
-    ctx.fillStyle = "#999999";
-    for (let di = 0; di < dotCount; di++) {
-      ctx.beginPath();
-      ctx.arc(dotStartX + di * dotSpacing, dotY, 1.2 * scale, 0, Math.PI * 2);
-      ctx.fill();
+    // Color name text inside input box
+    const colorName = codeToName.get(code) || code;
+    let nameFontSize = Math.max(11 * scale, scaledInputH * 0.38);
+    ctx.fillStyle = "#222222";
+    ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    ctx.save();
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(
+        inputLeft + sInputPad * scale,
+        inputTop,
+        scaledInputW - sInputPad * 2 * scale,
+        scaledInputH,
+        2
+      );
+    } else {
+      ctx.rect(
+        inputLeft + sInputPad * scale,
+        inputTop,
+        scaledInputW - sInputPad * 2 * scale,
+        scaledInputH
+      );
     }
+    ctx.clip();
+
+    const words = colorName.split(" ");
+    const lines = [];
+    let currentLine = words[0] || "";
+    for (let j = 1; j < words.length; j++) {
+      const word = words[j];
+      const width = ctx.measureText(currentLine + " " + word).width;
+      if (width < scaledInputW - sInputPad * 2 * scale - 4) {
+        currentLine += " " + word;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    if (lines.length > 2) {
+      nameFontSize = Math.max(10 * scale, scaledInputH * 0.3);
+      ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
+    }
+
+    const lineHeight = nameFontSize * 1.15;
+    const totalTextHeight = lines.length * lineHeight;
+    const startTextY = inputTop + scaledInputH / 2 - totalTextHeight / 2 + lineHeight / 2;
+
+    lines.forEach((line, lineIdx) => {
+      ctx.fillText(line, cx, startTextY + lineIdx * lineHeight);
+    });
+    ctx.restore();
 
     // ── Separator line between rows ──
     if (row < numRows - 1 && col === itemsPerRow - 1) {
