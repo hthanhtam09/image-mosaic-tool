@@ -373,26 +373,32 @@ export default function Dashboard() {
 
             if (directImages.length > 0) {
                 // Folder Mode: Load colorUrl from directImages
-                const colorCanvases = await Promise.all(directImages.map(async img => {
-                    return new Promise<HTMLCanvasElement>((resolve) => {
+                const colorCanvases: HTMLCanvasElement[] = [];
+                for (const img of directImages) {
+                    const canvas = await new Promise<HTMLCanvasElement>((resolve) => {
                         const el = new Image();
                         el.onload = () => {
-                            const canvas = document.createElement("canvas");
-                            canvas.width = el.width;
-                            canvas.height = el.height;
-                            const ctx = canvas.getContext("2d");
-                            ctx?.drawImage(el, 0, 0);
-                            resolve(canvas);
+                            const maxDim = 600;
+                            const scale = Math.min(1, maxDim / Math.max(el.width, el.height));
+                            const thumbCanvas = document.createElement("canvas");
+                            thumbCanvas.width = el.width * scale;
+                            thumbCanvas.height = el.height * scale;
+                            const ctx = thumbCanvas.getContext("2d");
+                            ctx?.drawImage(el, 0, 0, thumbCanvas.width, thumbCanvas.height);
+                            resolve(thumbCanvas);
                         };
                         el.src = img.colorUrl;
                     });
-                }));
+                    colorCanvases.push(canvas);
+                    await new Promise(r => setTimeout(r, 0));
+                }
                 const collagePages = exportCollagePagesToCanvas(colorCanvases, { bgColor: theme.backgroundColor });
                 solutionPages = collagePages.map(c => c.toDataURL("image/png"));
             } else {
                 // Standard Mode: Generate colored canvases from projects
-                const colorCanvases = readyProjects.map(p => {
-                    return exportToCanvas(p.data!, p.filled, {
+                const colorCanvases: HTMLCanvasElement[] = [];
+                for (const p of readyProjects) {
+                    const fullCanvas = exportToCanvas(p.data!, p.filled, {
                         showCodes: false,
                         colored: true,
                         showPalette: false,
@@ -401,7 +407,18 @@ export default function Dashboard() {
                         transparentBg: p.removeBackground,
                         tightCrop: p.removeBackground
                     });
-                });
+                    const maxDim = 600;
+                    const scale = Math.min(1, maxDim / Math.max(fullCanvas.width, fullCanvas.height));
+                    const thumbCanvas = document.createElement("canvas");
+                    thumbCanvas.width = fullCanvas.width * scale;
+                    thumbCanvas.height = fullCanvas.height * scale;
+                    const ctx = thumbCanvas.getContext("2d");
+                    ctx?.drawImage(fullCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+                    colorCanvases.push(thumbCanvas);
+                    fullCanvas.width = 0;
+                    fullCanvas.height = 0;
+                    await new Promise(r => setTimeout(r, 0));
+                }
                 const collagePages = exportCollagePagesToCanvas(colorCanvases, { bgColor: theme.backgroundColor });
                 solutionPages = collagePages.map(c => c.toDataURL("image/png"));
             }
@@ -496,9 +513,21 @@ export default function Dashboard() {
                     tightCrop: project.removeBackground,
                     removeBgColorCells: globalExportPalette,
                 });
-                coloredCanvases.push(canvasColor);
+                
+                const maxDim = 600;
+                const scale = Math.min(1, maxDim / Math.max(canvasColor.width, canvasColor.height));
+                const thumbCanvas = document.createElement("canvas");
+                thumbCanvas.width = canvasColor.width * scale;
+                thumbCanvas.height = canvasColor.height * scale;
+                const tCtx = thumbCanvas.getContext("2d");
+                tCtx?.drawImage(canvasColor, 0, 0, thumbCanvas.width, thumbCanvas.height);
+                coloredCanvases.push(thumbCanvas);
+
                 const base64Color = canvasColor.toDataURL("image/png").split(',')[1];
                 colorFolder?.file(`${baseName}.png`, base64Color, { base64: true });
+                
+                canvasColor.width = 0;
+                canvasColor.height = 0;
 
                 // Uncolored version (empty grid with numbers)
                 const canvasUncolor = exportToCanvas(project.data!, project.filled, {
@@ -513,6 +542,9 @@ export default function Dashboard() {
                 });
                 const base64Uncolor = canvasUncolor.toDataURL("image/png").split(',')[1];
                 uncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
+                
+                canvasUncolor.width = 0;
+                canvasUncolor.height = 0;
 
                 // Palette export (separate file) — vertical list, swatch right, name left, droplets themed
                 if (globalExportPalette && paletteFolder && project.data) {
@@ -525,7 +557,12 @@ export default function Dashboard() {
                     });
                     const base64Palette = canvasPalette.toDataURL("image/png").split(',')[1];
                     paletteFolder.file(`${baseName}.png`, base64Palette, { base64: true });
+                    
+                    canvasPalette.width = 0;
+                    canvasPalette.height = 0;
                 }
+
+                await new Promise(r => setTimeout(r, 0));
             }
 
             // Generate Collage pages
@@ -560,8 +597,10 @@ export default function Dashboard() {
                 .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
             
             const theme = getThemeById(globalTheme);
-            const generatedPalettes = readyProjects.map((project, idx) => {
-                if (!project.data) return "";
+            const generatedPalettes: string[] = [];
+            for (let idx = 0; idx < readyProjects.length; idx++) {
+                const project = readyProjects[idx];
+                if (!project.data) continue;
                 const canvas = exportPaletteToCanvas(project.data, {
                     bgColor: theme.backgroundColor,
                     themeColor: theme.backgroundColor,
@@ -569,8 +608,11 @@ export default function Dashboard() {
                     transparentBg: true,
                     removeBgColorCells: true
                 });
-                return canvas.toDataURL("image/png");
-            }).filter(url => url !== "");
+                generatedPalettes.push(canvas.toDataURL("image/png"));
+                canvas.width = 0;
+                canvas.height = 0;
+                await new Promise(r => setTimeout(r, 0));
+            }
             
             setPaletteImages(generatedPalettes);
         }
