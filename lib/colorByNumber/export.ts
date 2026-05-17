@@ -31,7 +31,6 @@ import {
   rgbToExportPaletteColor,
   paletteIndexToLabel,
   rgbToHex,
-  type RGB,
 } from "@/lib/utils";
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
@@ -376,7 +375,7 @@ export const calculatePaletteLayout = (
 
   let codeToColor: Map<string, string>;
   let codeToCount: Map<string, number>;
-  let codeToName = new Map<string, string>();
+  const codeToName = new Map<string, string>();
 
   if (options?.removeBgColorCells) {
     // Export palette mode: remap to 23 restricted colors and merge duplicates
@@ -1635,7 +1634,6 @@ export const exportPaletteToCanvas = (
   // Step 2: Remap each code's color to the nearest restricted export palette color
   //         and merge codes that map to the same color name (no duplicate names)
   const codeToColor = new Map<string, string>();
-  const codeToPaletteIndex = new Map<string, number>();
   const codeToCount = new Map<string, number>();
   const codeToName = new Map<string, string>(); // code → export palette color name (correct, computed during merge)
   const nameToCode = new Map<string, string>(); // export palette name → first code that mapped to it
@@ -1718,7 +1716,6 @@ export const exportPaletteToCanvas = (
   const [bgR, bgG, bgB] = parseHex(bgHex);
   const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
   const isDarkBg = options?.transparentBg ? false : bgBrightness < 128;
-  const textColor = "#ffffff";
   const separatorColor = "rgba(255,255,255,0.15)";
 
   // ── Swatch shape ──
@@ -1760,6 +1757,7 @@ export const exportPaletteToCanvas = (
   const sDW = PAL_DROPLET_W; // droplet width ~21px
   const sDGap = PAL_DROPLET_GAP; // gap between droplets ~7.5px
   const sGap = PAL_SWD_GAP; // swatch→droplets gap
+  const sDropletTopPad = Math.round(0.085 * EXPORT_DPI); // extra top padding so droplets clear angled pattern previews
   const sArcGap = PAL_ARC_GAP;
   const sArcRadius = PAL_ARC_RADIUS;
   const sArcCircleR = PAL_ARC_CIRCLE_R;
@@ -1791,8 +1789,8 @@ export const exportPaletteToCanvas = (
     Math.floor((contentW + hGap) / (itemW + hGap)),
   );
 
-  // Item height: swatch + gap + droplets + inputGap + inputH
-  const itemH = sSW + sGap + sDH + sInputGap + sInputH;
+  // Item height: swatch + gap + droplet top padding + droplets + inputGap + inputH
+  const itemH = sSW + sGap + sDropletTopPad + sDH + sInputGap + sInputH;
   const vGap = Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
 
   const numRows = Math.ceil(codes.length / itemsPerRow);
@@ -1859,8 +1857,6 @@ export const exportPaletteToCanvas = (
     const cx = ix + itemCx * scale;
     const swCY = iy + sw / 2;
 
-    const color = codeToColor.get(code) ?? "#999999";
-
     // ── Swatch: white shape ──
     drawPalSwatch(ctx, cx, swCY, sw, shape, "#ffffff");
 
@@ -1876,7 +1872,7 @@ export const exportPaletteToCanvas = (
     ctx.fillText(displayCode, cx, swCY);
 
     // ── Droplets below swatch (theme-colored) ──
-    const dropTop = iy + sw + sGap * scale;
+    const dropTop = iy + sw + (sGap + sDropletTopPad) * scale;
     const dW = sDW * scale;
     const dH = sDH * scale;
     const dGapS = sDGap * scale;
@@ -1975,7 +1971,7 @@ export const exportPaletteToCanvas = (
     // ── Input box below droplets ──
     const scaledInputH = sInputH * scale;
     const scaledInputW = sInputW * scale;
-    const inputTop = iy + (sSW + sGap + sDH + sInputGap) * scale;
+    const inputTop = iy + (sSW + sGap + sDropletTopPad + sDH + sInputGap) * scale;
     const inputLeft = cx - scaledInputW / 2;
     const inputRadius = Math.min(scaledInputH * 0.25, 6);
 
