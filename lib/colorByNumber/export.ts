@@ -451,7 +451,7 @@ export const calculatePaletteLayout = (
     scale = 0.8; // Scale up for left column visibility (was 0.6)
   } else {
     // Logic for horizontal bottom (optional/legacy now?)
-    itemsPerRow = 7;
+    itemsPerRow = 6;
   }
 
   const sc = scale;
@@ -1784,9 +1784,10 @@ export const exportPaletteToCanvas = (
   // Horizontal gap between items
   const hGap = Math.round(0.4 * EXPORT_DPI); // Increased horizontal gap for spacious layout
   // Items per row
+  const maxItemsPerRow = 6;
   const itemsPerRow = Math.max(
     1,
-    Math.floor((contentW + hGap) / (itemW + hGap)),
+    Math.min(maxItemsPerRow, Math.floor((contentW + hGap) / (itemW + hGap))),
   );
 
   // Item height: swatch + gap + droplet top padding + droplets + inputGap + inputH
@@ -1849,8 +1850,11 @@ export const exportPaletteToCanvas = (
   codes.forEach((code, i) => {
     const row = Math.floor(i / itemsPerRow);
     const col = i % itemsPerRow;
+    const rowItemCount = Math.min(itemsPerRow, codes.length - row * itemsPerRow);
+    const rowW = rowItemCount * itemW + Math.max(0, rowItemCount - 1) * hGap;
+    const rowStartX = padX + (contentW - rowW * scale) / 2;
 
-    const ix = padX + col * (itemW + hGap) * scale;
+    const ix = rowStartX + col * (itemW + hGap) * scale;
     const iy = startY + row * (itemH + vGap) * scale;
 
     const sw = sSW * scale;
@@ -2051,7 +2055,7 @@ export const exportPaletteToCanvas = (
     ctx.restore();
 
     // ── Separator line between rows ──
-    if (row < numRows - 1 && col === itemsPerRow - 1) {
+    if (row < numRows - 1 && col === rowItemCount - 1) {
       const lineY = iy + itemH * scale + (vGap * scale) / 2;
       ctx.beginPath();
       ctx.moveTo(padX, lineY);
