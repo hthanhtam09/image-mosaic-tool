@@ -8,7 +8,7 @@ import Image from "next/image";
 
 interface PdfSetupStepProps {
     directImages: DirectImage[];
-    uploadedFolders: { color: boolean; uncolor: boolean; palette: boolean };
+    uploadedFolders: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean };
     prefixPages: string[];
     prefixInputRef: React.RefObject<HTMLInputElement | null>;
     handlePrefixChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -31,7 +31,7 @@ interface PdfSetupStepProps {
     setGlobalTheme: (theme: string) => void;
     setCurrentStep: (step: 1 | 2 | 3) => void;
     setDirectImages: (imgs: DirectImage[]) => void;
-    setUploadedFolders: (status: { color: boolean; uncolor: boolean; palette: boolean }) => void;
+    setUploadedFolders: (status: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean }) => void;
     handleGeneratePdf: () => void;
     showStoryInput: boolean;
     setShowStoryInput: (val: boolean) => void;
@@ -40,6 +40,10 @@ interface PdfSetupStepProps {
     setPaletteImages: (imgs: string[]) => void;
     paletteInputRef: React.RefObject<HTMLInputElement | null>;
     handlePaletteChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    solutionCollagePages: string[];
+    setSolutionCollagePages: (pages: string[]) => void;
+    solutionCollageInputRef: React.RefObject<HTMLInputElement | null>;
+    handleSolutionCollageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export default function PdfSetupStep({
@@ -76,6 +80,10 @@ export default function PdfSetupStep({
     setPaletteImages,
     paletteInputRef,
     handlePaletteChange,
+    solutionCollagePages,
+    setSolutionCollagePages,
+    solutionCollageInputRef,
+    handleSolutionCollageChange,
 }: PdfSetupStepProps) {
     return (
         <div className="flex-1 flex flex-col py-2 overflow-y-auto no-scrollbar">
@@ -90,7 +98,7 @@ export default function PdfSetupStep({
                             <h2 className="text-sm font-bold text-(--text-primary)">Folder Mode Active</h2>
                             <p className="text-[10px] text-(--text-secondary) uppercase tracking-wider font-semibold">{directImages.length} Pairs Loaded</p>
                         </div>
-                        <div className="flex gap-2 ml-4">
+                        <div className="flex flex-wrap gap-2 ml-4">
                             <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold border shadow-sm transition-all duration-500 ${uploadedFolders.color ? 'bg-green-500 border-green-400 text-white' : 'bg-gray-500/5 border-gray-500/10 text-(--text-muted)'}`}>
                                 <div className={`w-2.5 h-2.5 rounded-full flex items-center justify-center ${uploadedFolders.color ? 'bg-white text-green-600' : 'bg-gray-500/20'}`}>
                                     <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
@@ -109,6 +117,14 @@ export default function PdfSetupStep({
                                         <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
                                     </div>
                                     Palette
+                                </div>
+                            )}
+                            {uploadedFolders.solutionsCollage && (
+                                <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold border shadow-sm transition-all duration-500 bg-cyan-500 border-cyan-400 text-white`}>
+                                    <div className={`w-2.5 h-2.5 rounded-full flex items-center justify-center bg-white text-cyan-600`}>
+                                        <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
+                                    </div>
+                                    Solutions
                                 </div>
                             )}
                         </div>
@@ -183,8 +199,8 @@ export default function PdfSetupStep({
                     {bgImages.length === 0 && <div className="absolute top-4 right-4 bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Optional</div>}
                 </div>
 
-                {/* 3. CSV Text Content OR Palette Images */}
-                {!globalExportPalette ? (
+                {/* 3. CSV Text Content */}
+                {!globalExportPalette && directImages.length === 0 && (
                     <div className="bg-(--bg-secondary) rounded-2xl p-5 border border-(--border-subtle) flex flex-col items-center justify-center relative overflow-hidden group">
                         <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
@@ -237,7 +253,9 @@ export default function PdfSetupStep({
                         </div>
                         {csvFileName && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded ({csvData.length})</div>}
                     </div>
-                ) : (
+                )}
+
+                {(globalExportPalette || directImages.length > 0) && (
                     <div className="bg-(--bg-secondary) rounded-2xl p-5 border border-(--border-subtle) flex flex-col items-center justify-center relative overflow-hidden group">
                         <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
@@ -247,28 +265,15 @@ export default function PdfSetupStep({
                             <h3 className="text-sm font-semibold text-(--text-primary) mb-1">Palette Images</h3>
                             <p className="text-xs text-(--text-secondary) text-center mb-5">Upload custom palettes for the left pages</p>
 
-                            {directImages.length > 0 ? (
-                                <div className="flex flex-col items-center justify-center bg-black/5 rounded-xl border border-dashed border-(--border-subtle) w-full py-6">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${uploadedFolders.palette ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                                        {uploadedFolders.palette ? (
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
-                                        ) : (
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                                        )}
-                                    </div>
-                                    <span className="text-sm font-medium text-(--text-primary)">
-                                        {uploadedFolders.palette ? "Loaded from Folder Mode" : "No Palette Folder"}
-                                    </span>
-                                </div>
-                            ) : paletteImages.length > 0 ? (
+                            {paletteImages.some(Boolean) ? (
                                 <div className="flex flex-col items-center w-full gap-3">
                                     <div className="flex items-center gap-2 max-w-full overflow-x-auto pb-2 no-scrollbar">
-                                        {paletteImages.map((img, i) => (
+                                        {paletteImages.map((img, i) => img ? (
                                             <div key={i} className="shrink-0 relative w-12 h-16 rounded border border-(--border-default) overflow-hidden shadow-sm">
                                                 <Image src={img} alt={`Palette ${i + 1}`} width={48} height={64} className="w-full h-full object-cover" />
                                                 <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)] rounded" />
                                             </div>
-                                        ))}
+                                        ) : null)}
                                     </div>
                                     <div className="flex gap-2">
                                         <button onClick={() => setPaletteImages([])} className="px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">Clear</button>
@@ -280,7 +285,53 @@ export default function PdfSetupStep({
                             )}
                             <input ref={paletteInputRef} type="file" accept="image/png,image/jpeg" multiple className="hidden" onChange={handlePaletteChange} />
                         </div>
-                        {paletteImages.length > 0 && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded ({paletteImages.length})</div>}
+                        {paletteImages.some(Boolean) && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded ({paletteImages.filter(Boolean).length})</div>}
+                    </div>
+                )}
+
+                {(globalExportPalette || directImages.length > 0) && (
+                    <div className="bg-(--bg-secondary) rounded-2xl p-5 border border-(--border-subtle) flex flex-col items-center justify-center relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
+                            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center mb-4">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+                            </div>
+                            <h3 className="text-sm font-semibold text-(--text-primary) mb-1">Solutions Collage Pages</h3>
+                            <p className="text-xs text-(--text-secondary) text-center mb-5">
+                                {directImages.length > 0 ? "Import solution collage pages for the answer section" : "Auto-added from converted color pages"}
+                            </p>
+
+                            {solutionCollagePages.length > 0 ? (
+                                <div className="flex flex-col items-center w-full gap-3">
+                                    <div className="flex items-center gap-2 max-w-full overflow-x-auto pb-2 no-scrollbar">
+                                        {solutionCollagePages.map((page, i) => (
+                                            <div key={i} className="shrink-0 relative w-12 h-16 rounded border border-(--border-default) overflow-hidden shadow-sm">
+                                                <Image src={page} alt={`Solutions collage ${i + 1}`} width={48} height={64} className="w-full h-full object-cover" />
+                                                <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)] rounded" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setSolutionCollagePages([])} className="px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">Clear</button>
+                                        {directImages.length > 0 && (
+                                            <button onClick={() => solutionCollageInputRef.current?.click()} className="px-3 py-1.5 text-xs font-medium text-(--accent) hover:bg-(--accent)/10 rounded-lg transition-colors">Change Images</button>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : directImages.length > 0 ? (
+                                <button onClick={() => solutionCollageInputRef.current?.click()} className="px-4 py-2 bg-(--bg-primary) border border-(--border-default) rounded-lg shadow-sm text-sm font-medium hover:bg-black/5 transition-colors">Upload Images</button>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center bg-black/5 rounded-xl border border-(--border-subtle) w-full py-6">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center mb-2 bg-green-500/20 text-green-500">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                                    </div>
+                                    <span className="text-sm font-medium text-(--text-primary)">Ready to Auto Add</span>
+                                </div>
+                            )}
+                            <input ref={solutionCollageInputRef} type="file" accept="image/png,image/jpeg" multiple className="hidden" onChange={handleSolutionCollageChange} />
+                        </div>
+                        {solutionCollagePages.length > 0 && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded ({solutionCollagePages.length})</div>}
+                        {solutionCollagePages.length === 0 && <div className="absolute top-4 right-4 bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Optional</div>}
                     </div>
                 )}
 
@@ -360,7 +411,8 @@ export default function PdfSetupStep({
                         setCurrentStep(1);
                         if (directImages.length > 0) {
                             setDirectImages([]);
-                            setUploadedFolders({ color: false, uncolor: false, palette: false });
+                            setUploadedFolders({ color: false, uncolor: false, palette: false, solutionsCollage: false });
+                            setSolutionCollagePages([]);
                         }
                     }}
                     className="px-6 py-2 text-sm font-medium text-(--text-secondary) border border-(--border-default) rounded-lg hover:bg-white/5 transition-colors"

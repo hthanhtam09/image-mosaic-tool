@@ -272,10 +272,10 @@ export const generateBookPdf = async (
       let paletteImgData: string | undefined;
 
       if (globalOptions.globalExportPalette) {
-          if (directImages && directImages.length > 0 && directImages[i]?.paletteUrl) {
-              paletteImgData = await removeBackgroundFromDataUrl(directImages[i].paletteUrl!);
-          } else if (globalOptions.paletteImages && globalOptions.paletteImages.length > i && globalOptions.paletteImages[i]) {
+          if (globalOptions.paletteImages && globalOptions.paletteImages.length > i && globalOptions.paletteImages[i]) {
               paletteImgData = await removeBackgroundFromDataUrl(globalOptions.paletteImages[i]);
+          } else if (directImages && directImages.length > 0 && directImages[i]?.paletteUrl) {
+              paletteImgData = await removeBackgroundFromDataUrl(directImages[i].paletteUrl!);
           } else if (project?.data) {
               // Render Palette Image mixed with Background
               const canvasPalette = exportPaletteToCanvas(project.data, {

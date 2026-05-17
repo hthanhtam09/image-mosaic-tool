@@ -52,12 +52,14 @@ export default function Dashboard() {
     const prefixInputRef = useRef<HTMLInputElement>(null);
     const suffixInputRef = useRef<HTMLInputElement>(null);
     const paletteInputRef = useRef<HTMLInputElement>(null);
+    const solutionCollageInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const transparentImageInputRef = useRef<HTMLInputElement>(null);
     const dirInputRef = useRef<HTMLInputElement>(null);
     const [directImages, setDirectImages] = useState<{ name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }[]>([]);
     const [paletteImages, setPaletteImages] = useState<string[]>([]);
-    const [uploadedFolders, setUploadedFolders] = useState<{ color: boolean, uncolor: boolean, palette: boolean }>({ color: false, uncolor: false, palette: false });
+    const [solutionCollagePages, setSolutionCollagePages] = useState<string[]>([]);
+    const [uploadedFolders, setUploadedFolders] = useState<{ color: boolean, uncolor: boolean, palette: boolean, solutionsCollage: boolean }>({ color: false, uncolor: false, palette: false, solutionsCollage: false });
     const [showStoryInput, setShowStoryInput] = useState(true);
     const [isProcessingFolder, setIsProcessingFolder] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
@@ -222,11 +224,24 @@ export default function Dashboard() {
             let hasColor = false;
             let hasUncolor = false;
             let hasPalette = false;
+            let hasSolutionsCollage = false;
             const groups: Record<string, { color?: File; uncolor?: File; palette?: File }> = {};
+            const solutionCollageFiles: File[] = [];
 
             for (const file of files) {
                 const relPath = file.webkitRelativePath.toLowerCase();
                 const name = file.name;
+
+                if (
+                    relPath.includes('/solutions_collage/') ||
+                    relPath.startsWith('solutions_collage/') ||
+                    relPath.includes('/solution_collage/') ||
+                    relPath.startsWith('solution_collage/')
+                ) {
+                    solutionCollageFiles.push(file);
+                    hasSolutionsCollage = true;
+                    continue;
+                }
 
                 if (!groups[name]) groups[name] = {};
 
@@ -252,7 +267,8 @@ export default function Dashboard() {
             setUploadedFolders(prev => ({
                 color: prev.color || hasColor,
                 uncolor: prev.uncolor || hasUncolor,
-                palette: prev.palette || hasPalette
+                palette: prev.palette || hasPalette,
+                solutionsCollage: prev.solutionsCollage || hasSolutionsCollage,
             }));
 
             const readFile = (f: File): Promise<string> => new Promise((resolve, reject) => {
@@ -261,6 +277,14 @@ export default function Dashboard() {
                 rd.onerror = reject;
                 rd.readAsDataURL(f);
             });
+
+            if (solutionCollageFiles.length > 0) {
+                const sortedSolutionCollageFiles = solutionCollageFiles.sort((a, b) =>
+                    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+                );
+                const pages = await Promise.all(sortedSolutionCollageFiles.map(readFile));
+                setSolutionCollagePages(pages);
+            }
 
             const newDirectImages: { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }[] = [];
             for (const [name, g] of Object.entries(groups)) {
@@ -280,7 +304,9 @@ export default function Dashboard() {
                     // Filter out existing matches to avoid duplicates if re-uploading
                     const filtered = prev.filter(p => !newDirectImages.some(n => n.name === p.name));
                     const updated = [...filtered, ...newDirectImages];
-                    return updated.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+                    const sorted = updated.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+                    setPaletteImages(sorted.map(img => img.paletteUrl ?? ""));
+                    return sorted;
                 });
             }
             setIsProcessingFolder(false);
@@ -343,6 +369,19 @@ export default function Dashboard() {
         if (files.length === 0) return;
         const dataUrls = await Promise.all(files.map(readFileAsDataURL));
         setPaletteImages(dataUrls);
+        if (directImages.length > 0) {
+            setUploadedFolders(prev => ({ ...prev, palette: true }));
+        }
+    };
+
+    const handleSolutionCollageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        if (files.length === 0) return;
+        const dataUrls = await Promise.all(files.map(readFileAsDataURL));
+        setSolutionCollagePages(dataUrls);
+        if (directImages.length > 0) {
+            setUploadedFolders(prev => ({ ...prev, solutionsCollage: true }));
+        }
     };
 
     const handleCsvChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -367,62 +406,6 @@ export default function Dashboard() {
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
-            // ── Generate Solution Gallery Pages ──
-            let solutionPages: string[] = [];
-            const theme = getThemeById(globalTheme);
-
-            if (directImages.length > 0) {
-                // Folder Mode: Load colorUrl from directImages
-                const colorCanvases: HTMLCanvasElement[] = [];
-                for (const img of directImages) {
-                    const canvas = await new Promise<HTMLCanvasElement>((resolve) => {
-                        const el = new Image();
-                        el.onload = () => {
-                            const maxDim = 600;
-                            const scale = Math.min(1, maxDim / Math.max(el.width, el.height));
-                            const thumbCanvas = document.createElement("canvas");
-                            thumbCanvas.width = el.width * scale;
-                            thumbCanvas.height = el.height * scale;
-                            const ctx = thumbCanvas.getContext("2d");
-                            ctx?.drawImage(el, 0, 0, thumbCanvas.width, thumbCanvas.height);
-                            resolve(thumbCanvas);
-                        };
-                        el.src = img.colorUrl;
-                    });
-                    colorCanvases.push(canvas);
-                    await new Promise(r => setTimeout(r, 0));
-                }
-                const collagePages = exportCollagePagesToCanvas(colorCanvases, { bgColor: theme.backgroundColor });
-                solutionPages = collagePages.map(c => c.toDataURL("image/png"));
-            } else {
-                // Standard Mode: Generate colored canvases from projects
-                const colorCanvases: HTMLCanvasElement[] = [];
-                for (const p of readyProjects) {
-                    const fullCanvas = exportToCanvas(p.data!, p.filled, {
-                        showCodes: false,
-                        colored: true,
-                        showPalette: false,
-                        partialColorMode: p.partialColorMode,
-                        bgColor: theme.backgroundColor,
-                        transparentBg: p.removeBackground,
-                        tightCrop: p.removeBackground
-                    });
-                    const maxDim = 600;
-                    const scale = Math.min(1, maxDim / Math.max(fullCanvas.width, fullCanvas.height));
-                    const thumbCanvas = document.createElement("canvas");
-                    thumbCanvas.width = fullCanvas.width * scale;
-                    thumbCanvas.height = fullCanvas.height * scale;
-                    const ctx = thumbCanvas.getContext("2d");
-                    ctx?.drawImage(fullCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
-                    colorCanvases.push(thumbCanvas);
-                    fullCanvas.width = 0;
-                    fullCanvas.height = 0;
-                    await new Promise(r => setTimeout(r, 0));
-                }
-                const collagePages = exportCollagePagesToCanvas(colorCanvases, { bgColor: theme.backgroundColor });
-                solutionPages = collagePages.map(c => c.toDataURL("image/png"));
-            }
-
             const blob = await generateBookPdf(
                 {
                     projects: readyProjects.map(p => ({
@@ -440,13 +423,15 @@ export default function Dashboard() {
                     csvData,
                     prefixPages,
                     suffixPages,
-                    solutionPages,
+                    solutionPages: directImages.length > 0 ? solutionCollagePages : globalExportPalette ? solutionCollagePages : [],
                     globalOptions: {
                         showCodes: globalShowNumbers,
                         showPalette: globalShowPalette,
                         theme: globalTheme,
                         showStoryInput: showStoryInput,
-                        globalExportPalette: directImages.length > 0 ? directImages.some(img => !!img.paletteUrl) : globalExportPalette,
+                        globalExportPalette: directImages.length > 0
+                            ? directImages.some(img => !!img.paletteUrl) || paletteImages.some(Boolean)
+                            : globalExportPalette,
                         paletteImages: paletteImages
                     },
                 },
@@ -589,14 +574,13 @@ export default function Dashboard() {
 
     const handleNextToSetup = async () => {
         setIsPreparingStep2(true);
+        const readyProjects = [...projects]
+            .filter(p => p.status === 'completed')
+            .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        const theme = getThemeById(globalTheme);
 
         // Auto-fill palette images if Export Palette is enabled and we have converted projects (Standard Mode)
-        if (globalExportPalette && projects.some(p => p.status === 'completed') && directImages.length === 0) {
-            const readyProjects = [...projects]
-                .filter(p => p.status === 'completed')
-                .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-            
-            const theme = getThemeById(globalTheme);
+        if (globalExportPalette && readyProjects.length > 0 && directImages.length === 0) {
             const generatedPalettes: string[] = [];
             for (let idx = 0; idx < readyProjects.length; idx++) {
                 const project = readyProjects[idx];
@@ -615,6 +599,38 @@ export default function Dashboard() {
             }
             
             setPaletteImages(generatedPalettes);
+        }
+
+        if (globalExportPalette && readyProjects.length > 0 && directImages.length === 0) {
+            const colorCanvases: HTMLCanvasElement[] = [];
+            for (const project of readyProjects) {
+                if (!project.data) continue;
+                const fullCanvas = exportToCanvas(project.data, project.filled, {
+                    showCodes: false,
+                    colored: true,
+                    showPalette: false,
+                    partialColorMode: project.partialColorMode,
+                    bgColor: theme.backgroundColor,
+                    transparentBg: project.removeBackground,
+                    tightCrop: project.removeBackground,
+                });
+                const maxDim = 600;
+                const scale = Math.min(1, maxDim / Math.max(fullCanvas.width, fullCanvas.height));
+                const thumbCanvas = document.createElement("canvas");
+                thumbCanvas.width = fullCanvas.width * scale;
+                thumbCanvas.height = fullCanvas.height * scale;
+                const ctx = thumbCanvas.getContext("2d");
+                ctx?.drawImage(fullCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+                colorCanvases.push(thumbCanvas);
+                fullCanvas.width = 0;
+                fullCanvas.height = 0;
+                await new Promise(r => setTimeout(r, 0));
+            }
+
+            const generatedSolutionPages = exportCollagePagesToCanvas(colorCanvases, {
+                bgColor: theme.backgroundColor,
+            });
+            setSolutionCollagePages(generatedSolutionPages.map(c => c.toDataURL("image/png")));
         }
 
         // Emulate brief loading for better UX
@@ -823,6 +839,10 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
                     setPaletteImages={setPaletteImages}
                     paletteInputRef={paletteInputRef}
                     handlePaletteChange={handlePaletteChange}
+                    solutionCollagePages={solutionCollagePages}
+                    setSolutionCollagePages={setSolutionCollagePages}
+                    solutionCollageInputRef={solutionCollageInputRef}
+                    handleSolutionCollageChange={handleSolutionCollageChange}
                 />
             )}
 

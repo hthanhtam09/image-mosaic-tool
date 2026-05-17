@@ -5,7 +5,7 @@ interface EmptyStateProps {
     dirInputRef: React.RefObject<HTMLInputElement | null>;
     handleDirUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     isProcessingFolder: boolean;
-    uploadedFolders: { color: boolean; uncolor: boolean; palette: boolean };
+    uploadedFolders: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean };
     imageInputRef: React.RefObject<HTMLInputElement | null>;
     handleImageFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 
@@ -129,10 +129,10 @@ export default function EmptyState({
                         </div>
                         <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Folder Upload</h2>
                         <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
-                            Bulk upload images with pre-separated <b>color/</b>, <b>uncolor/</b>, and optional <b>palette/</b> subfolders.
+                            Bulk upload images with pre-separated <b>color/</b>, <b>uncolor/</b>, optional <b>palette/</b>, and <b>solutions_collage/</b> subfolders.
                         </p>
 
-                        <div className="flex gap-4 mb-12">
+                        <div className="flex flex-wrap justify-center gap-4 mb-12 max-w-3xl">
                             <div className={`flex flex-col items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all duration-500 min-w-[120px] ${uploadedFolders.color
                                 ? 'bg-green-500/20 border-green-500 text-green-400 shadow-[0_0_20px_rgba(34,197,94,0.2)]'
                                 : 'bg-white/5 border-white/10 text-[var(--text-muted)]'}`}>
@@ -157,6 +157,17 @@ export default function EmptyState({
                                 </div>
                                 <div className="flex flex-col items-center">
                                     <span>Palette</span>
+                                    <span className="text-[10px] font-normal opacity-70">(Optional)</span>
+                                </div>
+                            </div>
+                            <div className={`flex flex-col items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all duration-500 min-w-[120px] ${uploadedFolders.solutionsCollage
+                                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
+                                : 'bg-white/5 border-white/10 text-[var(--text-muted)]'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${uploadedFolders.solutionsCollage ? 'bg-cyan-500 text-white' : 'bg-white/10'}`}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
+                                </div>
+                                <div className="flex flex-col items-center">
+                                    <span>Solutions</span>
                                     <span className="text-[10px] font-normal opacity-70">(Optional)</span>
                                 </div>
                             </div>
