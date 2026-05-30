@@ -42,6 +42,10 @@ const STORAGE_KEY = "color-by-number-progress";
 /** Page padding in layout units (applied before fitting to letter) */
 export const PAGE_PADDING_X = 90; // 0.3 inch * 300 DPI = 90px
 export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
+export const DOT_CODE_PAGE_PADDING_X = 75; // 0.25 inch * 300 DPI: tighter but still KDP-safe
+
+export const getPagePaddingX = (data: ColorByNumberData): number =>
+  data.gridType === "dot-code" ? DOT_CODE_PAGE_PADDING_X : PAGE_PADDING_X;
 
 export const saveProgressToStorage = (
   dataId: string,
@@ -1386,7 +1390,7 @@ export const exportToCanvas = (
   const cropSettings = (() => {
     let pageW = EXPORT_PAGE_W;
     let pageH = EXPORT_PAGE_H;
-    let pX = PAGE_PADDING_X;
+    let pX = getPagePaddingX(data);
     let pY = PAGE_PADDING_Y;
 
     if (tightCrop) {
@@ -1408,7 +1412,7 @@ export const exportToCanvas = (
   })();
 
   const needsPalette = showPalette;
-  const padX = showPalette ? PAGE_PADDING_X : cropSettings.padX;
+  const padX = showPalette ? getPagePaddingX(data) : cropSettings.padX;
   const padY = showPalette ? PAGE_PADDING_Y : cropSettings.padY;
 
   const pageW = cropSettings.pageW;
@@ -1446,6 +1450,16 @@ export const exportToCanvas = (
 
   // 4. Fit grid into gridAvailableH/W
   const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
+  const gridDimsForScale = getGridDimensions(data);
+  const gridScaleX =
+    data.gridType === "dot-code" && gridDimsForScale.width > 0
+      ? gridAvailableW / gridDimsForScale.width
+      : gridLayout.scale;
+  const gridScaleY = gridLayout.scale;
+  const gridOffsetX =
+    data.gridType === "dot-code"
+      ? 0
+      : gridLayout.offsetX;
 
   // 5. Calculate vertical centering
 
@@ -1506,13 +1520,13 @@ export const exportToCanvas = (
     PALETTE_X_OFFSET +
     paletteWidth +
     (paletteWidth > 0 ? PALETTE_GAP : 0) +
-    gridLayout.offsetX +
+    gridOffsetX +
     GRID_CLIP_PADDING +
     (tightCrop ? -visualBounds.minX : 0); // Compensate for visual minX bleed in tight mode
 
   const gridYOffset = tightCrop ? -visualBounds.minY : 0;
   ctx.translate(gridStartX, gridVisualTopPos + gridYOffset);
-  ctx.scale(gridLayout.scale, gridLayout.scale);
+  ctx.scale(gridScaleX, gridScaleY);
 
   const strokeColor = "#000000";
   ctx.strokeStyle = strokeColor;

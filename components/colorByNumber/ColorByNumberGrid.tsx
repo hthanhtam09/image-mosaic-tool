@@ -24,8 +24,8 @@ import {
   type PaletteLayout,
   type PartialColorMode,
   PAL_DROPLET_COUNT,
-  PAGE_PADDING_X,
   PAGE_PADDING_Y,
+  getPagePaddingX,
 } from "@/lib/colorByNumber/export";
 import { getThemeById } from "@/lib/colorByNumber/themes";
 import type { ColorByNumberData, ColorByNumberCell, PageLayout } from "@/lib/colorByNumber";
@@ -1523,8 +1523,15 @@ const PageGrid = ({
     paletteVisualTop,
     gridVisualTop,
   } = layout;
+  const pagePaddingX = getPagePaddingX(data);
 
   const gridDims = getGridDimensions(data);
+  const gridScaleX =
+    data.gridType === "dot-code" && gridDims.width > 0
+      ? gridLayout.boxW / gridDims.width
+      : gridLayout.scale;
+  const gridScaleY = gridLayout.scale;
+  const gridOffsetX = data.gridType === "dot-code" ? 0 : gridLayout.offsetX;
 
   const CellComponent =
     data.gridType === "honeycomb"
@@ -1584,7 +1591,7 @@ const PageGrid = ({
 
       {/* Palette Column (only show if not removeBackground) */}
       {paletteLayout && !removeBackground && (
-        <g transform={`translate(${PAGE_PADDING_X - 40}, ${paletteVisualTop})`}>
+        <g transform={`translate(${pagePaddingX - 40}, ${paletteVisualTop})`}>
           <PaletteColumnSVG data={data} layout={paletteLayout} />
         </g>
       )}
@@ -1592,7 +1599,7 @@ const PageGrid = ({
       {/* Grid centered in its available area */}
       {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 40 offset */}
       <g
-        transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + (layout.gridVisualLeftOffset || 0) + (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0)}, ${gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0)}) scale(${gridLayout.scale})`}
+        transform={`translate(${pagePaddingX - 40 + (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) + gridOffsetX + (layout.gridVisualLeftOffset || 0) + (removeBackground ? -layout.visualBounds.minX * gridScaleX : 0)}, ${gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -layout.visualBounds.minY * gridScaleY : 0)}) scale(${gridScaleX}, ${gridScaleY})`}
       >
         <g transform={`translate(0, 0)`}>
           {data.gridType === "dot-code" &&
@@ -1693,8 +1700,8 @@ export default function ColorByNumberGrid({
     if (!data) return null;
 
     // 1. Determine "Safe Area" based on fixed margins
-    const padX = showPalette ? PAGE_PADDING_X : 0;
-    const padY = showPalette ? PAGE_PADDING_Y : 0;
+    const padX = getPagePaddingX(data);
+    const padY = PAGE_PADDING_Y;
 
     const safeW = LETTER_OUTPUT_WIDTH - padX * 2;
     const safeH = LETTER_OUTPUT_HEIGHT - padY * 2;
@@ -1856,12 +1863,18 @@ export default function ColorByNumberGrid({
       // Inverse PageGrid transform
       const { gridLayout, paletteLayout, gridVisualTop, gridVisualLeftOffset = 0, visualBounds } = pageLayout;
       const removeBackground = activeProject?.removeBackground;
-      const gridXOffset = PAGE_PADDING_X - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + gridVisualLeftOffset + (removeBackground ? -visualBounds.minX * gridLayout.scale : 0);
-      const gridYOffset = gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -visualBounds.minY * gridLayout.scale : 0);
-      const gridScale = gridLayout.scale;
+      const gridDims = getGridDimensions(data);
+      const gridScaleX =
+        data.gridType === "dot-code" && gridDims.width > 0
+          ? gridLayout.boxW / gridDims.width
+          : gridLayout.scale;
+      const gridScaleY = gridLayout.scale;
+      const gridOffsetX = data.gridType === "dot-code" ? 0 : gridLayout.offsetX;
+      const gridXOffset = getPagePaddingX(data) - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridOffsetX + gridVisualLeftOffset + (removeBackground ? -visualBounds.minX * gridScaleX : 0);
+      const gridYOffset = gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -visualBounds.minY * gridScaleY : 0);
 
-      const cellX = (hitX - gridXOffset) / gridScale;
-      const cellY = (hitY - gridYOffset) / gridScale;
+      const cellX = (hitX - gridXOffset) / gridScaleX;
+      const cellY = (hitY - gridYOffset) / gridScaleY;
 
       const cell = hitTestCell(cellX, cellY, data);
       if (cell) {
