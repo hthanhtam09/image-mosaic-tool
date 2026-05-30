@@ -1450,16 +1450,6 @@ export const exportToCanvas = (
 
   // 4. Fit grid into gridAvailableH/W
   const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
-  const gridDimsForScale = getGridDimensions(data);
-  const gridScaleX =
-    data.gridType === "dot-code" && gridDimsForScale.width > 0
-      ? gridAvailableW / gridDimsForScale.width
-      : gridLayout.scale;
-  const gridScaleY = gridLayout.scale;
-  const gridOffsetX =
-    data.gridType === "dot-code"
-      ? 0
-      : gridLayout.offsetX;
 
   // 5. Calculate vertical centering
 
@@ -1520,13 +1510,13 @@ export const exportToCanvas = (
     PALETTE_X_OFFSET +
     paletteWidth +
     (paletteWidth > 0 ? PALETTE_GAP : 0) +
-    gridOffsetX +
+    gridLayout.offsetX +
     GRID_CLIP_PADDING +
     (tightCrop ? -visualBounds.minX : 0); // Compensate for visual minX bleed in tight mode
 
   const gridYOffset = tightCrop ? -visualBounds.minY : 0;
   ctx.translate(gridStartX, gridVisualTopPos + gridYOffset);
-  ctx.scale(gridScaleX, gridScaleY);
+  ctx.scale(gridLayout.scale, gridLayout.scale);
 
   const strokeColor = "#000000";
   ctx.strokeStyle = strokeColor;

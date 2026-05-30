@@ -1526,12 +1526,6 @@ const PageGrid = ({
   const pagePaddingX = getPagePaddingX(data);
 
   const gridDims = getGridDimensions(data);
-  const gridScaleX =
-    data.gridType === "dot-code" && gridDims.width > 0
-      ? gridLayout.boxW / gridDims.width
-      : gridLayout.scale;
-  const gridScaleY = gridLayout.scale;
-  const gridOffsetX = data.gridType === "dot-code" ? 0 : gridLayout.offsetX;
 
   const CellComponent =
     data.gridType === "honeycomb"
@@ -1599,7 +1593,7 @@ const PageGrid = ({
       {/* Grid centered in its available area */}
       {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 40 offset */}
       <g
-        transform={`translate(${pagePaddingX - 40 + (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) + gridOffsetX + (layout.gridVisualLeftOffset || 0) + (removeBackground ? -layout.visualBounds.minX * gridScaleX : 0)}, ${gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -layout.visualBounds.minY * gridScaleY : 0)}) scale(${gridScaleX}, ${gridScaleY})`}
+        transform={`translate(${pagePaddingX - 40 + (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + (layout.gridVisualLeftOffset || 0) + (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0)}, ${gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0)}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
           {data.gridType === "dot-code" &&
@@ -1863,18 +1857,12 @@ export default function ColorByNumberGrid({
       // Inverse PageGrid transform
       const { gridLayout, paletteLayout, gridVisualTop, gridVisualLeftOffset = 0, visualBounds } = pageLayout;
       const removeBackground = activeProject?.removeBackground;
-      const gridDims = getGridDimensions(data);
-      const gridScaleX =
-        data.gridType === "dot-code" && gridDims.width > 0
-          ? gridLayout.boxW / gridDims.width
-          : gridLayout.scale;
-      const gridScaleY = gridLayout.scale;
-      const gridOffsetX = data.gridType === "dot-code" ? 0 : gridLayout.offsetX;
-      const gridXOffset = getPagePaddingX(data) - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridOffsetX + gridVisualLeftOffset + (removeBackground ? -visualBounds.minX * gridScaleX : 0);
-      const gridYOffset = gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -visualBounds.minY * gridScaleY : 0);
+      const gridXOffset = getPagePaddingX(data) - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + gridVisualLeftOffset + (removeBackground ? -visualBounds.minX * gridLayout.scale : 0);
+      const gridYOffset = gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -visualBounds.minY * gridLayout.scale : 0);
+      const gridScale = gridLayout.scale;
 
-      const cellX = (hitX - gridXOffset) / gridScaleX;
-      const cellY = (hitY - gridYOffset) / gridScaleY;
+      const cellX = (hitX - gridXOffset) / gridScale;
+      const cellY = (hitY - gridYOffset) / gridScale;
 
       const cell = hitTestCell(cellX, cellY, data);
       if (cell) {
