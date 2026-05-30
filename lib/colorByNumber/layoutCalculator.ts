@@ -21,7 +21,8 @@ export interface CellLayout {
     | "puzzle"
     | "islamic"
     | "fish-scale"
-    | "trapezoid";
+    | "trapezoid"
+    | "dot-code";
 }
 
 const CELL_GAP_DEFAULT = 2;
@@ -40,6 +41,18 @@ const getStandardCellLayout = (
   const cy = y * cellSize + cellSize / 2;
   const r = cellSize / 2;
   return { cx, cy, r, shape: "square" };
+};
+
+const getDotCodeCellLayout = (
+  x: number,
+  y: number,
+  cellSize: number,
+  _gap: number,
+): CellLayout => {
+  const cx = x * cellSize + cellSize / 2;
+  const cy = y * cellSize + cellSize / 2;
+  const r = cellSize / 2;
+  return { cx, cy, r, shape: "dot-code" };
 };
 
 /**
@@ -232,6 +245,8 @@ export const getCellLayout = (
       return getFishScaleCellLayout(x, y, cellSize, gap);
     case "trapezoid":
       return getTrapezoidCellLayout(x, y, cellSize, gap);
+    case "dot-code":
+      return getDotCodeCellLayout(x, y, cellSize, gap);
     case "standard":
     default:
       return getStandardCellLayout(x, y, cellSize, gap);
@@ -287,7 +302,7 @@ export const getGridDimensions = (
     return { width: gridW, height: gridH };
   }
 
-  // Standard and Puzzle grids use the same dimensions
+  // Standard, Puzzle, Islamic, and Dot Code grids use the same dimensions.
   const gridW = width * cellSize;
   const gridH = height * cellSize;
   return { width: gridW, height: gridH };
@@ -347,7 +362,8 @@ export const hitTestCell = (
   if (
     gridType === "standard" ||
     gridType === "puzzle" ||
-    gridType === "islamic"
+    gridType === "islamic" ||
+    gridType === "dot-code"
   ) {
     const col = Math.floor(px / cellSize);
     const row = Math.floor(py / cellSize);

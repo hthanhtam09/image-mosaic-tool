@@ -64,6 +64,114 @@ const getTextColor = (fillColor: string): string => {
   return brightness < 128 ? TEXT_COLOR_ON_DARK : "#999999";
 };
 
+const DotCodeSymbol = ({
+  code,
+  cx,
+  cy,
+  size,
+}: {
+  code: string;
+  cx: number;
+  cy: number;
+  size: number;
+}) => {
+  const strokeWidth = Math.max(1.4, size * 0.13);
+  const half = size / 2;
+  const top = cy - half;
+  const bottom = cy + half;
+  const left = cx - half;
+  const right = cx + half;
+  const common = {
+    stroke: "#000000",
+    strokeWidth,
+    strokeLinecap: "round" as const,
+  };
+
+  if (code === "0") {
+    return <circle cx={cx} cy={cy} r={Math.max(1.2, size * 0.075)} fill="#000000" />;
+  }
+  if (code === "5") {
+    const bleed = Math.max(0.75, size * 0.035);
+    return (
+      <rect
+        x={left - bleed}
+        y={top - bleed}
+        width={size + bleed * 2}
+        height={size + bleed * 2}
+        fill="#000000"
+      />
+    );
+  }
+
+  return (
+    <g>
+      {(code === "1" || code === "3" || code === "4") && (
+        <line x1={left} y1={bottom} x2={right} y2={top} {...common} />
+      )}
+      {(code === "2" || code === "3" || code === "4") && (
+        <line x1={left} y1={top} x2={right} y2={bottom} {...common} />
+      )}
+      {code === "4" && (
+        <>
+          <line x1={cx} y1={top} x2={cx} y2={bottom} {...common} />
+          <line x1={left} y1={cy} x2={right} y2={cy} {...common} />
+        </>
+      )}
+    </g>
+  );
+};
+
+const DotCodeCellBase = ({
+  x,
+  y,
+  size,
+  showBackground = true,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  showBackground?: boolean;
+}) => {
+  const dotR = Math.max(1.1, size * 0.055);
+  const smallR = Math.max(0.55, size * 0.025);
+  const pad = 0;
+  const left = x + pad;
+  const right = x + size - pad;
+  const top = y + pad;
+  const bottom = y + size - pad;
+  const dots: { x: number; y: number; corner?: boolean }[] = [
+    { x: left, y: top, corner: true },
+    { x: right, y: top, corner: true },
+    { x: left, y: bottom, corner: true },
+    { x: right, y: bottom, corner: true },
+  ];
+  const steps = 4;
+
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    dots.push({ x: left + (right - left) * t, y: top });
+    dots.push({ x: left + (right - left) * t, y: bottom });
+    dots.push({ x: left, y: top + (bottom - top) * t });
+    dots.push({ x: right, y: top + (bottom - top) * t });
+  }
+
+  return (
+    <g>
+      {showBackground && <rect x={x} y={y} width={size} height={size} fill="#ffffff" />}
+      {dots.map((dot, i) => (
+        <circle
+          key={i}
+          cx={dot.x}
+          cy={dot.y}
+          r={dot.corner ? dotR : smallR}
+          fill="#000000"
+          opacity={dot.corner ? 1 : 0.28}
+        />
+      ))}
+    </g>
+  );
+};
+
 
 const getRoundedPolygonPath = (
   points: { x: number; y: number }[],
@@ -166,7 +274,9 @@ const PaletteColumnSVG = ({
                 ? "fish-scale"
                 : data.gridType === "trapezoid"
                   ? "trapezoid"
-                  : "square";
+                  : data.gridType === "dot-code"
+                    ? "dot-code"
+                    : "square";
 
   return (
     <g>
@@ -180,7 +290,7 @@ const PaletteColumnSVG = ({
         const yPos = sTop + rowIndex * (itemHeight + verticalGap);
 
         const cx = xPos + itemCx;
-        const color = codeToColor.get(code) ?? "#999";
+        const color = data.gridType === "dot-code" ? "#000000" : codeToColor.get(code) ?? "#999";
         const swCY = yPos + sSW / 2;
 
         let s = sSW;
@@ -191,6 +301,7 @@ const PaletteColumnSVG = ({
         else if (shape === "islamic") s = sSW * 1.7;
         else if (shape === "fish-scale") s = sSW * 1.35;
         else if (shape === "trapezoid") s = sSW * 1.25;
+        else if (shape === "dot-code") s = sSW * 1.15;
 
         // Droplet calculations
         const dropTop = yPos + sSW + sGap;
@@ -266,22 +377,30 @@ const PaletteColumnSVG = ({
                 <circle cx={cx} cy={swCY} r={s / 2} fill={color} stroke="#333" strokeWidth={2} />
               </g>
             )}
+            {shape === "dot-code" && (
+              <g>
+                <DotCodeCellBase x={cx - s / 2} y={swCY - s / 2} size={s} showBackground={false} />
+                <DotCodeSymbol code={code} cx={cx} cy={swCY} size={s} />
+              </g>
+            )}
 
-            <text
-              x={cx}
-              y={swCY}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={sLbl}
-              fontWeight="bold"
-              fontFamily="sans-serif"
-              stroke="rgba(0,0,0,0.5)"
-              strokeWidth={3}
-              paintOrder="stroke"
-              fill="#ffffff"
-            >
-              {code}
-            </text>
+            {shape !== "dot-code" && (
+              <text
+                x={cx}
+                y={swCY}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={sLbl}
+                fontWeight="bold"
+                fontFamily="sans-serif"
+                stroke="rgba(0,0,0,0.5)"
+                strokeWidth={3}
+                paintOrder="stroke"
+                fill="#ffffff"
+              >
+                {code}
+              </text>
+            )}
 
             {/* Droplets */}
             {Array.from({ length: PAL_DROPLET_COUNT }).map((_, d) => {
@@ -290,7 +409,11 @@ const PaletteColumnSVG = ({
               let displayDroplets = 0;
 
               if (count > 0) {
-                const ratio = count / maxCount;
+                const coverage = count / Math.max(1, data.width * data.height);
+                const ratio =
+                  data.gridType === "dot-code"
+                    ? Math.min(1, coverage * codes.length)
+                    : count / maxCount;
                 displayDroplets = ratio * PAL_DROPLET_COUNT;
                 // If colored at all, show at least half a drop
                 if (displayDroplets < 0.5) displayDroplets = 0.5;
@@ -346,9 +469,9 @@ const PaletteColumnSVG = ({
                   <path d={pathData} fill="#ffffff" />
 
                   {/* Fill */}
-                  {isFull && <path d={pathData} fill={color} />}
+                  {isFull && <path d={pathData} fill={shape === "dot-code" ? "#000000" : color} />}
                   {isHalf && (
-                    <path d={pathData} fill={color} clipPath={`url(#${clipId})`} />
+                    <path d={pathData} fill={shape === "dot-code" ? "#000000" : color} clipPath={`url(#${clipId})`} />
                   )}
 
                   {/* Outline */}
@@ -363,7 +486,7 @@ const PaletteColumnSVG = ({
             })}
 
             {/* 3 shapes in arc to the right of swatch (top → bottom), outline only; shape follows pattern (circle/square/diamond). Square uses inscribed size so they don't overlap. */}
-            {(() => {
+            {shape !== "dot-code" && (() => {
               const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
               const arcCenterY = swCY;
               const arcAngles = [-80, 0, 80].map(
@@ -491,7 +614,7 @@ const PaletteColumnSVG = ({
             })()}
 
             {/* Input box below droplets: white, rounded, pencil icon + dotted placeholder */}
-            <foreignObject
+            {shape !== "dot-code" && <foreignObject
               x={cx - sInputW / 2}
               y={dropTop + sDH + sInputGap}
               width={sInputW}
@@ -517,7 +640,7 @@ const PaletteColumnSVG = ({
                   defaultValue=""
                 />
               </div>
-            </foreignObject>
+            </foreignObject>}
           </g>
         );
       })}
@@ -1221,20 +1344,44 @@ const CellSquare = ({
   const textFill = getTextColor(fillColor);
 
   const s = data.cellSize;
+  const isDotCode = data.gridType === "dot-code";
 
   return (
     <g>
-      <rect
-        x={cell.x * s}
-        y={cell.y * s}
-        width={s}
-        height={s}
-        rx={s * 0.15}
-        fill={fillColor}
-        stroke={STROKE_COLOR}
-        strokeWidth={1.2}
-      />
-      {showNumbers && (
+      {isDotCode ? (
+        <g />
+      ) : (
+        <rect
+          x={cell.x * s}
+          y={cell.y * s}
+          width={s}
+          height={s}
+          rx={s * 0.15}
+          fill={fillColor}
+          stroke={STROKE_COLOR}
+          strokeWidth={1.2}
+        />
+      )}
+      {isDotCode && showNumbers && (
+        colored ? (
+          <DotCodeSymbol code={cell.code} cx={layout.cx} cy={layout.cy} size={s} />
+        ) : (
+          <text
+            x={layout.cx}
+            y={layout.cy}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#8a8a8a"
+            opacity={0.55}
+            fontSize={s * 0.7}
+            fontWeight={500}
+            fontFamily="'Noto Sans', sans-serif"
+          >
+            {cell.code}
+          </text>
+        )
+      )}
+      {!isDotCode && showNumbers && (
         <text
           x={layout.cx}
           y={layout.cy}
@@ -1448,6 +1595,17 @@ const PageGrid = ({
         transform={`translate(${PAGE_PADDING_X - 40 + (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + (layout.gridVisualLeftOffset || 0) + (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0)}, ${gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0)}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
+          {data.gridType === "dot-code" &&
+            Array.from({ length: data.height }).map((_, y) =>
+              Array.from({ length: data.width }).map((__, x) => (
+                <DotCodeCellBase
+                  key={`base-${x},${y}`}
+                  x={x * data.cellSize}
+                  y={y * data.cellSize}
+                  size={data.cellSize}
+                />
+              )),
+            )}
           {data.cells.map((cell) => (
             <CellComponent
               key={`${cell.x},${cell.y}`}

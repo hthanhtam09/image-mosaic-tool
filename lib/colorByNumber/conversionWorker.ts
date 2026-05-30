@@ -35,6 +35,12 @@ const findClosestFixedColorIndex = (color: RGB): number => {
   return bestIdx;
 };
 
+const codeForPalettePosition = (index: number, gridType: string): string =>
+  gridType === "dot-code" ? String(index) : paletteIndexToLabel(index);
+
+const brightnessOf = (color: RGB): number =>
+  color.r * 0.299 + color.g * 0.587 + color.b * 0.114;
+
 /**
  * agglomerativeMerge — OPTIMIZED:
  * Uses a distance matrix to avoid recomputing all pairwise distances each iteration.
@@ -207,15 +213,24 @@ self.onmessage = (e: MessageEvent) => {
   );
 
   // 5. Build sequential code mapping
-  const indexIsWhite = usedPalette.map((c) => isWhite(c));
+  const indexIsWhite = usedPalette.map((c) => gridType !== "dot-code" && isWhite(c));
   let seq = 0;
   const indexToCode = new Map<number, string>();
-  for (let i = 0; i < usedPalette.length; i++) {
-    if (indexIsWhite[i]) {
-      indexToCode.set(i, "");
-    } else {
-      indexToCode.set(i, paletteIndexToLabel(seq));
-      seq++;
+  if (gridType === "dot-code") {
+    const byBrightness = usedPalette
+      .map((color, index) => ({ index, brightness: brightnessOf(color) }))
+      .sort((a, b) => b.brightness - a.brightness);
+    byBrightness.forEach((entry, rank) => {
+      indexToCode.set(entry.index, String(Math.min(rank, 5)));
+    });
+  } else {
+    for (let i = 0; i < usedPalette.length; i++) {
+      if (indexIsWhite[i]) {
+        indexToCode.set(i, "");
+      } else {
+        indexToCode.set(i, codeForPalettePosition(seq, gridType));
+        seq++;
+      }
     }
   }
 
@@ -260,6 +275,26 @@ self.onmessage = (e: MessageEvent) => {
       x: c.x - minX,
       y: c.y - minY,
     }));
+  }
+
+  if (gridType === "dot-code") {
+    const cellsByCoord = new Map(finalCells.map((c) => [`${c.x},${c.y}`, c]));
+    const fallbackColor = "#ffffff";
+    const filledCells = [];
+    for (let y = 0; y < finalRows; y++) {
+      for (let x = 0; x < finalCols; x++) {
+        filledCells.push(
+          cellsByCoord.get(`${x},${y}`) ?? {
+            x,
+            y,
+            code: "0",
+            color: fallbackColor,
+            fixedPaletteIndex: findClosestFixedColorIndex({ r: 255, g: 255, b: 255 }),
+          },
+        );
+      }
+    }
+    finalCells = filledCells;
   }
 
   const result = {

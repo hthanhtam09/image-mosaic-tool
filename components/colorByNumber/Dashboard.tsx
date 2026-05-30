@@ -107,6 +107,7 @@ export default function Dashboard() {
                     "islamic",
                     "fish-scale",
                     "trapezoid",
+                    "dot-code",
                 ];
 
                 // Process sequentially to preserve order
@@ -164,6 +165,7 @@ export default function Dashboard() {
                     "islamic",
                     "fish-scale",
                     "trapezoid",
+                    "dot-code",
                 ];
 
                 const newProjectIds: string[] = [];
@@ -679,6 +681,7 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
         { value: "islamic", label: "Islamic" },
         { value: "fish-scale", label: "Fish Scale" },
         { value: "trapezoid", label: "Trapezoid" },
+        { value: "dot-code", label: "Dot Code" },
     ];
 
     const isFolderModeActive = directImages.length > 0;

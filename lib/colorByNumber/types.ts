@@ -10,7 +10,8 @@ export type ColorByNumberGridType =
   | "puzzle"
   | "islamic"
   | "fish-scale"
-  | "trapezoid";
+  | "trapezoid"
+  | "dot-code";
 
 export interface ColorByNumberCell {
   x: number;

@@ -20,6 +20,7 @@ const GRID_TYPE_OPTIONS: { value: ColorByNumberGridType | 'auto'; label: string 
     { value: 'islamic', label: 'Islamic' },
     { value: 'fish-scale', label: 'Fish Scale' },
     { value: 'trapezoid', label: 'Trapezoid' },
+    { value: 'dot-code', label: 'Dot Code' },
 ];
 
 export default function GlobalSettings({

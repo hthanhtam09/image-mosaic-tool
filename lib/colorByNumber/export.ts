@@ -181,6 +181,102 @@ const getBrightness = (hex: string): number => {
   );
 };
 
+const drawDotCodeCellBase = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  showBackground: boolean = true,
+) => {
+  const dotR = Math.max(1.1, size * 0.055);
+  const smallR = Math.max(0.55, size * 0.025);
+  const pad = 0;
+  const left = x + pad;
+  const right = x + size - pad;
+  const top = y + pad;
+  const bottom = y + size - pad;
+
+  if (showBackground) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x, y, size, size);
+  }
+
+  ctx.fillStyle = "#000000";
+  const drawDot = (cx: number, cy: number, r: number, alpha: number) => {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  drawDot(left, top, dotR, 1);
+  drawDot(right, top, dotR, 1);
+  drawDot(left, bottom, dotR, 1);
+  drawDot(right, bottom, dotR, 1);
+
+  const steps = 4;
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    drawDot(left + (right - left) * t, top, smallR, 0.28);
+    drawDot(left + (right - left) * t, bottom, smallR, 0.28);
+    drawDot(left, top + (bottom - top) * t, smallR, 0.28);
+    drawDot(right, top + (bottom - top) * t, smallR, 0.28);
+  }
+};
+
+const drawDotCodeSymbol = (
+  ctx: CanvasRenderingContext2D,
+  code: string,
+  cx: number,
+  cy: number,
+  size: number,
+) => {
+  const half = size / 2;
+  const left = cx - half;
+  const right = cx + half;
+  const top = cy - half;
+  const bottom = cy + half;
+
+  ctx.save();
+  ctx.strokeStyle = "#000000";
+  ctx.fillStyle = "#000000";
+  ctx.lineWidth = Math.max(1.4, size * 0.13);
+  ctx.lineCap = "round";
+
+  if (code === "0") {
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(1.2, size * 0.075), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  if (code === "5") {
+    const bleed = Math.max(0.75, size * 0.035);
+    ctx.fillRect(left - bleed, top - bleed, size + bleed * 2, size + bleed * 2);
+    ctx.restore();
+    return;
+  }
+
+  const line = (x1: number, y1: number, x2: number, y2: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  };
+
+  if (code === "1" || code === "3" || code === "4") line(left, bottom, right, top);
+  if (code === "2" || code === "3" || code === "4") line(left, top, right, bottom);
+  if (code === "4") {
+    line(cx, top, cx, bottom);
+    line(left, cy, right, cy);
+  }
+
+  ctx.restore();
+};
+
 const getRoundedPolygonPath = (
   ctx: CanvasRenderingContext2D,
   points: { x: number; y: number }[],
@@ -815,7 +911,8 @@ const drawPalSwatch = (
     | "puzzle"
     | "islamic"
     | "fish-scale"
-    | "trapezoid",
+    | "trapezoid"
+    | "dot-code",
   fillColor: string,
 ) => {
   let s = size;
@@ -826,6 +923,7 @@ const drawPalSwatch = (
   else if (shape === "islamic") s = size * 1.7;
   else if (shape === "fish-scale") s = size * 1.35;
   else if (shape === "trapezoid") s = size * 1.25;
+  else if (shape === "dot-code") s = size * 1.15;
 
   const half = s / 2;
 
@@ -885,6 +983,8 @@ const drawPalSwatch = (
   } else if (shape === "islamic") {
     drawIslamicTilePath(ctx, cx, cy, s * 0.7, 0, 0);
     performFillAndStroke();
+  } else if (shape === "dot-code") {
+    drawDotCodeCellBase(ctx, cx - half, cy - half, s, false);
   } else {
     // rounded square
     const r = s * 0.12;
@@ -957,7 +1057,8 @@ const renderPaletteColumnCBN = (
     | "puzzle"
     | "islamic"
     | "fish-scale"
-    | "trapezoid" =
+    | "trapezoid"
+    | "dot-code" =
     data.gridType === "honeycomb"
       ? "circle"
       : data.gridType === "diamond"
@@ -972,7 +1073,9 @@ const renderPaletteColumnCBN = (
                 ? "fish-scale"
                 : data.gridType === "trapezoid"
                   ? "trapezoid"
-                  : "square";
+                  : data.gridType === "dot-code"
+                    ? "dot-code"
+                    : "square";
 
   codes.forEach((code, i) => {
     // Calculate row and column index
@@ -984,12 +1087,12 @@ const renderPaletteColumnCBN = (
     const yPos = sTop + rowIndex * (itemHeight + verticalGap);
 
     const cx = xPos + itemCx;
-    const color = codeToColor.get(code) ?? "#999";
+    const color = data.gridType === "dot-code" ? "#000000" : codeToColor.get(code) ?? "#999";
     const swCY = yPos + sSW / 2;
     const clearSwatches = renderOpts?.clearSwatches ?? false;
 
     // Swatch — white when clearSwatches mode, otherwise filled with the actual color
-    drawPalSwatch(ctx, cx, swCY, sSW, shape, clearSwatches ? "#ffffff" : color);
+    drawPalSwatch(ctx, cx, swCY, sSW, shape, shape === "dot-code" || clearSwatches ? "#ffffff" : color);
 
     // Label inside swatch
     // In clearSwatches mode, draw black label (visible on white bg); otherwise white
@@ -1003,9 +1106,13 @@ const renderPaletteColumnCBN = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = labelStroke;
     ctx.lineWidth = 3;
-    const displayCode = renderOpts?.codeMap?.get(code) || code;
-    ctx.strokeText(displayCode, cx, swCY);
-    ctx.fillText(displayCode, cx, swCY);
+    const displayCode = shape === "dot-code" ? code : renderOpts?.codeMap?.get(code) || code;
+    if (shape === "dot-code") {
+      drawDotCodeSymbol(ctx, displayCode, cx, swCY, sSW * 1.15);
+    } else {
+      ctx.strokeText(displayCode, cx, swCY);
+      ctx.fillText(displayCode, cx, swCY);
+    }
 
     // 5 droplet icons
     const dropTop = yPos + sSW + sGap;
@@ -1014,7 +1121,11 @@ const renderPaletteColumnCBN = (
     let displayDroplets = 0;
 
     if (count > 0) {
-      const ratio = count / maxCount;
+      const coverage = count / Math.max(1, data.width * data.height);
+      const ratio =
+        shape === "dot-code"
+          ? Math.min(1, coverage * codes.length)
+          : count / maxCount;
       displayDroplets = ratio * PAL_DROPLET_COUNT;
       // If colored at all, show at least half a drop
       if (displayDroplets < 0.5) displayDroplets = 0.5;
@@ -1034,8 +1145,18 @@ const renderPaletteColumnCBN = (
         fillType = 0.5;
       }
 
-      drawDropletShape(ctx, dx, dropTop, sDW, sDH, fillType, color);
+      drawDropletShape(
+        ctx,
+        dx,
+        dropTop,
+        sDW,
+        sDH,
+        fillType,
+        shape === "dot-code" ? "#000000" : color,
+      );
     }
+
+    if (shape === "dot-code") return;
 
     // 3 shapes in arc to the right of swatch (top → bottom), outline only; shape follows pattern. Square uses inscribed size so they don't overlap.
     const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
@@ -1519,6 +1640,8 @@ export const exportToCanvas = (
       );
       ctx.fill();
       ctx.stroke();
+    } else if (data.gridType === "dot-code") {
+      // Base grid is drawn once for all dot-code cells before symbol rendering.
     } else {
       const s = data.cellSize;
       ctx.beginPath();
@@ -1532,6 +1655,21 @@ export const exportToCanvas = (
     }
 
     if (showCodes && cell.code) {
+      if (data.gridType === "dot-code") {
+        if (colored) {
+          drawDotCodeSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize);
+        } else {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.45)";
+          ctx.font = `500 ${data.cellSize * 0.7}px 'Noto Sans', sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(cell.code, cl.cx, cl.cy);
+          ctx.restore();
+        }
+        return;
+      }
+
       ctx.save();
       const brightness = getBrightness(fillColor);
       const textFill = brightness < 128 ? "#ffffff" : "#999999";
@@ -1570,6 +1708,14 @@ export const exportToCanvas = (
       ctx.restore();
     }
   };
+
+  if (data.gridType === "dot-code") {
+    for (let y = 0; y < data.height; y++) {
+      for (let x = 0; x < data.width; x++) {
+        drawDotCodeCellBase(ctx, x * data.cellSize, y * data.cellSize, data.cellSize);
+      }
+    }
+  }
 
   for (const cell of data.cells) {
     renderCell(cell, !!filled[`${cell.x},${cell.y}`]);
@@ -1727,7 +1873,8 @@ export const exportPaletteToCanvas = (
     | "puzzle"
     | "islamic"
     | "fish-scale"
-    | "trapezoid" =
+    | "trapezoid"
+    | "dot-code" =
     data.gridType === "honeycomb"
       ? "circle"
       : data.gridType === "diamond"
@@ -1742,7 +1889,9 @@ export const exportPaletteToCanvas = (
                 ? "fish-scale"
                 : data.gridType === "trapezoid"
                   ? "trapezoid"
-                  : "square";
+                  : data.gridType === "dot-code"
+                    ? "dot-code"
+                    : "square";
 
   // ── Layout constants ──
   const EXTRA_RIGHT = 30;
@@ -1871,9 +2020,13 @@ export const exportPaletteToCanvas = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(255,255,255,0.6)";
     ctx.lineWidth = 2;
-    const displayCode = codeMap.get(code) || code;
-    ctx.strokeText(displayCode, cx, swCY);
-    ctx.fillText(displayCode, cx, swCY);
+    const displayCode = shape === "dot-code" ? code : codeMap.get(code) || code;
+    if (shape === "dot-code") {
+      drawDotCodeSymbol(ctx, displayCode, cx, swCY, sw * 1.15);
+    } else {
+      ctx.strokeText(displayCode, cx, swCY);
+      ctx.fillText(displayCode, cx, swCY);
+    }
 
     // ── Droplets below swatch (theme-colored) ──
     const dropTop = iy + sw + (sGap + sDropletTopPad) * scale;
@@ -1883,8 +2036,13 @@ export const exportPaletteToCanvas = (
     const totalDropW = PAL_DROPLET_COUNT * dW + (PAL_DROPLET_COUNT - 1) * dGapS;
     const dropStartX = cx - totalDropW / 2 + dW / 2;
     const count = codeToCount.get(code) ?? 0;
+    const coverage = count / Math.max(1, data.width * data.height);
+    const coverageRatio =
+      shape === "dot-code"
+        ? Math.min(1, coverage * codes.length)
+        : count / maxCount;
     const displayDroplets =
-      count > 0 ? Math.max(0.5, (count / maxCount) * PAL_DROPLET_COUNT) : 0;
+      count > 0 ? Math.max(0.5, coverageRatio * PAL_DROPLET_COUNT) : 0;
     for (let d = 0; d < PAL_DROPLET_COUNT; d++) {
       let fillType = 0;
       if (d + 1 <= displayDroplets) fillType = 1;
@@ -1896,9 +2054,11 @@ export const exportPaletteToCanvas = (
         dW,
         dH,
         fillType,
-        themeColor,
+        shape === "dot-code" ? "#000000" : themeColor,
       );
     }
+
+    if (shape === "dot-code") return;
 
     // ── Arc shapes to the right of swatch (outline only, same as palette in main image) ──
     const arcCenterX = cx + sw / 2 + sArcGap * scale + sArcRadius * scale;

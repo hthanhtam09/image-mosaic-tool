@@ -119,7 +119,7 @@ export const imageToColorByNumber = async (
     cellSize = 25,
     maxWidth = 1800,
     useDithering = true,
-    maxColors = 20,
+    maxColors = gridType === "dot-code" ? 6 : 20,
     removeWhiteBackground = true,
     removeBottomWatermark = false,
   } = options;
@@ -187,7 +187,7 @@ export const imageToColorByNumber = async (
   const targetW = cols * cellSize;
   const targetH = rows * cellSize;
   const imageData =
-    gridType === "standard"
+    gridType === "standard" || gridType === "dot-code"
       ? baseData
       : resizeCanvasToSize(croppedCanvas, targetW, targetH);
 
