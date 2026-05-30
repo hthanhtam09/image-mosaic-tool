@@ -35,6 +35,7 @@ const softCropToPortrait = (
   img: HTMLImageElement | HTMLCanvasElement,
   targetRatio: number,
   cropBottom: boolean = false,
+  tolerance: number = 0.20,
 ): HTMLCanvasElement => {
   const srcW = img instanceof HTMLCanvasElement ? img.width : img.width;
   let srcH = img instanceof HTMLCanvasElement ? img.height : img.height;
@@ -46,14 +47,13 @@ const softCropToPortrait = (
   const currentRatio = srcW / srcH;
 
   // Allow up to 20% ratio deviation before cropping — preserves full image for most photos
-  const TOLERANCE = 0.20;
   let sx = 0, sy = 0, sw = srcW, sh = srcH;
 
-  if (currentRatio > targetRatio * (1 + TOLERANCE)) {
+  if (currentRatio > targetRatio * (1 + tolerance)) {
     // Image is significantly wider than portrait target: trim sides only
     sw = srcH * targetRatio;
     sx = (srcW - sw) / 2;
-  } else if (currentRatio < targetRatio * (1 - TOLERANCE)) {
+  } else if (currentRatio < targetRatio * (1 - tolerance)) {
     // Image is significantly taller than portrait target: trim top/bottom only
     sh = srcW / targetRatio;
     sy = (srcH - sh) / 2;
@@ -147,7 +147,8 @@ export const imageToColorByNumber = async (
     }
   }
 
-  const TARGET_ASPECT = 7.0 / 10.2;
+  const TARGET_ASPECT = gridType === "dot-code" ? 7.8 / 10.2 : 7.0 / 10.2;
+  const ASPECT_TOLERANCE = gridType === "dot-code" ? 0.04 : 0.20;
 
   // Normalize to canvas (no crop, no watermark removal — preserves full image)
   const sourceCanvas =
@@ -155,8 +156,13 @@ export const imageToColorByNumber = async (
       ? currentSource
       : copyToCanvas(currentSource);
 
-  // Soft crop: only trims if image is >20% off from portrait ratio
-  const croppedCanvas = softCropToPortrait(sourceCanvas, TARGET_ASPECT, removeBottomWatermark);
+  // Soft crop: dot-code crops closer to the printable safe-area aspect.
+  const croppedCanvas = softCropToPortrait(
+    sourceCanvas,
+    TARGET_ASPECT,
+    removeBottomWatermark,
+    ASPECT_TOLERANCE,
+  );
 
   // Resize using canvas directly (resizeImageFromCanvas avoids toDataURL)
   const baseData = resizeImageFromCanvas(croppedCanvas, maxWidth);
