@@ -217,11 +217,21 @@ self.onmessage = (e: MessageEvent) => {
   let seq = 0;
   const indexToCode = new Map<number, string>();
   if (gridType === "dot-code") {
-    const byBrightness = usedPalette
-      .map((color, index) => ({ index, brightness: brightnessOf(color) }))
+    const brightEntries = usedPalette.map((color, index) => ({
+      index,
+      brightness: brightnessOf(color),
+      isLight: color.r >= 245 && color.g >= 245 && color.b >= 245,
+    }));
+    for (const entry of brightEntries) {
+      if (entry.isLight) indexToCode.set(entry.index, "");
+    }
+    const ranked = brightEntries
+      .filter((entry) => !entry.isLight)
       .sort((a, b) => b.brightness - a.brightness);
-    byBrightness.forEach((entry, rank) => {
-      indexToCode.set(entry.index, String(Math.min(rank, 5)));
+    const maxRank = Math.max(1, ranked.length - 1);
+    ranked.forEach((entry, rank) => {
+      const code = ranked.length === 1 ? 5 : Math.round(1 + (rank / maxRank) * 4);
+      indexToCode.set(entry.index, String(Math.max(1, Math.min(5, code))));
     });
   } else {
     for (let i = 0; i < usedPalette.length; i++) {
@@ -287,7 +297,7 @@ self.onmessage = (e: MessageEvent) => {
           cellsByCoord.get(`${x},${y}`) ?? {
             x,
             y,
-            code: "0",
+            code: "",
             color: fallbackColor,
             fixedPaletteIndex: findClosestFixedColorIndex({ r: 255, g: 255, b: 255 }),
           },

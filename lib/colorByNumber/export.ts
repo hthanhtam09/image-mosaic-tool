@@ -47,6 +47,8 @@ export const DOT_CODE_PAGE_PADDING_X = 75; // 0.25 inch * 300 DPI: tighter but s
 export const getPagePaddingX = (data: ColorByNumberData): number =>
   data.gridType === "dot-code" ? DOT_CODE_PAGE_PADDING_X : PAGE_PADDING_X;
 
+const DOT_CODE_CODES = ["1", "2", "3", "4", "5"];
+
 export const saveProgressToStorage = (
   dataId: string,
   filled: FilledMap,
@@ -248,14 +250,6 @@ const drawDotCodeSymbol = (
   ctx.fillStyle = "#000000";
   ctx.lineWidth = Math.max(1.4, size * 0.13);
   ctx.lineCap = "round";
-
-  if (code === "0") {
-    ctx.beginPath();
-    ctx.arc(cx, cy, Math.max(1.2, size * 0.075), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
 
   if (code === "5") {
     const bleed = Math.max(0.75, size * 0.035);
@@ -519,6 +513,12 @@ export const calculatePaletteLayout = (
     codeToCount = rawCodeToCount;
   }
 
+  if (data.gridType === "dot-code") {
+    const usedDotCodes = DOT_CODE_CODES.filter((code) => (rawCodeToCount.get(code) ?? 0) > 0);
+    codeToColor = new Map(usedDotCodes.map((code) => [code, rawCodeToColor.get(code) ?? "#ffffff"]));
+    codeToCount = new Map(usedDotCodes.map((code) => [code, rawCodeToCount.get(code) ?? 0]));
+  }
+
   const codes = [...codeToColor.keys()].sort((a, b) => {
     const aN = parseInt(a, 10),
       bN = parseInt(b, 10);
@@ -675,15 +675,14 @@ const drawDropletShape = (
     // If it's continuous (not 0.5 or 1), keep bottom-up?
     // The requirement says "min ít nhất của nước mắt là 1 nửa" -> implied discrete steps 0.5, 1, 1.5.
 
-    if (Math.abs(fillRatio - 0.5) < 0.01) {
-      // Left half fill
-      ctx.fillStyle = fillColor;
-      ctx.fillRect(cx - halfW - 1, topY - 1, halfW + 1, h + 2);
-    } else {
-      // Full fill (or bottom up if we wanted that, but we use discrete 1.0 or 0.5 now)
-      ctx.fillStyle = fillColor;
-      ctx.fillRect(cx - halfW - 1, topY - 1, w + 2, h + 2);
-    }
+    const clamped = Math.max(0, Math.min(1, fillRatio));
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(
+      cx - halfW - 1,
+      topY + h * (1 - clamped) - 1,
+      w + 2,
+      h * clamped + 2,
+    );
 
     ctx.restore();
   }
@@ -1094,6 +1093,10 @@ const renderPaletteColumnCBN = (
     const color = data.gridType === "dot-code" ? "#000000" : codeToColor.get(code) ?? "#999";
     const swCY = yPos + sSW / 2;
     const clearSwatches = renderOpts?.clearSwatches ?? false;
+    const count = codeToCount.get(code) ?? 0;
+    const coverage = count / Math.max(1, data.width * data.height);
+    const dotCodeFillRatio =
+      count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
 
     // Swatch — white when clearSwatches mode, otherwise filled with the actual color
     drawPalSwatch(ctx, cx, swCY, sSW, shape, shape === "dot-code" || clearSwatches ? "#ffffff" : color);
@@ -1113,6 +1116,23 @@ const renderPaletteColumnCBN = (
     const displayCode = shape === "dot-code" ? code : renderOpts?.codeMap?.get(code) || code;
     if (shape === "dot-code") {
       drawDotCodeSymbol(ctx, displayCode, cx, swCY, sSW * 1.15);
+      ctx.save();
+      ctx.fillStyle = "#000000";
+      ctx.font = `700 ${Math.max(18, sLbl * 1.05)}px 'Noto Sans', sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(displayCode, cx, yPos + sSW + sGap + sDH / 2);
+      ctx.restore();
+
+      drawDropletShape(
+        ctx,
+        cx + (sSW * 1.15) / 2 + sArcGap * 3.4 + (sDW * 1.45) / 2,
+        swCY - (sDH * 1.45) / 2,
+        sDW * 1.45,
+        sDH * 1.45,
+        dotCodeFillRatio,
+        "#000000",
+      );
     } else {
       ctx.strokeText(displayCode, cx, swCY);
       ctx.fillText(displayCode, cx, swCY);
@@ -1120,15 +1140,13 @@ const renderPaletteColumnCBN = (
 
     // 5 droplet icons
     const dropTop = yPos + sSW + sGap;
-    const count = codeToCount.get(code) ?? 0;
 
     let displayDroplets = 0;
 
     if (count > 0) {
-      const coverage = count / Math.max(1, data.width * data.height);
       const ratio =
         shape === "dot-code"
-          ? Math.min(1, coverage * codes.length)
+          ? dotCodeFillRatio
           : count / maxCount;
       displayDroplets = ratio * PAL_DROPLET_COUNT;
       // If colored at all, show at least half a drop
@@ -1139,7 +1157,7 @@ const renderPaletteColumnCBN = (
       PAL_DROPLET_COUNT * sDW + (PAL_DROPLET_COUNT - 1) * sDGap;
     const dropStartX = cx - totalDropW / 2 + sDW / 2;
 
-    for (let d = 0; d < PAL_DROPLET_COUNT; d++) {
+    for (let d = 0; shape !== "dot-code" && d < PAL_DROPLET_COUNT; d++) {
       const dx = dropStartX + d * (sDW + sDGap);
 
       let fillType = 0; // 0=none, 0.5=half, 1=full
@@ -1156,7 +1174,7 @@ const renderPaletteColumnCBN = (
         sDW,
         sDH,
         fillType,
-        shape === "dot-code" ? "#000000" : color,
+        color,
       );
     }
 
@@ -1798,7 +1816,14 @@ export const exportPaletteToCanvas = (
     return a.localeCompare(b);
   });
 
-  for (const code of rawCodes) {
+  if (data.gridType === "dot-code") {
+    for (const code of DOT_CODE_CODES) {
+      if ((rawCodeToCount.get(code) ?? 0) <= 0) continue;
+      codeToColor.set(code, rawCodeToColor.get(code) ?? "#ffffff");
+      codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
+      codeToName.set(code, code);
+    }
+  } else for (const code of rawCodes) {
     const hex = rawCodeToColor.get(code)!;
     const rgb = parseHexToRGB(hex);
     // Map to the nearest of the 23 allowed colors
@@ -1822,7 +1847,7 @@ export const exportPaletteToCanvas = (
     }
   }
 
-  const codes = [...codeToColor.keys()].sort((a, b) => {
+  const codes = data.gridType === "dot-code" ? DOT_CODE_CODES.filter((code) => (codeToCount.get(code) ?? 0) > 0) : [...codeToColor.keys()].sort((a, b) => {
     const aN = parseInt(a, 10),
       bN = parseInt(b, 10);
     if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
@@ -2013,6 +2038,10 @@ export const exportPaletteToCanvas = (
     const sw = sSW * scale;
     const cx = ix + itemCx * scale;
     const swCY = iy + sw / 2;
+    const count = codeToCount.get(code) ?? 0;
+    const coverage = count / Math.max(1, data.width * data.height);
+    const dotCodeFillRatio =
+      count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
 
     // ── Swatch: white shape ──
     drawPalSwatch(ctx, cx, swCY, sw, shape, "#ffffff");
@@ -2027,27 +2056,46 @@ export const exportPaletteToCanvas = (
     const displayCode = shape === "dot-code" ? code : codeMap.get(code) || code;
     if (shape === "dot-code") {
       drawDotCodeSymbol(ctx, displayCode, cx, swCY, sw * 1.15);
+      ctx.save();
+      ctx.fillStyle = "#000000";
+      ctx.font = `700 ${Math.max(18 * scale, sw * (sLbl / sSW) * 1.05)}px 'Noto Sans', sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(displayCode, cx, iy + sw + (sGap + sDropletTopPad) * scale + (sDH * scale) / 2);
+      ctx.restore();
+
+      drawDropletShape(
+        ctx,
+        cx + (sw * 1.15) / 2 + sArcGap * 3.4 * scale + (sDW * 1.45 * scale) / 2,
+        swCY - (sDH * 1.45 * scale) / 2,
+        sDW * 1.45 * scale,
+        sDH * 1.45 * scale,
+        dotCodeFillRatio,
+        "#000000",
+      );
     } else {
       ctx.strokeText(displayCode, cx, swCY);
       ctx.fillText(displayCode, cx, swCY);
     }
 
     // ── Droplets below swatch (theme-colored) ──
-    const dropTop = iy + sw + (sGap + sDropletTopPad) * scale;
+    const dropTop =
+      iy +
+      sw +
+      (sGap + sDropletTopPad) * scale +
+      (shape === "dot-code" ? sLbl * 0.7 * scale : 0);
     const dW = sDW * scale;
     const dH = sDH * scale;
     const dGapS = sDGap * scale;
     const totalDropW = PAL_DROPLET_COUNT * dW + (PAL_DROPLET_COUNT - 1) * dGapS;
     const dropStartX = cx - totalDropW / 2 + dW / 2;
-    const count = codeToCount.get(code) ?? 0;
-    const coverage = count / Math.max(1, data.width * data.height);
     const coverageRatio =
       shape === "dot-code"
-        ? Math.min(1, coverage * codes.length)
+        ? dotCodeFillRatio
         : count / maxCount;
     const displayDroplets =
       count > 0 ? Math.max(0.5, coverageRatio * PAL_DROPLET_COUNT) : 0;
-    for (let d = 0; d < PAL_DROPLET_COUNT; d++) {
+    for (let d = 0; shape !== "dot-code" && d < PAL_DROPLET_COUNT; d++) {
       let fillType = 0;
       if (d + 1 <= displayDroplets) fillType = 1;
       else if (d + 0.5 <= displayDroplets) fillType = 0.5;
@@ -2058,7 +2106,7 @@ export const exportPaletteToCanvas = (
         dW,
         dH,
         fillType,
-        shape === "dot-code" ? "#000000" : themeColor,
+        themeColor,
       );
     }
 

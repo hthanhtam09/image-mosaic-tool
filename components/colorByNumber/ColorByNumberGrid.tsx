@@ -87,9 +87,6 @@ const DotCodeSymbol = ({
     strokeLinecap: "round" as const,
   };
 
-  if (code === "0") {
-    return <circle cx={cx} cy={cy} r={Math.max(1.2, size * 0.075)} fill="#000000" />;
-  }
   if (code === "5") {
     const bleed = Math.max(0.75, size * 0.035);
     return (
@@ -168,6 +165,55 @@ const DotCodeCellBase = ({
           opacity={dot.corner ? 1 : 0.28}
         />
       ))}
+    </g>
+  );
+};
+
+const DotCodeDroplet = ({
+  cx,
+  topY,
+  width,
+  height,
+  fillRatio,
+}: {
+  cx: number;
+  topY: number;
+  width: number;
+  height: number;
+  fillRatio: number;
+}) => {
+  const halfW = width / 2;
+  const bottomY = topY + height;
+  const bodyTopY = topY + height * 0.35;
+  const pathData = `
+    M ${cx} ${topY}
+    C ${cx - halfW * 0.3} ${bodyTopY},
+      ${cx - halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.2},
+      ${cx - halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.55}
+    A ${halfW} ${halfW} 0 1 0 ${cx + halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.55}
+    C ${cx + halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.2},
+      ${cx + halfW * 0.3} ${bodyTopY},
+      ${cx} ${topY}
+    Z
+  `;
+  const clipId = `dot-code-drop-${cx}-${topY}`;
+  const clamped = Math.max(0, Math.min(1, fillRatio));
+
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <rect
+            x={cx - halfW}
+            y={topY + height * (1 - clamped)}
+            width={width}
+            height={height * clamped}
+          />
+        </clipPath>
+      </defs>
+      <path d={pathData} fill="#ffffff" stroke="#ffffff" strokeWidth={3} />
+      {clamped > 0 && <path d={pathData} fill="#000000" clipPath={`url(#${clipId})`} />}
+      <path d={pathData} fill="none" stroke="#555555" strokeWidth={1.5} />
     </g>
   );
 };
@@ -303,11 +349,21 @@ const PaletteColumnSVG = ({
         else if (shape === "trapezoid") s = sSW * 1.25;
         else if (shape === "dot-code") s = sSW * 1.15;
 
+        const count = codeToCount.get(code) ?? 0;
+        const coverage = count / Math.max(1, data.width * data.height);
+        const dotCodeFillRatio =
+          count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
+
         // Droplet calculations
+        const codeLabelY = yPos + sSW + sGap + sDH / 2;
         const dropTop = yPos + sSW + sGap;
         const totalDropW =
           PAL_DROPLET_COUNT * sDW + (PAL_DROPLET_COUNT - 1) * sDGap;
         const dropStartX = cx - totalDropW / 2 + sDW / 2;
+        const singleDropW = sDW * 1.45;
+        const singleDropH = sDH * 1.45;
+        const singleDropCx = cx + s / 2 + sArcGap * 3.4 + singleDropW / 2;
+        const singleDropTop = swCY - singleDropH / 2;
 
         return (
           <g key={code}>
@@ -381,6 +437,25 @@ const PaletteColumnSVG = ({
               <g>
                 <DotCodeCellBase x={cx - s / 2} y={swCY - s / 2} size={s} showBackground={false} />
                 <DotCodeSymbol code={code} cx={cx} cy={swCY} size={s} />
+                <DotCodeDroplet
+                  cx={singleDropCx}
+                  topY={singleDropTop}
+                  width={singleDropW}
+                  height={singleDropH}
+                  fillRatio={dotCodeFillRatio}
+                />
+                <text
+                  x={cx}
+                  y={codeLabelY}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={Math.max(18, sLbl * 1.05)}
+                  fontWeight={700}
+                  fontFamily="'Noto Sans', sans-serif"
+                  fill="#000000"
+                >
+                  {code}
+                </text>
               </g>
             )}
 
@@ -403,17 +478,13 @@ const PaletteColumnSVG = ({
             )}
 
             {/* Droplets */}
-            {Array.from({ length: PAL_DROPLET_COUNT }).map((_, d) => {
+            {shape !== "dot-code" && Array.from({ length: PAL_DROPLET_COUNT }).map((_, d) => {
               const dx = dropStartX + d * (sDW + sDGap);
-              const count = codeToCount.get(code) ?? 0;
               let displayDroplets = 0;
 
               if (count > 0) {
-                const coverage = count / Math.max(1, data.width * data.height);
                 const ratio =
-                  data.gridType === "dot-code"
-                    ? Math.min(1, coverage * codes.length)
-                    : count / maxCount;
+                  data.gridType === "dot-code" ? dotCodeFillRatio : count / maxCount;
                 displayDroplets = ratio * PAL_DROPLET_COUNT;
                 // If colored at all, show at least half a drop
                 if (displayDroplets < 0.5) displayDroplets = 0.5;
@@ -469,9 +540,9 @@ const PaletteColumnSVG = ({
                   <path d={pathData} fill="#ffffff" />
 
                   {/* Fill */}
-                  {isFull && <path d={pathData} fill={shape === "dot-code" ? "#000000" : color} />}
+                  {isFull && <path d={pathData} fill={color} />}
                   {isHalf && (
-                    <path d={pathData} fill={shape === "dot-code" ? "#000000" : color} clipPath={`url(#${clipId})`} />
+                    <path d={pathData} fill={color} clipPath={`url(#${clipId})`} />
                   )}
 
                   {/* Outline */}
