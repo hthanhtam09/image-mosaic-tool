@@ -25,6 +25,10 @@ import {
   type PartialColorMode,
   PAL_DROPLET_COUNT,
   PAGE_PADDING_Y,
+  CONTENT_SAFE_INSET,
+  CONTENT_SAFE_INSET_LEFT,
+  PALETTE_GAP,
+  PALETTE_X_OFFSET,
   getPagePaddingX,
 } from "@/lib/colorByNumber/export";
 import { getThemeById } from "@/lib/colorByNumber/themes";
@@ -1694,9 +1698,10 @@ const PageGrid = ({
                   ? CellTrapezoid
                   : CellSquare;
   const gridPageX =
-    pagePaddingX -
-    40 +
-    (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) +
+    pagePaddingX +
+    CONTENT_SAFE_INSET_LEFT +
+    (paletteLayout && !removeBackground ? PALETTE_X_OFFSET : 0) +
+    (paletteLayout && !removeBackground ? paletteLayout.palColW + PALETTE_GAP : 0) +
     gridLayout.offsetX +
     (layout.gridVisualLeftOffset || 0) +
     (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0);
@@ -1747,13 +1752,15 @@ const PageGrid = ({
 
       {/* Palette Column (only show if not removeBackground) */}
       {paletteLayout && !removeBackground && (
-        <g transform={`translate(${pagePaddingX - 40}, ${paletteVisualTop})`}>
+        <g
+          transform={`translate(${pagePaddingX + CONTENT_SAFE_INSET_LEFT + PALETTE_X_OFFSET}, ${paletteVisualTop})`}
+        >
           <PaletteColumnSVG data={data} layout={paletteLayout} />
         </g>
       )}
 
       {/* Grid centered in its available area */}
-      {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 40 offset */}
+      {/* Grid X = Padding + safe inset + PaletteWidth + Gap + OffsetX */}
       <g
         transform={`translate(${gridPageX}, ${gridPageY}) scale(${gridLayout.scale})`}
       >
@@ -1861,33 +1868,36 @@ export default function ColorByNumberGrid({
 
     const safeW = LETTER_OUTPUT_WIDTH - padX * 2;
     const safeH = LETTER_OUTPUT_HEIGHT - padY * 2;
+    const contentSafeW = Math.max(
+      0,
+      safeW - CONTENT_SAFE_INSET_LEFT - CONTENT_SAFE_INSET,
+    );
+    const contentSafeH = Math.max(0, safeH - CONTENT_SAFE_INSET * 2);
 
     let pLayout: PaletteLayout | null = null;
 
     // Only calculate palette layout if enabled
     if (showPalette) {
-      pLayout = calculatePaletteLayout(data, safeW, { vertical: true });
+      pLayout = calculatePaletteLayout(data, contentSafeW, { vertical: true });
     }
 
-    const PALETTE_GAP = 30;
     const paletteWidth = pLayout ? pLayout.palColW : 0;
 
-    // Add 40px to available width (Palette moved left into margin)
-    // Only applies if palette is shown? Or maybe we want consistent grid position?
     // Requirement: "nếu hide thì cho ảnh hiển thị full" (if hide, show image full)
     // So if hidden, we reclaim the space.
 
-    const PALETTE_X_OFFSET = -40; // Only relevant if palette is present
-
-    // If palette is hidden, paletteWidth is 0. 
-    // visual available width = safeW
+    // If palette is hidden, paletteWidth is 0.
+    // visual available width = contentSafeW
 
     let maxGridW = Math.max(
       0,
-      safeW - paletteWidth - (paletteWidth > 0 ? PALETTE_GAP : 0) - (paletteWidth > 0 ? PALETTE_X_OFFSET : 0)
+      contentSafeW -
+        paletteWidth -
+        (paletteWidth > 0 ? PALETTE_GAP : 0) -
+        (paletteWidth > 0 ? PALETTE_X_OFFSET : 0),
     );
 
-    let maxGridH = safeH;
+    let maxGridH = contentSafeH;
 
     let gridVisualLeftOffset = 0;
     let gridVisualTopOffset = 0;
@@ -1897,15 +1907,15 @@ export default function ColorByNumberGrid({
     // Keep a little extra air in Object Focus mode so the subject is not clipped.
     if (shouldUseTightCrop(data, activeProject?.removeBackground)) {
       const padRatio = 0.16;
-      maxGridW = safeW * (1 - padRatio * 2);
-      maxGridH = safeH * (1 - padRatio * 2);
-      gridVisualLeftOffset = safeW * padRatio;
-      gridVisualTopOffset = safeH * padRatio;
+      maxGridW = contentSafeW * (1 - padRatio * 2);
+      maxGridH = contentSafeH * (1 - padRatio * 2);
+      gridVisualLeftOffset = contentSafeW * padRatio;
+      gridVisualTopOffset = contentSafeH * padRatio;
     }
 
     const gridLayout = getPageLayout(data, maxGridW, maxGridH);
 
-    const gridVisualTop = PAGE_PADDING_Y + gridVisualTopOffset;
+    const gridVisualTop = PAGE_PADDING_Y + CONTENT_SAFE_INSET + gridVisualTopOffset;
 
     // Vertical positioning: align palette swatches with grid rows (matching export.ts)
     const firstCell = getCellLayout(0, 0, data);
@@ -2019,7 +2029,15 @@ export default function ColorByNumberGrid({
       // Inverse PageGrid transform
       const { gridLayout, paletteLayout, gridVisualTop, gridVisualLeftOffset = 0, visualBounds } = pageLayout;
       const removeBackground = activeProject?.removeBackground;
-      const gridXOffset = getPagePaddingX(data) - 40 + (paletteLayout ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + gridVisualLeftOffset + (removeBackground ? -visualBounds.minX * gridLayout.scale : 0);
+      const gridXOffset =
+        getPagePaddingX(data) +
+        CONTENT_SAFE_INSET_LEFT +
+        (paletteLayout
+          ? PALETTE_X_OFFSET + paletteLayout.palColW + PALETTE_GAP
+          : 0) +
+        gridLayout.offsetX +
+        gridVisualLeftOffset +
+        (removeBackground ? -visualBounds.minX * gridLayout.scale : 0);
       const gridYOffset = gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -visualBounds.minY * gridLayout.scale : 0);
       const gridScale = gridLayout.scale;
 

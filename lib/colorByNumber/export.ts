@@ -48,6 +48,10 @@ const STORAGE_KEY = "color-by-number-progress";
 export const PAGE_PADDING_X = 90; // 0.3 inch * 300 DPI = 90px
 export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
 export const DOT_CODE_PAGE_PADDING_X = 75; // 0.25 inch * 300 DPI: tighter but still KDP-safe
+export const CONTENT_SAFE_INSET = 30; // Keep converted artwork comfortably inside the safe area.
+export const CONTENT_SAFE_INSET_LEFT = 70; // Extra left inset for KDP safe-area tolerance.
+export const PALETTE_GAP = 30; // Gap between palette and grid.
+export const PALETTE_X_OFFSET = 0; // Do not pull palette/grid into the left safe margin.
 
 export const getPagePaddingX = (data: ColorByNumberData): number =>
   data.gridType === "dot-code" ? DOT_CODE_PAGE_PADDING_X : PAGE_PADDING_X;
@@ -1512,33 +1516,35 @@ export const exportToCanvas = (
 
   const safeW = pageW - padX * 2;
   const safeH = pageH - padY * 2;
+  const contentSafeW = Math.max(
+    0,
+    safeW - CONTENT_SAFE_INSET_LEFT - CONTENT_SAFE_INSET,
+  );
+  const contentSafeH = Math.max(0, safeH - CONTENT_SAFE_INSET * 2);
 
   // 2. Calculate palette layout (vertical)
   let layout: PaletteLayout | null = null;
   if (needsPalette) {
-    layout = calculatePaletteLayout(data, safeW, {
+    layout = calculatePaletteLayout(data, contentSafeW, {
       vertical: true,
       bgColor,
       removeBgColorCells,
     });
   }
 
-  const PALETTE_GAP = 30; // ~10px visual
   const paletteWidth = layout ? layout.palColW : 0;
 
-  // 3. Grid available width = SafeW - PaletteW - Gap
-  // Gain 50px from palette shift!
-  const PALETTE_X_OFFSET = showPalette ? -40 : 0; // Shift palette left into margin (was -50)
+  // 3. Grid available width = inset safe area - PaletteW - Gap
   // Shrink available area by clip-padding so the scaled grid keeps overhangs inside the page
   const gridAvailableW = Math.max(
     0,
-    safeW -
+    contentSafeW -
       paletteWidth -
       (paletteWidth > 0 ? PALETTE_GAP : 0) -
-      PALETTE_X_OFFSET -
+      (paletteWidth > 0 ? PALETTE_X_OFFSET : 0) -
       GRID_CLIP_PADDING * 2,
   );
-  const gridAvailableH = safeH - GRID_CLIP_PADDING * 2;
+  const gridAvailableH = contentSafeH - GRID_CLIP_PADDING * 2;
 
   // 4. Fit grid into gridAvailableH/W
   const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
@@ -1548,7 +1554,7 @@ export const exportToCanvas = (
   // Anchor to TOP padding (0.4 inch) instead of centering vertically
   // Vertical positioning: align palette swatches with grid rows
   const firstCell = getCellLayout(0, 0, data);
-  const gridVisualTop = padY + GRID_CLIP_PADDING;
+  const gridVisualTop = padY + CONTENT_SAFE_INSET + GRID_CLIP_PADDING;
   const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
 
   // Swatch center in palette coordinate space is sTop + sSW/2
@@ -1582,8 +1588,7 @@ export const exportToCanvas = (
   // ── Palette column (Left) ──
   if (needsPalette && layout) {
     ctx.save();
-    // Palette is positioned at Left Padding - 50px offset per user request
-    const paletteX = padX + PALETTE_X_OFFSET;
+    const paletteX = padX + CONTENT_SAFE_INSET_LEFT + PALETTE_X_OFFSET;
 
     ctx.translate(paletteX, paletteY);
     renderPaletteColumnCBN(ctx, data, layout, {
@@ -1599,7 +1604,8 @@ export const exportToCanvas = (
   // Grid starts after Palette + Gap; shift right by clip-padding so overhangs don't clip
   const gridStartX =
     padX +
-    PALETTE_X_OFFSET +
+    CONTENT_SAFE_INSET_LEFT +
+    (paletteWidth > 0 ? PALETTE_X_OFFSET : 0) +
     paletteWidth +
     (paletteWidth > 0 ? PALETTE_GAP : 0) +
     gridLayout.offsetX +
