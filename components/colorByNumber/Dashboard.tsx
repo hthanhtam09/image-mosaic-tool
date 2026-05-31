@@ -13,6 +13,8 @@ import {
     exportCollagePagesToCanvas,
     exportDotCodeMagnifierToCanvas,
 } from "@/lib/colorByNumber/export";
+import { exportBeforeAfterToCanvas, type BeforeAfterTheme } from "@/lib/colorByNumber/beforeAfter";
+import { imageToColorByNumber } from "@/lib/colorByNumber/imageToColorByNumber";
 import { shouldShowCodes, shouldUseTightCrop } from "@/lib/colorByNumber/objectFocus";
 
 import JSZip from "jszip";
@@ -35,6 +37,7 @@ export default function Dashboard() {
         globalShowNumbers,
         globalExportPalette,
         globalGridType,
+        globalCellSize,
         setGlobalTheme,
     } = useColorByNumberStore();
 
@@ -62,6 +65,7 @@ export default function Dashboard() {
     const imageInputRef = useRef<HTMLInputElement>(null);
     const transparentImageInputRef = useRef<HTMLInputElement>(null);
     const dirInputRef = useRef<HTMLInputElement>(null);
+    const beforeAfterInputRef = useRef<HTMLInputElement>(null);
     const [directImages, setDirectImages] = useState<{ name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }[]>([]);
     const [paletteImages, setPaletteImages] = useState<string[]>([]);
     const [solutionCollagePages, setSolutionCollagePages] = useState<string[]>([]);
@@ -71,6 +75,20 @@ export default function Dashboard() {
     const [isConverting, setIsConverting] = useState(false);
     const [isPreparingStep2, setIsPreparingStep2] = useState(false);
     const [isZipping, setIsZipping] = useState(false);
+    const [beforeAfterTheme, setBeforeAfterTheme] = useState<BeforeAfterTheme>({
+        backgroundColor: "#000000",
+        borderColor: "#f6c64a",
+        arrowColor: "#ffc24a",
+        textColor: "#111111",
+        labelBackgroundColor: "#ffc24a",
+        transparentBackground: true,
+    });
+    const [beforeAfterJob, setBeforeAfterJob] = useState<{
+        name: string;
+        beforeUrl: string;
+        afterUrl: string;
+        previewUrl: string;
+    } | null>(null);
     const [splitColorDropdownId, setSplitColorDropdownId] = useState<string | null>(null);
     const [keepImportScreen, setKeepImportScreen] = useState(false);
     const splitColorRef = useRef<HTMLDivElement>(null);
@@ -317,6 +335,137 @@ export default function Dashboard() {
 
     const removeDirectImage = (name: string) => {
         setDirectImages(prev => prev.filter(img => img.name !== name));
+    };
+
+    const canvasToDataUrl = (canvas: HTMLCanvasElement): string => canvas.toDataURL("image/png");
+
+    const handleBeforeAfterImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsProcessingFolder(true);
+        try {
+            const gridType = globalGridType === "auto" ? "dot-code" : globalGridType;
+            const data = await imageToColorByNumber(file, {
+                gridType,
+                cellSize: globalCellSize,
+                useDithering: true,
+                removeWhiteBackground: false,
+                removeBottomWatermark: globalExportPalette,
+            });
+            const theme = getThemeById(globalTheme);
+            const uncolorCanvas = exportToCanvas(data, {}, {
+                showCodes: true,
+                colored: false,
+                showPalette: false,
+                bgColor: theme.backgroundColor,
+                showMagnifier: false,
+            });
+            const colorCanvas = exportToCanvas(data, {}, {
+                showCodes: data.gridType === "dot-code",
+                colored: true,
+                showPalette: false,
+                bgColor: theme.backgroundColor,
+                showMagnifier: false,
+            });
+            const beforeUrl = canvasToDataUrl(uncolorCanvas);
+            const afterUrl = canvasToDataUrl(colorCanvas);
+            const beforeAfterCanvas = await exportBeforeAfterToCanvas(
+                beforeUrl,
+                afterUrl,
+                beforeAfterTheme,
+            );
+            setBeforeAfterJob({
+                name: file.name,
+                beforeUrl,
+                afterUrl,
+                previewUrl: beforeAfterCanvas.toDataURL("image/png"),
+            });
+            uncolorCanvas.width = 0;
+            uncolorCanvas.height = 0;
+            colorCanvas.width = 0;
+            colorCanvas.height = 0;
+            beforeAfterCanvas.width = 0;
+            beforeAfterCanvas.height = 0;
+        } catch (error) {
+            console.error("Failed to generate before/after image:", error);
+        } finally {
+            setIsProcessingFolder(false);
+            e.target.value = "";
+        }
+    };
+
+    const refreshBeforeAfterPreview = async (themeOverride = beforeAfterTheme) => {
+        const currentJob = beforeAfterJob;
+        if (!currentJob) return;
+        const canvas = await exportBeforeAfterToCanvas(
+            currentJob.beforeUrl,
+            currentJob.afterUrl,
+            themeOverride,
+        );
+        setBeforeAfterJob(prev => prev ? { ...prev, previewUrl: canvas.toDataURL("image/png") } : prev);
+        canvas.width = 0;
+        canvas.height = 0;
+    };
+
+    const updateBeforeAfterTheme = async (updates: Partial<BeforeAfterTheme>) => {
+        const nextTheme = { ...beforeAfterTheme, ...updates };
+        setBeforeAfterTheme(nextTheme);
+        const currentJob = beforeAfterJob;
+        if (!currentJob) return;
+        const canvas = await exportBeforeAfterToCanvas(
+            currentJob.beforeUrl,
+            currentJob.afterUrl,
+            nextTheme,
+        );
+        setBeforeAfterJob({
+            ...currentJob,
+            previewUrl: canvas.toDataURL("image/png"),
+        });
+        canvas.width = 0;
+        canvas.height = 0;
+    };
+
+    const handleDownloadSingleBeforeAfter = async () => {
+        if (!beforeAfterJob) return;
+        const canvas = await exportBeforeAfterToCanvas(
+            beforeAfterJob.beforeUrl,
+            beforeAfterJob.afterUrl,
+            beforeAfterTheme,
+        );
+        canvas.toBlob((blob) => {
+            if (!blob) return;
+            const baseName = beforeAfterJob.name.replace(/\.[^/.]+$/, "");
+            saveAs(blob, `before-after-${baseName}.png`);
+        }, "image/png");
+        canvas.width = 0;
+        canvas.height = 0;
+    };
+
+    const handleDownloadBeforeAfter = async () => {
+        const pairs = directImages.filter(img => img.uncolorUrl && img.colorUrl);
+        if (pairs.length === 0) return;
+
+        setIsZipping(true);
+        try {
+            const zip = new JSZip();
+            const folder = zip.folder("before_after");
+            for (const img of pairs) {
+                const canvas = await exportBeforeAfterToCanvas(img.uncolorUrl, img.colorUrl, beforeAfterTheme);
+                const baseName = img.name.replace(/\.[^/.]+$/, "");
+                const base64 = canvas.toDataURL("image/png").split(",")[1];
+                folder?.file(`${baseName}.png`, base64, { base64: true });
+                canvas.width = 0;
+                canvas.height = 0;
+                await new Promise(r => setTimeout(r, 0));
+            }
+            const content = await zip.generateAsync({ type: "blob" });
+            saveAs(content, "before_after_images.zip");
+        } catch (error) {
+            console.error("Failed to export before/after images:", error);
+        } finally {
+            setIsZipping(false);
+        }
     };
 
     /* ── Split Color Mode Options ── */
@@ -697,7 +846,7 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
 
     const isFolderModeActive = directImages.length > 0;
     const shouldShowImportScreen = keepImportScreen || 
-                                   (projects.length === 0 && !isFolderModeActive) || 
+                                   (projects.length === 0 && !isFolderModeActive && !beforeAfterJob) || 
                                    (isFolderModeActive && currentStep === 1);
 
     if (shouldShowImportScreen) {
@@ -708,6 +857,8 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
                     handleImportTransparentClick={handleImportTransparentClick}
                     dirInputRef={dirInputRef}
                     handleDirUploadChange={handleDirUploadChange}
+                    beforeAfterInputRef={beforeAfterInputRef}
+                    handleBeforeAfterImageChange={handleBeforeAfterImageChange}
                     isProcessingFolder={isProcessingFolder}
                     uploadedFolders={uploadedFolders}
                     imageInputRef={imageInputRef}
@@ -775,6 +926,20 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
                                     Download All (.zip)
                                 </button>
                             )}
+                            {directImages.some(img => img.colorUrl && img.uncolorUrl) && (
+                                <button
+                                    onClick={handleDownloadBeforeAfter}
+                                    disabled={isZipping}
+                                    className="px-6 py-2 text-sm font-medium text-yellow-300 border border-yellow-400/40 bg-yellow-400/10 hover:bg-yellow-400/15 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isZipping ? (
+                                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
+                                    )}
+                                    Before/After
+                                </button>
+                            )}
                             <button
                                 onClick={handleNextToSetup}
                                 disabled={isConverting || isPreparingStep2}
@@ -804,17 +969,116 @@ async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string
 
             {/* Wizard Step 1: Grid of Project Cards */}
             {currentStep === 1 && (
-                <ProjectGrid
-                    projects={projects}
-                    directImages={directImages}
-                    removeDirectImage={removeDirectImage}
-                    splitColorDropdownId={splitColorDropdownId}
-                    setSplitColorDropdownId={setSplitColorDropdownId}
-                    splitColorRef={splitColorRef}
-                    setPreviewProjectId={setPreviewProjectId}
-                    SPLIT_COLOR_MODES={SPLIT_COLOR_MODES}
-                    GRID_TYPES={GRID_TYPES}
-                />
+                <div className="flex-1 min-h-0 flex flex-col gap-4">
+                    {beforeAfterJob && (
+                        <div className="flex-1 min-h-0 flex flex-col gap-4">
+                            <div className="shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4">
+                                <div className="flex flex-wrap items-center gap-4">
+                                    <div className="mr-2">
+                                        <div className="text-sm font-semibold text-[var(--text-primary)]">Before/After Settings</div>
+                                        <div className="text-xs text-[var(--text-secondary)]">{beforeAfterJob.name}</div>
+                                    </div>
+                                    {[
+                                        ["backgroundColor", "Background"],
+                                        ["borderColor", "Border"],
+                                        ["arrowColor", "Arrow"],
+                                        ["labelBackgroundColor", "Text Box"],
+                                        ["textColor", "Text"],
+                                    ].map(([key, label]) => (
+                                        <label key={key} className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                            <span>{label}</span>
+                                            <input
+                                                type="color"
+                                                value={beforeAfterTheme[key as keyof BeforeAfterTheme] as string}
+                                                onChange={(e) => void updateBeforeAfterTheme({ [key]: e.target.value } as Partial<BeforeAfterTheme>)}
+                                                className="h-8 w-10 rounded border border-[var(--border-default)] bg-transparent"
+                                            />
+                                        </label>
+                                    ))}
+                                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                        <input
+                                            type="checkbox"
+                                            checked={beforeAfterTheme.transparentBackground}
+                                            onChange={(e) => void updateBeforeAfterTheme({ transparentBackground: e.target.checked })}
+                                        />
+                                        Transparent background
+                                    </label>
+                                </div>
+                            </div>
+                            <div className="flex-1 min-h-0 rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4 flex items-center justify-center overflow-auto">
+                                <img
+                                    src={beforeAfterJob.previewUrl}
+                                    alt="Before after preview"
+                                    className="max-h-full max-w-full object-contain rounded-lg"
+                                />
+                            </div>
+                            <div className="shrink-0 flex justify-center gap-3">
+                                <button
+                                    onClick={() => beforeAfterInputRef.current?.click()}
+                                    disabled={isProcessingFolder}
+                                    className="px-5 py-2 text-sm font-medium text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg hover:bg-white/5 transition-colors"
+                                >
+                                    Choose Another Image
+                                </button>
+                                <button
+                                    onClick={handleDownloadSingleBeforeAfter}
+                                    className="px-6 py-2 text-sm font-medium text-yellow-300 border border-yellow-400/40 bg-yellow-400/10 hover:bg-yellow-400/15 rounded-lg shadow-sm transition-colors"
+                                >
+                                    Download Before/After
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {!beforeAfterJob && (
+                        <>
+                    {directImages.some(img => img.colorUrl && img.uncolorUrl) && (
+                        <div className="shrink-0 rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4">
+                            <div className="flex flex-wrap items-center gap-4">
+                                <div className="mr-2">
+                                    <div className="text-sm font-semibold text-[var(--text-primary)]">Before/After Export</div>
+                                    <div className="text-xs text-[var(--text-secondary)]">Uses uncolor as before and color as after.</div>
+                                </div>
+                                {[
+                                    ["backgroundColor", "Background"],
+                                    ["borderColor", "Border"],
+                                    ["arrowColor", "Arrow"],
+                                    ["textColor", "Text"],
+                                ].map(([key, label]) => (
+                                    <label key={key} className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                        <span>{label}</span>
+                                        <input
+                                            type="color"
+                                            value={beforeAfterTheme[key as keyof BeforeAfterTheme] as string}
+                                            onChange={(e) => setBeforeAfterTheme(prev => ({ ...prev, [key]: e.target.value }))}
+                                            className="h-8 w-10 rounded border border-[var(--border-default)] bg-transparent"
+                                        />
+                                    </label>
+                                ))}
+                                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                    <input
+                                        type="checkbox"
+                                        checked={beforeAfterTheme.transparentBackground}
+                                        onChange={(e) => setBeforeAfterTheme(prev => ({ ...prev, transparentBackground: e.target.checked }))}
+                                    />
+                                    Transparent background
+                                </label>
+                            </div>
+                        </div>
+                    )}
+                    <ProjectGrid
+                        projects={projects}
+                        directImages={directImages}
+                        removeDirectImage={removeDirectImage}
+                        splitColorDropdownId={splitColorDropdownId}
+                        setSplitColorDropdownId={setSplitColorDropdownId}
+                        splitColorRef={splitColorRef}
+                        setPreviewProjectId={setPreviewProjectId}
+                        SPLIT_COLOR_MODES={SPLIT_COLOR_MODES}
+                        GRID_TYPES={GRID_TYPES}
+                    />
+                        </>
+                    )}
+                </div>
             )}
 
             {/* Wizard Step 2: Setup PDF */}

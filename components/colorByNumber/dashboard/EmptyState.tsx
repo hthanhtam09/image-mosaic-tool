@@ -4,6 +4,8 @@ interface EmptyStateProps {
     handleImportClick: () => void;
     dirInputRef: React.RefObject<HTMLInputElement | null>;
     handleDirUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    beforeAfterInputRef: React.RefObject<HTMLInputElement | null>;
+    handleBeforeAfterImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     isProcessingFolder: boolean;
     uploadedFolders: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean };
     imageInputRef: React.RefObject<HTMLInputElement | null>;
@@ -19,12 +21,14 @@ interface EmptyStateProps {
     isPreparingStep2?: boolean;
 }
 
-type TabType = "standard" | "object" | "folder";
+type TabType = "standard" | "object" | "folder" | "before-after";
 
 export default function EmptyState({
     handleImportClick,
     dirInputRef,
     handleDirUploadChange,
+    beforeAfterInputRef,
+    handleBeforeAfterImageChange,
     isProcessingFolder,
     uploadedFolders,
     imageInputRef,
@@ -69,6 +73,19 @@ export default function EmptyState({
                 </svg>
             ),
             color: "#3b82f6", // blue-500
+        },
+        {
+            id: "before-after" as TabType,
+            name: "Before/After",
+            icon: (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                    <rect x="3" y="5" width="6" height="14" rx="1.5" />
+                    <rect x="15" y="5" width="6" height="14" rx="1.5" />
+                </svg>
+            ),
+            color: "#f59e0b",
         },
     ];
 
@@ -208,6 +225,38 @@ export default function EmptyState({
                         </div>
                     </div>
                 );
+            case "before-after":
+                return (
+                    <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="w-24 h-24 rounded-3xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(245,158,11,0.1)]">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M5 12h14" />
+                                <path d="m13 6 6 6-6 6" />
+                                <rect x="3" y="5" width="6" height="14" rx="1.5" />
+                                <rect x="15" y="5" width="6" height="14" rx="1.5" />
+                            </svg>
+                        </div>
+                        <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Before/After</h2>
+                        <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
+                            Import one image and generate a before/after PNG automatically: uncolored on the left, colored on the right.
+                        </p>
+
+                        <button
+                            onClick={() => beforeAfterInputRef.current?.click()}
+                            disabled={isProcessingFolder}
+                            className="px-12 py-4 text-lg font-semibold text-amber-300 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/15 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-[280px]"
+                        >
+                            {isProcessingFolder ? (
+                                <>
+                                    <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                                    Scanning...
+                                </>
+                            ) : (
+                                "Select Image"
+                            )}
+                        </button>
+                    </div>
+                );
             default:
                 return null;
         }
@@ -291,6 +340,13 @@ export default function EmptyState({
                 {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory: string; directory: string })}
                 className="hidden"
                 onChange={handleDirUploadChange}
+            />
+            <input
+                ref={beforeAfterInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                className="hidden"
+                onChange={handleBeforeAfterImageChange}
             />
         </div>
     );

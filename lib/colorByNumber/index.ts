@@ -5,3 +5,4 @@ export * from "./export";
 export * from "./imageToColorByNumber";
 export * from "./pdfExport";
 export * from "./objectFocus";
+export * from "./beforeAfter";
