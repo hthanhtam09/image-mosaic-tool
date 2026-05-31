@@ -153,7 +153,24 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
             }, 300);
         }
 
-        // Uncolored (only for full color projects, and skipped for transparent import)
+        if (activeProject.removeBackground) {
+            setTimeout(() => {
+                const canvasSubjectUncolor = exportToCanvas(activeProject.data!, activeProject.filled, {
+                    showCodes: shouldShowCodes(activeProject.data, activeProject.removeBackground, true),
+                    colored: false,
+                    showPalette: false,
+                    partialColorMode: activeProject.partialColorMode,
+                    bgColor: theme.backgroundColor,
+                    transparentBg: true,
+                    tightCrop: useObjectTightCrop,
+                    removeBgColorCells: globalExportPalette,
+                    showMagnifier: false,
+                });
+                downloadCanvas(canvasSubjectUncolor, `subject-uncolor-${baseName}.png`);
+            }, 500);
+        }
+
+        // Uncolored (only for full color projects)
         if (activeProject.partialColorMode === 'none' && !activeProject.removeBackground) {
             setTimeout(() => {
                 const canvas2 = exportToCanvas(activeProject.data!, activeProject.filled, {

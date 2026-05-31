@@ -617,6 +617,7 @@ export default function Dashboard() {
         const rootFolder = zip.folder("converted_images");
         const colorFolder = rootFolder?.folder("color");
         const uncolorFolder = rootFolder?.folder("uncolor");
+        const subjectUncolorFolder = rootFolder?.folder("subject_uncolor");
         const circleFolder = rootFolder?.folder("circle");
         const collageFolder = rootFolder?.folder("solutions_collage");
         const paletteFolder = globalExportPalette ? rootFolder?.folder("palette") : null;
@@ -688,6 +689,9 @@ export default function Dashboard() {
                 });
                 const base64Uncolor = canvasUncolor.toDataURL("image/png").split(',')[1];
                 uncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
+                if (project.removeBackground) {
+                    subjectUncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
+                }
                 
                 canvasUncolor.width = 0;
                 canvasUncolor.height = 0;
