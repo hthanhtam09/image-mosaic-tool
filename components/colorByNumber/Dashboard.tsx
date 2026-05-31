@@ -7,7 +7,12 @@ import { getThemeById } from "@/lib/colorByNumber/themes";
 
 import ProjectPreviewModal from "./ProjectPreviewModal";
 import { generateBookPdf, parseCSV, PDFCsvRow } from "@/lib/colorByNumber/pdfExport";
-import { exportToCanvas, exportPaletteToCanvas, exportCollagePagesToCanvas } from "@/lib/colorByNumber/export";
+import {
+    exportToCanvas,
+    exportPaletteToCanvas,
+    exportCollagePagesToCanvas,
+    exportDotCodeMagnifierToCanvas,
+} from "@/lib/colorByNumber/export";
 import { shouldShowCodes, shouldUseTightCrop } from "@/lib/colorByNumber/objectFocus";
 
 import JSZip from "jszip";
@@ -463,6 +468,7 @@ export default function Dashboard() {
         const rootFolder = zip.folder("converted_images");
         const colorFolder = rootFolder?.folder("color");
         const uncolorFolder = rootFolder?.folder("uncolor");
+        const circleFolder = rootFolder?.folder("circle");
         const collageFolder = rootFolder?.folder("solutions_collage");
         const paletteFolder = globalExportPalette ? rootFolder?.folder("palette") : null;
 
@@ -492,6 +498,7 @@ export default function Dashboard() {
                     transparentBg: project.removeBackground,
                     tightCrop: useObjectTightCrop,
                     removeBgColorCells: globalExportPalette,
+                    showMagnifier: false,
                 });
                 
                 const maxDim = 600;
@@ -505,6 +512,16 @@ export default function Dashboard() {
 
                 const base64Color = canvasColor.toDataURL("image/png").split(',')[1];
                 colorFolder?.file(`${baseName}.png`, base64Color, { base64: true });
+
+                if (project.removeBackground && project.data?.gridType === "dot-code") {
+                    const canvasCircle = exportDotCodeMagnifierToCanvas(project.data, {
+                        transparentBg: true,
+                    });
+                    const base64Circle = canvasCircle.toDataURL("image/png").split(',')[1];
+                    circleFolder?.file(`${baseName}.png`, base64Circle, { base64: true });
+                    canvasCircle.width = 0;
+                    canvasCircle.height = 0;
+                }
                 
                 canvasColor.width = 0;
                 canvasColor.height = 0;

@@ -3,7 +3,7 @@
 import { useColorByNumberStore, useActiveProject } from "@/store/useColorByNumberStore";
 import { useEffect, useRef, useState } from "react";
 import ColorByNumberGrid from "./ColorByNumberGrid";
-import { exportToCanvas } from "@/lib/colorByNumber";
+import { exportDotCodeMagnifierToCanvas, exportToCanvas } from "@/lib/colorByNumber";
 import { getThemeById } from "@/lib/colorByNumber/themes";
 import { shouldShowCodes, shouldUseTightCrop } from "@/lib/colorByNumber/objectFocus";
 
@@ -98,6 +98,7 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
                 transparentBg: activeProject.removeBackground,
                 tightCrop: useObjectTightCrop,
                 removeBgColorCells: globalExportPalette,
+                showMagnifier: false,
             });
             setPreviewUrl(canvas.toDataURL("image/png"));
             setIsGenerating(false);
@@ -139,8 +140,18 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
             transparentBg: activeProject.removeBackground,
             tightCrop: useObjectTightCrop,
             removeBgColorCells: globalExportPalette,
+            showMagnifier: false,
         });
         downloadCanvas(canvas1, `colored-${baseName}.png`);
+
+        if (activeProject.removeBackground && activeProject.data.gridType === "dot-code") {
+            setTimeout(() => {
+                const circleCanvas = exportDotCodeMagnifierToCanvas(activeProject.data!, {
+                    transparentBg: true,
+                });
+                downloadCanvas(circleCanvas, `circle-${baseName}.png`);
+            }, 300);
+        }
 
         // Uncolored (only for full color projects, and skipped for transparent import)
         if (activeProject.partialColorMode === 'none' && !activeProject.removeBackground) {

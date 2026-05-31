@@ -413,6 +413,7 @@ export const generateBookPdf = async (
         transparentBg: project!.removeBackground,
         tightCrop: shouldUseTightCrop(project!.data, project!.removeBackground),
         removeBgColorCells: globalOptions.globalExportPalette,
+        showMagnifier: false,
       });
 
       imgData = canvas.toDataURL("image/png");

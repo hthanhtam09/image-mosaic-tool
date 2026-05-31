@@ -1446,6 +1446,7 @@ export const exportToCanvas = (
     showCodes?: boolean;
     colored?: boolean;
     showPalette?: boolean;
+    showMagnifier?: boolean;
     /** Split color mode for partial coloring */
     partialColorMode?: PartialColorMode;
     /** Background color for the page (default: '#ffffff') */
@@ -1461,6 +1462,7 @@ export const exportToCanvas = (
   const showCodes = options.showCodes ?? true;
   const colored = options.colored ?? true;
   const showPalette = options.showPalette ?? true;
+  const showMagnifier = options.showMagnifier ?? true;
   const partialColorMode = options.partialColorMode ?? "none";
   const bgColor = options.bgColor ?? "#ffffff";
   const transparentBg = options.transparentBg ?? false;
@@ -1817,7 +1819,7 @@ export const exportToCanvas = (
 
   ctx.restore();
 
-  if (data.gridType === "dot-code" && colored && transparentBg) {
+  if (showMagnifier && data.gridType === "dot-code" && colored && transparentBg) {
     const magnifier = getDotCodeMagnifierLayout({
       pageW,
       pageH,
@@ -1831,6 +1833,35 @@ export const exportToCanvas = (
     drawDotCodeMagnifier(ctx, magnifier.cx, magnifier.cy, magnifier.r, data, transparentBg);
   }
 
+  return canvas;
+};
+
+export const exportDotCodeMagnifierToCanvas = (
+  data: ColorByNumberData,
+  options?: {
+    transparentBg?: boolean;
+    bgColor?: string;
+  },
+): HTMLCanvasElement => {
+  const r = 320;
+  const pad = 70;
+  const size = r * 2 + pad * 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  if (options?.transparentBg === false) {
+    ctx.fillStyle = options.bgColor ?? "#ffffff";
+    ctx.fillRect(0, 0, size, size);
+  } else {
+    ctx.clearRect(0, 0, size, size);
+  }
+
+  drawDotCodeMagnifier(ctx, size / 2, size / 2, r, data, options?.transparentBg !== false);
   return canvas;
 };
 

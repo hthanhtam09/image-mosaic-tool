@@ -1704,19 +1704,7 @@ const PageGrid = ({
     gridVisualTop +
     (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) +
     (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0);
-  const magnifier =
-    data.gridType === "dot-code" && colored && removeBackground
-      ? getDotCodeMagnifierLayout({
-          pageW: LETTER_OUTPUT_WIDTH,
-          pageH: LETTER_OUTPUT_HEIGHT,
-          gridX: gridPageX,
-          gridY: gridPageY,
-          gridW: gridDims.width * gridLayout.scale,
-          gridH: gridDims.height * gridLayout.scale,
-          cellSize: data.cellSize,
-          scale: gridLayout.scale,
-        })
-      : null;
+  const magnifier = null;
 
   // Checker pattern ID for transparent background preview
   const checkerId = `checker-${colored ? 'c' : 'u'}`;
@@ -1796,15 +1784,6 @@ const PageGrid = ({
           ))}
         </g>
       </g>
-      {magnifier && (
-        <DotCodeMagnifier
-          cx={magnifier.cx}
-          cy={magnifier.cy}
-          r={magnifier.r}
-          data={data}
-          transparentBg={removeBackground}
-        />
-      )}
     </g>
   );
 };
