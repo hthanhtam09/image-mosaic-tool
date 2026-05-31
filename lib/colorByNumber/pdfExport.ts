@@ -3,6 +3,7 @@ import { ColorByNumberData, FilledMap } from "./types";
 import { exportToCanvas, exportPaletteToCanvas, PartialColorMode } from "./export";
 import { NOTO_SANS_REGULAR, NOTO_SANS_BOLD } from "./fonts";
 import { getThemeById } from "./themes";
+import { shouldShowCodes, shouldUseTightCrop } from "./objectFocus";
 
 
 export interface PDFCsvRow {
@@ -404,13 +405,13 @@ export const generateBookPdf = async (
       imgData = directImages[i].uncolorUrl;
     } else {
       const canvas = exportToCanvas(project!.data, project!.filled, {
-        showCodes: project!.removeBackground ? false : globalOptions.showCodes,
+        showCodes: shouldShowCodes(project!.data, project!.removeBackground, globalOptions.showCodes),
         colored: isTransparentProject, // Only export colored for transparent mode
         showPalette: project!.removeBackground ? false : globalOptions.showPalette,
         partialColorMode: project!.partialColorMode,
         bgColor: bgColorHex,
         transparentBg: project!.removeBackground,
-        tightCrop: project!.removeBackground,
+        tightCrop: shouldUseTightCrop(project!.data, project!.removeBackground),
         removeBgColorCells: globalOptions.globalExportPalette,
       });
 

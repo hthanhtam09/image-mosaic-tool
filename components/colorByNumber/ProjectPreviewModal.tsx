@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import ColorByNumberGrid from "./ColorByNumberGrid";
 import { exportToCanvas } from "@/lib/colorByNumber";
 import { getThemeById } from "@/lib/colorByNumber/themes";
+import { shouldShowCodes, shouldUseTightCrop } from "@/lib/colorByNumber/objectFocus";
 
 
 interface ProjectPreviewModalProps {
@@ -81,15 +82,21 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
             const shouldShowPalette = activeProject.removeBackground
                 ? false
                 : (globalExportPalette ? false : globalShowPalette);
+            const showProjectCodes = shouldShowCodes(
+                activeProject.data,
+                activeProject.removeBackground,
+                globalShowNumbers,
+            );
+            const useObjectTightCrop = shouldUseTightCrop(activeProject.data, activeProject.removeBackground);
 
             const canvas = exportToCanvas(activeProject.data!, activeProject.filled, {
-                showCodes: activeProject.removeBackground ? false : globalShowNumbers,
+                showCodes: showProjectCodes,
                 colored: true,
                 showPalette: shouldShowPalette,
                 partialColorMode: activeProject.partialColorMode,
                 bgColor: theme.backgroundColor,
                 transparentBg: activeProject.removeBackground,
-                tightCrop: activeProject.removeBackground,
+                tightCrop: useObjectTightCrop,
                 removeBgColorCells: globalExportPalette,
             });
             setPreviewUrl(canvas.toDataURL("image/png"));
@@ -116,15 +123,21 @@ export default function ProjectPreviewModal({ projectId, onClose }: ProjectPrevi
         const shouldShowPalette = activeProject.removeBackground
             ? false
             : (globalExportPalette ? false : globalShowPalette);
+        const showProjectCodes = shouldShowCodes(
+            activeProject.data,
+            activeProject.removeBackground,
+            globalShowNumbers,
+        );
+        const useObjectTightCrop = shouldUseTightCrop(activeProject.data, activeProject.removeBackground);
 
         const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
-            showCodes: activeProject.removeBackground ? false : globalShowNumbers,
+            showCodes: showProjectCodes,
             colored: true,
             showPalette: shouldShowPalette,
             partialColorMode: activeProject.partialColorMode,
             bgColor: theme.backgroundColor,
             transparentBg: activeProject.removeBackground,
-            tightCrop: activeProject.removeBackground,
+            tightCrop: useObjectTightCrop,
             removeBgColorCells: globalExportPalette,
         });
         downloadCanvas(canvas1, `colored-${baseName}.png`);

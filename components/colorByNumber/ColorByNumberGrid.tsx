@@ -28,6 +28,12 @@ import {
   getPagePaddingX,
 } from "@/lib/colorByNumber/export";
 import { getThemeById } from "@/lib/colorByNumber/themes";
+import {
+  getDotCodeMagnifierLayout,
+  shouldRenderDotCodeBaseCell,
+  shouldShowCodes,
+  shouldUseTightCrop,
+} from "@/lib/colorByNumber/objectFocus";
 import type { ColorByNumberData, ColorByNumberCell, PageLayout } from "@/lib/colorByNumber";
 
 import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
@@ -214,6 +220,79 @@ const DotCodeDroplet = ({
       <path d={pathData} fill="#ffffff" stroke="#ffffff" strokeWidth={3} />
       {clamped > 0 && <path d={pathData} fill="#000000" clipPath={`url(#${clipId})`} />}
       <path d={pathData} fill="none" stroke="#555555" strokeWidth={1.5} />
+    </g>
+  );
+};
+
+const DotCodeMagnifier = ({
+  cx,
+  cy,
+  r,
+  data,
+  transparentBg,
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  data: ColorByNumberData;
+  transparentBg?: boolean;
+}) => {
+  const clipId = `dot-code-magnifier-${Math.round(cx)}-${Math.round(cy)}`;
+  const cell = r * 0.25;
+  const cols = 7;
+  const rows = 7;
+  const startX = cx - (cols * cell) / 2;
+  const startY = cy - (rows * cell) / 2;
+  const codeAt = (row: number, col: number): string =>
+    String(((row * 2 + col * 3 + (row % 2 === 0 ? 1 : 4)) % 5) + 1);
+
+  return (
+    <g>
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="#ffffff"
+        filter="drop-shadow(8px 10px 16px rgba(0,0,0,0.32))"
+      />
+      <clipPath id={clipId}>
+        <circle cx={cx} cy={cy} r={r * 0.91} />
+      </clipPath>
+      <g clipPath={`url(#${clipId})`}>
+        <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} fill="#ffffff" />
+        {Array.from({ length: rows }).flatMap((_, row) =>
+          Array.from({ length: cols }).map((__, col) => {
+            const x = startX + col * cell;
+            const y = startY + row * cell;
+            const midX = x + cell / 2;
+            const midY = y + cell / 2;
+            const rowCode = codeAt(row, col);
+            return (
+              <g key={`${row}-${col}`}>
+                <DotCodeCellBase x={x} y={y} size={cell} showBackground={false} />
+                {col < 3 && (
+                  <text
+                    x={midX}
+                    y={midY}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={cell * 0.5}
+                    fontWeight={700}
+                    fontFamily="'Noto Sans', sans-serif"
+                    fill="rgba(0,0,0,0.34)"
+                  >
+                    {rowCode}
+                  </text>
+                )}
+                {col >= 3 && (
+                  <DotCodeSymbol code={rowCode} cx={midX} cy={midY} size={cell} />
+                )}
+              </g>
+            );
+          }),
+        )}
+      </g>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#000000" strokeWidth={Math.max(10, r * 0.08)} />
     </g>
   );
 };
@@ -1614,6 +1693,30 @@ const PageGrid = ({
                 : data.gridType === "trapezoid"
                   ? CellTrapezoid
                   : CellSquare;
+  const gridPageX =
+    pagePaddingX -
+    40 +
+    (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) +
+    gridLayout.offsetX +
+    (layout.gridVisualLeftOffset || 0) +
+    (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0);
+  const gridPageY =
+    gridVisualTop +
+    (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) +
+    (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0);
+  const magnifier =
+    data.gridType === "dot-code" && colored && removeBackground
+      ? getDotCodeMagnifierLayout({
+          pageW: LETTER_OUTPUT_WIDTH,
+          pageH: LETTER_OUTPUT_HEIGHT,
+          gridX: gridPageX,
+          gridY: gridPageY,
+          gridW: gridDims.width * gridLayout.scale,
+          gridH: gridDims.height * gridLayout.scale,
+          cellSize: data.cellSize,
+          scale: gridLayout.scale,
+        })
+      : null;
 
   // Checker pattern ID for transparent background preview
   const checkerId = `checker-${colored ? 'c' : 'u'}`;
@@ -1664,20 +1767,20 @@ const PageGrid = ({
       {/* Grid centered in its available area */}
       {/* Grid X = Padding + PaletteWidth + Gap + OffsetX - 40 offset */}
       <g
-        transform={`translate(${pagePaddingX - 40 + (paletteLayout && !removeBackground ? paletteLayout.palColW + 30 : 0) + gridLayout.offsetX + (layout.gridVisualLeftOffset || 0) + (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0)}, ${gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0)}) scale(${gridLayout.scale})`}
+        transform={`translate(${gridPageX}, ${gridPageY}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
           {data.gridType === "dot-code" &&
-            Array.from({ length: data.height }).map((_, y) =>
-              Array.from({ length: data.width }).map((__, x) => (
-                <DotCodeCellBase
-                  key={`base-${x},${y}`}
-                  x={x * data.cellSize}
-                  y={y * data.cellSize}
-                  size={data.cellSize}
-                />
-              )),
-            )}
+            Array.from({ length: data.height }).flatMap((_, y) =>
+              Array.from({ length: data.width }).map((__, x) => ({ x, y })),
+            ).filter(({ x, y }) => shouldRenderDotCodeBaseCell(data, x, y, removeBackground)).map(({ x, y }) => (
+              <DotCodeCellBase
+                key={`base-${x},${y}`}
+                x={x * data.cellSize}
+                y={y * data.cellSize}
+                size={data.cellSize}
+              />
+            ))}
           {data.cells.map((cell) => (
             <CellComponent
               key={`${cell.x},${cell.y}`}
@@ -1693,6 +1796,15 @@ const PageGrid = ({
           ))}
         </g>
       </g>
+      {magnifier && (
+        <DotCodeMagnifier
+          cx={magnifier.cx}
+          cy={magnifier.cy}
+          r={magnifier.r}
+          data={data}
+          transparentBg={removeBackground}
+        />
+      )}
     </g>
   );
 };
@@ -1722,7 +1834,7 @@ export default function ColorByNumberGrid({
   const zoom = activeProject?.zoom || 1;
   const panX = activeProject?.panX || 0;
   const panY = activeProject?.panY || 0;
-  const showNumbers = activeProject?.removeBackground ? false : globalShowNumbers;
+  const showNumbers = shouldShowCodes(data, activeProject?.removeBackground, globalShowNumbers);
   const showPalette = activeProject?.removeBackground ? false : globalShowPalette;
   const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
   const theme = getThemeById(globalTheme);
@@ -1804,7 +1916,7 @@ export default function ColorByNumberGrid({
     const visualBounds = getVisualGridBounds(data);
 
     // Keep a little extra air in Object Focus mode so the subject is not clipped.
-    if (activeProject?.removeBackground) {
+    if (shouldUseTightCrop(data, activeProject?.removeBackground)) {
       const padRatio = 0.16;
       maxGridW = safeW * (1 - padRatio * 2);
       maxGridH = safeH * (1 - padRatio * 2);

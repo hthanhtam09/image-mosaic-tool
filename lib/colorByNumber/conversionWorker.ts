@@ -188,10 +188,22 @@ self.onmessage = (e: MessageEvent) => {
   // 2b. FILTER MINOR COLORS
   rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
   
+  let backgroundCellKeys: string[] | undefined;
+
   // 2c. REMOVE BACKGROUND IF REQUESTED
   if (removeWhiteBackground) {
     const hasTransparentBlocks = rawBlocks.some((b) => b.isTransparent);
-    if (hasTransparentBlocks) {
+    if (gridType === "dot-code") {
+      const visibleBlocks = hasTransparentBlocks
+        ? rawBlocks.filter((b) => !b.isTransparent)
+        : removeBackgroundBlocks(rawBlocks, cols, rows, cellSize);
+      const visibleKeys = new Set(
+        visibleBlocks.map((b) => `${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`),
+      );
+      backgroundCellKeys = rawBlocks
+        .filter((b) => !visibleKeys.has(`${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`))
+        .map((b) => `${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`);
+    } else if (hasTransparentBlocks) {
       // If the image already has true alpha transparency, just remove the empty blocks!
       // This prevents the flood-fill from accidentally eating white objects that touch the edge.
       rawBlocks = rawBlocks.filter((b) => !b.isTransparent);
@@ -314,6 +326,7 @@ self.onmessage = (e: MessageEvent) => {
     cellSize,
     cellGap: gridType === "honeycomb" ? 2 : 0,
     rotationDeg: gridType === "diamond" ? 45 : 0,
+    backgroundCells: backgroundCellKeys,
     cells: finalCells,
   };
 

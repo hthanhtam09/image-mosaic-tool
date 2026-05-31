@@ -8,6 +8,7 @@ import { getThemeById } from "@/lib/colorByNumber/themes";
 import ProjectPreviewModal from "./ProjectPreviewModal";
 import { generateBookPdf, parseCSV, PDFCsvRow } from "@/lib/colorByNumber/pdfExport";
 import { exportToCanvas, exportPaletteToCanvas, exportCollagePagesToCanvas } from "@/lib/colorByNumber/export";
+import { shouldShowCodes, shouldUseTightCrop } from "@/lib/colorByNumber/objectFocus";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -155,19 +156,6 @@ export default function Dashboard() {
                 const fileList = Array.from(files).sort((a, b) =>
                     a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
                 );
-                // Pattern cycle: Square -> Circle -> Diamond -> Pentagon -> Puzzle -> Islamic -> Fish Scale -> Trapezoid
-                const patternCycle: ColorByNumberGridType[] = [
-                    "standard",
-                    "honeycomb",
-                    "diamond",
-                    "pentagon",
-                    "puzzle",
-                    "islamic",
-                    "fish-scale",
-                    "trapezoid",
-                    "dot-code",
-                ];
-
                 const newProjectIds: string[] = [];
 
                 // Process sequentially to preserve order
@@ -180,16 +168,18 @@ export default function Dashboard() {
                         reader.readAsDataURL(file);
                     });
 
-                    // Calculate pattern based on index
-                    const pattern = patternCycle[index % patternCycle.length];
+                    const pattern: ColorByNumberGridType =
+                        globalGridType === "auto" ? "dot-code" : globalGridType;
                     const id = crypto.randomUUID();
 
-                    // 1.5 Pad the image to protect edges
-                    const paddedDataUrl = await padImageDataUrl(dataUrl, 130);
+                    const sourceDataUrl =
+                        pattern === "dot-code" ? dataUrl : await padImageDataUrl(dataUrl, 130);
+                    const sourceFile =
+                        pattern === "dot-code"
+                            ? file
+                            : await dataUrlToFile(sourceDataUrl, file.name, file.type || "image/png");
 
-                    // Add project with assigned pattern and transparent background mode
-                    const paddedFile = await dataUrlToFile(paddedDataUrl, file.name, file.type || "image/png");
-                    addProject(paddedFile, paddedDataUrl, {
+                    addProject(sourceFile, sourceDataUrl, {
                         id,
                         gridType: pattern,
                         removeBackground: true,
@@ -213,7 +203,7 @@ export default function Dashboard() {
                 e.target.value = "";
             }
         },
-        [addProject, convertAllIdleProjects],
+        [addProject, convertAllIdleProjects, globalGridType],
     );
 
     const handleDirUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -489,15 +479,18 @@ export default function Dashboard() {
                     ? false
                     : (globalExportPalette ? false : globalShowPalette);
 
+                const showProjectCodes = shouldShowCodes(project.data, project.removeBackground, globalShowNumbers);
+                const useObjectTightCrop = shouldUseTightCrop(project.data, project.removeBackground);
+
                 // Color version
                 const canvasColor = exportToCanvas(project.data!, project.filled, {
-                    showCodes: project.removeBackground ? false : globalShowNumbers,
+                    showCodes: showProjectCodes,
                     colored: true,
                     showPalette: shouldShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
-                    tightCrop: project.removeBackground,
+                    tightCrop: useObjectTightCrop,
                     removeBgColorCells: globalExportPalette,
                 });
                 
@@ -518,13 +511,13 @@ export default function Dashboard() {
 
                 // Uncolored version (empty grid with numbers)
                 const canvasUncolor = exportToCanvas(project.data!, project.filled, {
-                    showCodes: !project.removeBackground,
+                    showCodes: shouldShowCodes(project.data, project.removeBackground, !project.removeBackground),
                     colored: false,
                     showPalette: shouldShowPalette,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
-                    tightCrop: project.removeBackground,
+                    tightCrop: useObjectTightCrop,
                     removeBgColorCells: globalExportPalette,
                 });
                 const base64Uncolor = canvasUncolor.toDataURL("image/png").split(',')[1];
@@ -607,14 +600,15 @@ export default function Dashboard() {
             const colorCanvases: HTMLCanvasElement[] = [];
             for (const project of readyProjects) {
                 if (!project.data) continue;
+                const showProjectCodes = shouldShowCodes(project.data, project.removeBackground, false);
                 const fullCanvas = exportToCanvas(project.data, project.filled, {
-                    showCodes: false,
+                    showCodes: showProjectCodes,
                     colored: true,
                     showPalette: false,
                     partialColorMode: project.partialColorMode,
                     bgColor: theme.backgroundColor,
                     transparentBg: project.removeBackground,
-                    tightCrop: project.removeBackground,
+                    tightCrop: shouldUseTightCrop(project.data, project.removeBackground),
                 });
                 const maxDim = 600;
                 const scale = Math.min(1, maxDim / Math.max(fullCanvas.width, fullCanvas.height));

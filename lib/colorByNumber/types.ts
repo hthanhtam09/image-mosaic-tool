@@ -30,6 +30,8 @@ export interface ColorByNumberData {
   rotationDeg?: number;
   /** Gap between cells in px (honeycomb: 1-2px) */
   cellGap?: number;
+  /** Edge-connected background cells that should be transparent in Object Focus exports. */
+  backgroundCells?: string[];
   cells: ColorByNumberCell[];
 }
 

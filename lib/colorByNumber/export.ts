@@ -17,6 +17,11 @@ import {
   getCellLayout,
   TRAPEZOID_SLANT_FACTOR,
 } from "./layoutCalculator";
+import {
+  getDotCodeMagnifierLayout,
+  isTransparentCell,
+  shouldRenderDotCodeBaseCell,
+} from "./objectFocus";
 
 /** Partial color split mode type */
 export type PartialColorMode =
@@ -272,6 +277,73 @@ const drawDotCodeSymbol = (
     line(left, cy, right, cy);
   }
 
+  ctx.restore();
+};
+
+const drawDotCodeMagnifier = (
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  data: ColorByNumberData,
+  transparentBg: boolean,
+) => {
+  const cell = r * 0.25;
+  const cols = 7;
+  const rows = 7;
+  const startX = cx - (cols * cell) / 2;
+  const startY = cy - (rows * cell) / 2;
+  const codeAt = (row: number, col: number): string =>
+    String(((row * 2 + col * 3 + (row % 2 === 0 ? 1 : 4)) % 5) + 1);
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.32)";
+  ctx.shadowBlur = r * 0.11;
+  ctx.shadowOffsetX = r * 0.035;
+  ctx.shadowOffsetY = r * 0.055;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.91, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = startX + col * cell;
+      const y = startY + row * cell;
+      const rowCode = codeAt(row, col);
+      drawDotCodeCellBase(ctx, x, y, cell, false);
+      const midX = x + cell / 2;
+      const midY = y + cell / 2;
+      if (col < 3) {
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.34)";
+        ctx.font = `700 ${cell * 0.5}px 'Noto Sans', sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(rowCode, midX, midY);
+        ctx.restore();
+      } else {
+        drawDotCodeSymbol(ctx, rowCode, midX, midY, cell);
+      }
+    }
+  }
+
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = Math.max(10, r * 0.08);
+  ctx.stroke();
   ctx.restore();
 };
 
@@ -1572,8 +1644,7 @@ export const exportToCanvas = (
 
     // In transparent-background mode, cells that are not colored (background cells)
     // should be completely invisible – skip both fill AND stroke.
-    const isBgCell = !cell.code;
-    if (transparentBg && isBgCell) return;
+    if (isTransparentCell(data, cell, transparentBg)) return;
 
     if (removeBgColorCells) {
       const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
@@ -1734,6 +1805,7 @@ export const exportToCanvas = (
   if (data.gridType === "dot-code") {
     for (let y = 0; y < data.height; y++) {
       for (let x = 0; x < data.width; x++) {
+        if (!shouldRenderDotCodeBaseCell(data, x, y, transparentBg)) continue;
         drawDotCodeCellBase(ctx, x * data.cellSize, y * data.cellSize, data.cellSize);
       }
     }
@@ -1744,6 +1816,21 @@ export const exportToCanvas = (
   }
 
   ctx.restore();
+
+  if (data.gridType === "dot-code" && colored && transparentBg) {
+    const magnifier = getDotCodeMagnifierLayout({
+      pageW,
+      pageH,
+      gridX: gridStartX,
+      gridY: gridVisualTopPos,
+      gridW: gridDims.width * gridLayout.scale,
+      gridH: gridDims.height * gridLayout.scale,
+      cellSize: data.cellSize,
+      scale: gridLayout.scale,
+    });
+    drawDotCodeMagnifier(ctx, magnifier.cx, magnifier.cy, magnifier.r, data, transparentBg);
+  }
+
   return canvas;
 };
 
