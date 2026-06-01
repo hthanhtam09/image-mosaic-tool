@@ -48,7 +48,8 @@ const STORAGE_KEY = "color-by-number-progress";
 export const PAGE_PADDING_X = 90; // 0.3 inch * 300 DPI = 90px
 export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
 export const DOT_CODE_PAGE_PADDING_X = 75; // 0.25 inch * 300 DPI: tighter but still KDP-safe
-export const CONTENT_SAFE_INSET = 30; // Keep converted artwork comfortably inside the safe area.
+export const CONTENT_SAFE_INSET = 60; // Keep converted artwork comfortably inside the safe area.
+export const CONTENT_SAFE_INSET_LEFT_EXTRA = 30; // 0.1 inch extra left inset at 300 DPI.
 export const CONTENT_SAFE_INSET_LEFT = 70; // Extra left inset for KDP safe-area tolerance.
 export const PALETTE_GAP = 30; // Gap between palette and grid.
 export const PALETTE_X_OFFSET = 0; // Do not pull palette/grid into the left safe margin.
@@ -1518,7 +1519,10 @@ export const exportToCanvas = (
   const safeH = pageH - padY * 2;
   const contentSafeW = Math.max(
     0,
-    safeW - CONTENT_SAFE_INSET_LEFT - CONTENT_SAFE_INSET,
+    safeW -
+      CONTENT_SAFE_INSET_LEFT -
+      CONTENT_SAFE_INSET_LEFT_EXTRA -
+      CONTENT_SAFE_INSET,
   );
   const contentSafeH = Math.max(0, safeH - CONTENT_SAFE_INSET * 2);
 
@@ -1588,7 +1592,11 @@ export const exportToCanvas = (
   // ── Palette column (Left) ──
   if (needsPalette && layout) {
     ctx.save();
-    const paletteX = padX + CONTENT_SAFE_INSET_LEFT + PALETTE_X_OFFSET;
+    const paletteX =
+      padX +
+      CONTENT_SAFE_INSET_LEFT +
+      CONTENT_SAFE_INSET_LEFT_EXTRA +
+      PALETTE_X_OFFSET;
 
     ctx.translate(paletteX, paletteY);
     renderPaletteColumnCBN(ctx, data, layout, {
@@ -1605,6 +1613,7 @@ export const exportToCanvas = (
   const gridStartX =
     padX +
     CONTENT_SAFE_INSET_LEFT +
+    CONTENT_SAFE_INSET_LEFT_EXTRA +
     (paletteWidth > 0 ? PALETTE_X_OFFSET : 0) +
     paletteWidth +
     (paletteWidth > 0 ? PALETTE_GAP : 0) +
