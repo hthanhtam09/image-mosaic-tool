@@ -35,7 +35,7 @@ const softCropToPortrait = (
   img: HTMLImageElement | HTMLCanvasElement,
   targetRatio: number,
   cropBottom: boolean = false,
-  tolerance: number = 0.20,
+  tolerance: number = 0.2,
 ): HTMLCanvasElement => {
   const srcW = img instanceof HTMLCanvasElement ? img.width : img.width;
   let srcH = img instanceof HTMLCanvasElement ? img.height : img.height;
@@ -47,7 +47,10 @@ const softCropToPortrait = (
   const currentRatio = srcW / srcH;
 
   // Allow up to 20% ratio deviation before cropping — preserves full image for most photos
-  let sx = 0, sy = 0, sw = srcW, sh = srcH;
+  let sx = 0,
+    sy = 0,
+    sw = srcW,
+    sh = srcH;
 
   if (currentRatio > targetRatio * (1 + tolerance)) {
     // Image is significantly wider than portrait target: trim sides only
@@ -119,7 +122,11 @@ export const imageToColorByNumber = async (
     cellSize = 25,
     maxWidth = 1800,
     useDithering = true,
-    maxColors = gridType === "dot-code" ? 6 : 20,
+    maxColors = gridType === "square-mark"
+      ? 6
+      : gridType === "hexagon-mark"
+        ? 8
+        : 20,
     removeWhiteBackground = true,
     removeBottomWatermark = false,
   } = options;
@@ -147,8 +154,9 @@ export const imageToColorByNumber = async (
     }
   }
 
-  const TARGET_ASPECT = gridType === "dot-code" ? 7.8 / 10.2 : 7.0 / 10.2;
-  const ASPECT_TOLERANCE = gridType === "dot-code" ? 0.04 : 0.20;
+  const isMarkGrid = gridType === "square-mark" || gridType === "hexagon-mark";
+  const TARGET_ASPECT = isMarkGrid ? 7.8 / 10.2 : 7.0 / 10.2;
+  const ASPECT_TOLERANCE = isMarkGrid ? 0.04 : 0.2;
 
   // Normalize to canvas (no crop, no watermark removal — preserves full image)
   const sourceCanvas =
@@ -156,7 +164,7 @@ export const imageToColorByNumber = async (
       ? currentSource
       : copyToCanvas(currentSource);
 
-  // Soft crop: dot-code crops closer to the printable safe-area aspect.
+  // Soft crop: square-mark crops closer to the printable safe-area aspect.
   const croppedCanvas = softCropToPortrait(
     sourceCanvas,
     TARGET_ASPECT,
@@ -184,6 +192,10 @@ export const imageToColorByNumber = async (
     const r = cellSize / Math.sqrt(3);
     const rowStep = 1.5 * r;
     rows = Math.ceil(rows * (cellSize / rowStep));
+  } else if (gridType === "hexagon-mark") {
+    const r = cellSize / Math.sqrt(3);
+    const rowStep = 1.5 * r;
+    rows = Math.ceil(rows * (cellSize / rowStep));
   } else if (gridType === "fish-scale") {
     const rowStep = cellSize / 2;
     rows = Math.ceil(rows * (cellSize / rowStep));
@@ -193,7 +205,7 @@ export const imageToColorByNumber = async (
   const targetW = cols * cellSize;
   const targetH = rows * cellSize;
   const imageData =
-    gridType === "standard" || gridType === "dot-code"
+    gridType === "standard" || gridType === "square-mark"
       ? baseData
       : resizeCanvasToSize(croppedCanvas, targetW, targetH);
 

@@ -8,7 +8,13 @@ import {
 } from "../pixelate";
 import { quantizeImage } from "../quantize";
 import { FIXED_PALETTE } from "../palette";
-import { rgbToHex, paletteIndexToLabel, isWhite, enhanceImage, type RGB } from "../utils";
+import {
+  rgbToHex,
+  paletteIndexToLabel,
+  isWhite,
+  enhanceImage,
+  type RGB,
+} from "../utils";
 import type { ConversionWorkerMessage } from "./types";
 
 /**
@@ -36,10 +42,48 @@ const findClosestFixedColorIndex = (color: RGB): number => {
 };
 
 const codeForPalettePosition = (index: number, gridType: string): string =>
-  gridType === "dot-code" ? String(index) : paletteIndexToLabel(index);
+  gridType === "square-mark" ? String(index) : paletteIndexToLabel(index);
+
+const isMarkGrid = (gridType: string): boolean =>
+  gridType === "square-mark" || gridType === "hexagon-mark";
+
+const markCodesForGridType = (gridType: string): string[] =>
+  gridType === "hexagon-mark"
+    ? [".", "1", "2", "3", "4", "5", "6"]
+    : ["1", "2", "3", "4", "5"];
 
 const brightnessOf = (color: RGB): number =>
   color.r * 0.299 + color.g * 0.587 + color.b * 0.114;
+
+const hueDegreesFromLab = (a: number, b: number): number => {
+  const deg = (Math.atan2(b, a) * 180) / Math.PI;
+  return deg < 0 ? deg + 360 : deg;
+};
+
+const circularHueDistance = (a: number, b: number): number => {
+  const diff = Math.abs(a - b) % 360;
+  return Math.min(diff, 360 - diff);
+};
+
+const markToneOf = (color: RGB): { score: number; hue: number; chroma: number } => {
+  const lab = rgbToLab(color);
+  const chroma = Math.hypot(lab.a, lab.b);
+  const hue = hueDegreesFromLab(lab.a, lab.b);
+
+  // OKLab L is the primary tone. Chroma/hue nudges separate warm, cool, and neutral
+  // colors that have similar lightness but should use different marks.
+  const warmHueProximity = 1 - circularHueDistance(hue, 75) / 180;
+  const coolHueProximity = 1 - circularHueDistance(hue, 265) / 180;
+  const neutralPenalty = Math.max(0, 0.035 - chroma) * 0.45;
+  const score =
+    lab.L +
+    chroma * 0.18 +
+    chroma * warmHueProximity * 0.1 -
+    chroma * coolHueProximity * 0.06 -
+    neutralPenalty;
+
+  return { score, hue, chroma };
+};
 
 /**
  * agglomerativeMerge — OPTIMIZED:
@@ -49,7 +93,11 @@ const brightnessOf = (color: RGB): number =>
  * Improvement: uses frequency-weighted centroid instead of naive midpoint.
  * The merged color is pulled toward the dominant color in the cluster.
  */
-const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
+const agglomerativeMerge = (
+  colors: RGB[],
+  maxColors: number,
+  inputWeights?: ArrayLike<number>,
+): RGB[] => {
   const n = colors.length;
   if (n <= maxColors) return colors.map((c) => ({ ...c }));
 
@@ -59,7 +107,10 @@ const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
     (c) => c.r >= 245 && c.g >= 245 && c.b >= 245,
   );
   // Track count (frequency) of each cluster — starts at 1 each, grows on merge
-  const counts = new Int32Array(n).fill(1);
+  const counts = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    counts[i] = Math.max(1, inputWeights?.[i] ?? 1);
+  }
 
   // Build upper-triangular distance matrix
   const size = palette.length;
@@ -141,15 +192,24 @@ const agglomerativeMerge = (colors: RGB[], maxColors: number): RGB[] => {
 };
 
 self.onmessage = (e: MessageEvent) => {
-  const { imageData, gridType, cellSize, useDithering, maxColors, cols, rows, removeWhiteBackground } =
-    e.data as ConversionWorkerMessage;
+  const {
+    imageData,
+    gridType,
+    cellSize,
+    useDithering,
+    maxColors,
+    cols,
+    rows,
+    removeWhiteBackground,
+  } = e.data as ConversionWorkerMessage;
 
   // 0. ENHANCE IMAGE: auto-contrast + saturation boost + sharpen
   //    Runs directly on the transferred ImageData buffer before quantization.
   const rawImageData = imageData as unknown as ImageData;
+  const markGrid = isMarkGrid(gridType);
   const enhancedImageData = enhanceImage(rawImageData, {
-    contrastStrength: 0.6,  // Less aggressive to avoid clipping highlights/shadows
-    saturation: 1.35,       // Slightly stronger saturation for better color separation
+    contrastStrength: markGrid ? 0.22 : 0.6,
+    saturation: markGrid ? 1.12 : 1.35,
     sharpen: true,
   });
 
@@ -173,8 +233,26 @@ self.onmessage = (e: MessageEvent) => {
     initialPalette.push({ r: 255, g: 255, b: 255 });
   }
 
+  const paletteWeights = new Float64Array(initialPalette.length);
+  if (markGrid) {
+    const preliminaryBlocks = createMosaicBlocks(
+      enhancedImageData,
+      initialPalette,
+      cellSize,
+      false,
+      true,
+    );
+    for (const block of preliminaryBlocks) {
+      paletteWeights[block.paletteIndex]++;
+    }
+  }
+
   // 1b. AGGLOMERATIVE MERGE
-  const dynamicPalette = agglomerativeMerge(initialPalette, maxColors);
+  const dynamicPalette = agglomerativeMerge(
+    initialPalette,
+    maxColors,
+    markGrid ? paletteWeights : undefined,
+  );
 
   // 2. Create mosaic blocks (use enhanced image for better block averaging)
   let rawBlocks = createMosaicBlocks(
@@ -187,22 +265,31 @@ self.onmessage = (e: MessageEvent) => {
 
   // 2b. FILTER MINOR COLORS
   rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
-  
+
   let backgroundCellKeys: string[] | undefined;
 
   // 2c. REMOVE BACKGROUND IF REQUESTED
   if (removeWhiteBackground) {
     const hasTransparentBlocks = rawBlocks.some((b) => b.isTransparent);
-    if (gridType === "dot-code") {
+    if (isMarkGrid(gridType)) {
       const visibleBlocks = hasTransparentBlocks
         ? rawBlocks.filter((b) => !b.isTransparent)
         : removeBackgroundBlocks(rawBlocks, cols, rows, cellSize);
       const visibleKeys = new Set(
-        visibleBlocks.map((b) => `${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`),
+        visibleBlocks.map(
+          (b) => `${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`,
+        ),
       );
       backgroundCellKeys = rawBlocks
-        .filter((b) => !visibleKeys.has(`${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`))
-        .map((b) => `${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`);
+        .filter(
+          (b) =>
+            !visibleKeys.has(
+              `${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`,
+            ),
+        )
+        .map(
+          (b) => `${Math.round(b.x / cellSize)},${Math.round(b.y / cellSize)}`,
+        );
     } else if (hasTransparentBlocks) {
       // If the image already has true alpha transparency, just remove the empty blocks!
       // This prevents the flood-fill from accidentally eating white objects that touch the edge.
@@ -225,25 +312,52 @@ self.onmessage = (e: MessageEvent) => {
   );
 
   // 5. Build sequential code mapping
-  const indexIsWhite = usedPalette.map((c) => gridType !== "dot-code" && isWhite(c));
+  const indexIsWhite = usedPalette.map(
+    (c) => !isMarkGrid(gridType) && isWhite(c),
+  );
   let seq = 0;
   const indexToCode = new Map<number, string>();
-  if (gridType === "dot-code") {
-    const brightEntries = usedPalette.map((color, index) => ({
-      index,
-      brightness: brightnessOf(color),
-      isLight: color.r >= 245 && color.g >= 245 && color.b >= 245,
-    }));
+  if (isMarkGrid(gridType)) {
+    const markCodes = markCodesForGridType(gridType);
+    const paletteCounts = new Int32Array(usedPalette.length);
+    for (const block of blocks) {
+      paletteCounts[block.paletteIndex]++;
+    }
+    const brightEntries = usedPalette.map((color, index) => {
+      const tone = markToneOf(color);
+      return {
+        index,
+        score: tone.score,
+        hue: tone.hue,
+        chroma: tone.chroma,
+        count: paletteCounts[index],
+        brightness: brightnessOf(color),
+        isLight: color.r >= 245 && color.g >= 245 && color.b >= 245,
+      };
+    });
     for (const entry of brightEntries) {
       if (entry.isLight) indexToCode.set(entry.index, "");
     }
     const ranked = brightEntries
       .filter((entry) => !entry.isLight)
-      .sort((a, b) => b.brightness - a.brightness);
+      .sort((a, b) => {
+        const toneDiff = b.score - a.score;
+        if (Math.abs(toneDiff) > 0.018) return toneDiff;
+        const chromaDiff = b.chroma - a.chroma;
+        if (Math.abs(chromaDiff) > 0.015) return chromaDiff;
+        const hueDiff = a.hue - b.hue;
+        if (Math.abs(hueDiff) > 8) return hueDiff;
+        const countDiff = b.count - a.count;
+        if (countDiff !== 0) return countDiff;
+        return b.brightness - a.brightness;
+      });
     const maxRank = Math.max(1, ranked.length - 1);
     ranked.forEach((entry, rank) => {
-      const code = ranked.length === 1 ? 5 : Math.round(1 + (rank / maxRank) * 4);
-      indexToCode.set(entry.index, String(Math.max(1, Math.min(5, code))));
+      const codeIndex =
+        ranked.length === 1
+          ? markCodes.length - 1
+          : Math.round((rank / maxRank) * (markCodes.length - 1));
+      indexToCode.set(entry.index, markCodes[Math.max(0, Math.min(markCodes.length - 1, codeIndex))]);
     });
   } else {
     for (let i = 0; i < usedPalette.length; i++) {
@@ -256,13 +370,52 @@ self.onmessage = (e: MessageEvent) => {
     }
   }
 
+  let markBlockCodes: string[] | undefined;
+  if (isMarkGrid(gridType)) {
+    const markCodes = markCodesForGridType(gridType);
+    const entries = blocks.map((block, ordinal) => {
+      const color = block.avgColor ?? block.color;
+      const tone = markToneOf(color);
+      return {
+        ordinal,
+        score: tone.score,
+        hue: tone.hue,
+        chroma: tone.chroma,
+        brightness: brightnessOf(color),
+        isLight: color.r >= 245 && color.g >= 245 && color.b >= 245,
+      };
+    });
+
+    markBlockCodes = new Array(blocks.length).fill("");
+    const rankedBlocks = entries
+      .filter((entry) => !entry.isLight)
+      .sort((a, b) => {
+        const toneDiff = b.score - a.score;
+        if (Math.abs(toneDiff) > 0.012) return toneDiff;
+        const chromaDiff = b.chroma - a.chroma;
+        if (Math.abs(chromaDiff) > 0.01) return chromaDiff;
+        const hueDiff = a.hue - b.hue;
+        if (Math.abs(hueDiff) > 6) return hueDiff;
+        return b.brightness - a.brightness;
+      });
+    const maxRank = Math.max(1, rankedBlocks.length - 1);
+    rankedBlocks.forEach((entry, rank) => {
+      const codeIndex =
+        rankedBlocks.length === 1
+          ? markCodes.length - 1
+          : Math.round((rank / maxRank) * (markCodes.length - 1));
+      markBlockCodes![entry.ordinal] =
+        markCodes[Math.max(0, Math.min(markCodes.length - 1, codeIndex))];
+    });
+  }
+
   // 6. Convert to cells
   let minX = cols,
     minY = rows,
     maxX = 0,
     maxY = 0;
 
-  const rawCells = blocks.map((block) => {
+  const rawCells = blocks.map((block, blockOrdinal) => {
     const x = Math.round(block.x / cellSize);
     const y = Math.round(block.y / cellSize);
     if (x < minX) minX = x;
@@ -273,8 +426,8 @@ self.onmessage = (e: MessageEvent) => {
     return {
       x,
       y,
-      code: indexToCode.get(block.paletteIndex) ?? "",
-      color: rgbToHex(block.color),
+      code: markBlockCodes?.[blockOrdinal] ?? indexToCode.get(block.paletteIndex) ?? "",
+      color: rgbToHex(isMarkGrid(gridType) ? block.avgColor ?? block.color : block.color),
       fixedPaletteIndex: dynamicToFixedIndex[block.paletteIndex],
     };
   });
@@ -299,7 +452,7 @@ self.onmessage = (e: MessageEvent) => {
     }));
   }
 
-  if (gridType === "dot-code") {
+  if (isMarkGrid(gridType)) {
     const cellsByCoord = new Map(finalCells.map((c) => [`${c.x},${c.y}`, c]));
     const fallbackColor = "#ffffff";
     const filledCells = [];
@@ -311,7 +464,11 @@ self.onmessage = (e: MessageEvent) => {
             y,
             code: "",
             color: fallbackColor,
-            fixedPaletteIndex: findClosestFixedColorIndex({ r: 255, g: 255, b: 255 }),
+            fixedPaletteIndex: findClosestFixedColorIndex({
+              r: 255,
+              g: 255,
+              b: 255,
+            }),
           },
         );
       }

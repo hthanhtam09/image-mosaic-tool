@@ -55,9 +55,16 @@ export const PALETTE_GAP = 30; // Gap between palette and grid.
 export const PALETTE_X_OFFSET = 0; // Do not pull palette/grid into the left safe margin.
 
 export const getPagePaddingX = (data: ColorByNumberData): number =>
-  data.gridType === "dot-code" ? DOT_CODE_PAGE_PADDING_X : PAGE_PADDING_X;
+  data.gridType === "square-mark" || data.gridType === "hexagon-mark" ? DOT_CODE_PAGE_PADDING_X : PAGE_PADDING_X;
 
 const DOT_CODE_CODES = ["1", "2", "3", "4", "5"];
+const HEXAGON_MARK_CODES = [".", "1", "2", "3", "4", "5", "6"];
+
+const isMarkGridType = (gridType: ColorByNumberData["gridType"]): boolean =>
+  gridType === "square-mark" || gridType === "hexagon-mark";
+
+const markCodesForGridType = (gridType: ColorByNumberData["gridType"]): string[] =>
+  gridType === "hexagon-mark" ? HEXAGON_MARK_CODES : DOT_CODE_CODES;
 
 export const saveProgressToStorage = (
   dataId: string,
@@ -280,6 +287,107 @@ const drawDotCodeSymbol = (
   if (code === "4") {
     line(cx, top, cx, bottom);
     line(left, cy, right, cy);
+  }
+
+  ctx.restore();
+};
+
+const getHexagonPoints = (cx: number, cy: number, r: number) =>
+  [-90, -30, 30, 90, 150, 210].map((deg) => {
+    const rad = (deg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  });
+
+const drawHexagonMarkCellBase = (
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  showBackground: boolean = true,
+) => {
+  const points = getHexagonPoints(cx, cy, r);
+  if (showBackground) {
+    getRoundedPolygonPath(ctx, points, r * 0.04);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+  }
+
+  const dotR = Math.max(1.1, r * 0.085);
+  const edgeWidth = Math.max(0.55, r * 0.025);
+  ctx.save();
+
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = edgeWidth;
+  ctx.lineCap = "round";
+  ctx.globalAlpha = 0.28;
+  for (let i = 0; i < points.length; i++) {
+    const start = points[i];
+    const end = points[(i + 1) % points.length];
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#000000";
+  for (const point of points) {
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+};
+
+const drawHexagonMarkSymbol = (
+  ctx: CanvasRenderingContext2D,
+  code: string,
+  cx: number,
+  cy: number,
+  size: number,
+  markRadius?: number,
+) => {
+  const r = markRadius ?? size / Math.sqrt(3);
+  const points = getHexagonPoints(cx, cy, r);
+  const [top, upperRight, lowerRight, bottom, lowerLeft, upperLeft] = points;
+
+  ctx.save();
+  ctx.strokeStyle = "#000000";
+  ctx.fillStyle = "#000000";
+  ctx.lineWidth = Math.max(1.4, size * 0.11);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const line = (x1: number, y1: number, x2: number, y2: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  };
+
+  if (code === ".") {
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(1.4, size * 0.075), 0, Math.PI * 2);
+    ctx.fill();
+  } else if (code === "1") line(top.x, top.y, bottom.x, bottom.y);
+  else if (code === "2") line(lowerLeft.x, lowerLeft.y, upperRight.x, upperRight.y);
+  else if (code === "3") line(upperLeft.x, upperLeft.y, lowerRight.x, lowerRight.y);
+  else if (code === "4") {
+    line(lowerLeft.x, lowerLeft.y, upperRight.x, upperRight.y);
+    line(upperLeft.x, upperLeft.y, lowerRight.x, lowerRight.y);
+  } else if (code === "5") {
+    line(top.x, top.y, bottom.x, bottom.y);
+    line(lowerLeft.x, lowerLeft.y, upperRight.x, upperRight.y);
+    line(upperLeft.x, upperLeft.y, lowerRight.x, lowerRight.y);
+    ctx.restore();
+    return;
+    ctx.font = `800 ${size * 0.82}px 'Noto Sans Symbols 2', 'Noto Sans', sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("✱", cx, cy + size * 0.02);
+  } else if (code === "6") {
+    getRoundedPolygonPath(ctx, points, r * 0.04);
+    ctx.fill();
   }
 
   ctx.restore();
@@ -590,8 +698,11 @@ export const calculatePaletteLayout = (
     codeToCount = rawCodeToCount;
   }
 
-  if (data.gridType === "dot-code") {
-    const usedDotCodes = DOT_CODE_CODES.filter((code) => (rawCodeToCount.get(code) ?? 0) > 0);
+  if (isMarkGridType(data.gridType)) {
+    const usedDotCodes =
+      data.gridType === "hexagon-mark"
+        ? markCodesForGridType(data.gridType)
+        : markCodesForGridType(data.gridType).filter((code) => (rawCodeToCount.get(code) ?? 0) > 0);
     codeToColor = new Map(usedDotCodes.map((code) => [code, rawCodeToColor.get(code) ?? "#ffffff"]));
     codeToCount = new Map(usedDotCodes.map((code) => [code, rawCodeToCount.get(code) ?? 0]));
   }
@@ -992,7 +1103,8 @@ const drawPalSwatch = (
     | "islamic"
     | "fish-scale"
     | "trapezoid"
-    | "dot-code",
+    | "square-mark"
+    | "hexagon-mark",
   fillColor: string,
 ) => {
   let s = size;
@@ -1003,7 +1115,8 @@ const drawPalSwatch = (
   else if (shape === "islamic") s = size * 1.7;
   else if (shape === "fish-scale") s = size * 1.35;
   else if (shape === "trapezoid") s = size * 1.25;
-  else if (shape === "dot-code") s = size * 1.15;
+  else if (shape === "square-mark") s = size * 1.15;
+  else if (shape === "hexagon-mark") s = size * 1.25;
 
   const half = s / 2;
 
@@ -1063,8 +1176,10 @@ const drawPalSwatch = (
   } else if (shape === "islamic") {
     drawIslamicTilePath(ctx, cx, cy, s * 0.7, 0, 0);
     performFillAndStroke();
-  } else if (shape === "dot-code") {
+  } else if (shape === "square-mark") {
     drawDotCodeCellBase(ctx, cx - half, cy - half, s, false);
+  } else if (shape === "hexagon-mark") {
+    drawHexagonMarkCellBase(ctx, cx, cy, half, false);
   } else {
     // rounded square
     const r = s * 0.12;
@@ -1138,7 +1253,8 @@ const renderPaletteColumnCBN = (
     | "islamic"
     | "fish-scale"
     | "trapezoid"
-    | "dot-code" =
+    | "square-mark"
+    | "hexagon-mark" =
     data.gridType === "honeycomb"
       ? "circle"
       : data.gridType === "diamond"
@@ -1153,8 +1269,10 @@ const renderPaletteColumnCBN = (
                 ? "fish-scale"
                 : data.gridType === "trapezoid"
                   ? "trapezoid"
-                  : data.gridType === "dot-code"
-                    ? "dot-code"
+                  : data.gridType === "square-mark"
+                    ? "square-mark"
+                    : data.gridType === "hexagon-mark"
+                      ? "hexagon-mark"
                     : "square";
 
   codes.forEach((code, i) => {
@@ -1167,7 +1285,8 @@ const renderPaletteColumnCBN = (
     const yPos = sTop + rowIndex * (itemHeight + verticalGap);
 
     const cx = xPos + itemCx;
-    const color = data.gridType === "dot-code" ? "#000000" : codeToColor.get(code) ?? "#999";
+    const isMarkShape = shape === "square-mark" || shape === "hexagon-mark";
+    const color = isMarkGridType(data.gridType) ? "#000000" : codeToColor.get(code) ?? "#999";
     const swCY = yPos + sSW / 2;
     const clearSwatches = renderOpts?.clearSwatches ?? false;
     const count = codeToCount.get(code) ?? 0;
@@ -1176,7 +1295,7 @@ const renderPaletteColumnCBN = (
       count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
 
     // Swatch — white when clearSwatches mode, otherwise filled with the actual color
-    drawPalSwatch(ctx, cx, swCY, sSW, shape, shape === "dot-code" || clearSwatches ? "#ffffff" : color);
+    drawPalSwatch(ctx, cx, swCY, sSW, shape, isMarkShape || clearSwatches ? "#ffffff" : color);
 
     // Label inside swatch
     // In clearSwatches mode, draw black label (visible on white bg); otherwise white
@@ -1190,9 +1309,13 @@ const renderPaletteColumnCBN = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = labelStroke;
     ctx.lineWidth = 3;
-    const displayCode = shape === "dot-code" ? code : renderOpts?.codeMap?.get(code) || code;
-    if (shape === "dot-code") {
-      drawDotCodeSymbol(ctx, displayCode, cx, swCY, sSW * 1.15);
+    const displayCode = isMarkShape ? code : renderOpts?.codeMap?.get(code) || code;
+    if (isMarkShape) {
+      if (shape === "hexagon-mark") {
+        drawHexagonMarkSymbol(ctx, displayCode, cx, swCY, sSW * 1.25, (sSW * 1.25) / 2);
+      } else {
+        drawDotCodeSymbol(ctx, displayCode, cx, swCY, sSW * 1.15);
+      }
       ctx.save();
       ctx.fillStyle = "#000000";
       ctx.font = `700 ${Math.max(18, sLbl * 1.05)}px 'Noto Sans', sans-serif`;
@@ -1222,7 +1345,7 @@ const renderPaletteColumnCBN = (
 
     if (count > 0) {
       const ratio =
-        shape === "dot-code"
+        isMarkShape
           ? dotCodeFillRatio
           : count / maxCount;
       displayDroplets = ratio * PAL_DROPLET_COUNT;
@@ -1234,7 +1357,7 @@ const renderPaletteColumnCBN = (
       PAL_DROPLET_COUNT * sDW + (PAL_DROPLET_COUNT - 1) * sDGap;
     const dropStartX = cx - totalDropW / 2 + sDW / 2;
 
-    for (let d = 0; shape !== "dot-code" && d < PAL_DROPLET_COUNT; d++) {
+    for (let d = 0; !isMarkShape && d < PAL_DROPLET_COUNT; d++) {
       const dx = dropStartX + d * (sDW + sDGap);
 
       let fillType = 0; // 0=none, 0.5=half, 1=full
@@ -1255,7 +1378,7 @@ const renderPaletteColumnCBN = (
       );
     }
 
-    if (shape === "dot-code") return;
+    if (isMarkShape) return;
 
     // 3 shapes in arc to the right of swatch (top → bottom), outline only; shape follows pattern. Square uses inscribed size so they don't overlap.
     const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
@@ -1750,8 +1873,8 @@ export const exportToCanvas = (
       );
       ctx.fill();
       ctx.stroke();
-    } else if (data.gridType === "dot-code") {
-      // Base grid is drawn once for all dot-code cells before symbol rendering.
+    } else if (isMarkGridType(data.gridType)) {
+      // Base mark grid is drawn once before symbol rendering.
     } else {
       const s = data.cellSize;
       ctx.beginPath();
@@ -1765,16 +1888,26 @@ export const exportToCanvas = (
     }
 
     if (showCodes && cell.code) {
-      if (data.gridType === "dot-code") {
+      if (isMarkGridType(data.gridType)) {
         if (colored) {
-          drawDotCodeSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize);
+          if (data.gridType === "hexagon-mark") {
+            drawHexagonMarkSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize, cl.r);
+          } else {
+            drawDotCodeSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize);
+          }
         } else {
           ctx.save();
           ctx.fillStyle = "rgba(0,0,0,0.45)";
-          ctx.font = `500 ${data.cellSize * 0.7}px 'Noto Sans', sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(cell.code, cl.cx, cl.cy);
+          if (data.gridType === "hexagon-mark" && cell.code === ".") {
+            ctx.beginPath();
+            ctx.arc(cl.cx, cl.cy, Math.max(1.1, data.cellSize * 0.045), 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.font = `500 ${data.cellSize * 0.7}px 'Noto Sans', sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(cell.code, cl.cx, cl.cy);
+          }
           ctx.restore();
         }
         return;
@@ -1819,11 +1952,16 @@ export const exportToCanvas = (
     }
   };
 
-  if (data.gridType === "dot-code") {
+  if (isMarkGridType(data.gridType)) {
     for (let y = 0; y < data.height; y++) {
       for (let x = 0; x < data.width; x++) {
         if (!shouldRenderDotCodeBaseCell(data, x, y, transparentBg)) continue;
-        drawDotCodeCellBase(ctx, x * data.cellSize, y * data.cellSize, data.cellSize);
+        if (data.gridType === "hexagon-mark") {
+          const layout = getCellLayout(x, y, data);
+          drawHexagonMarkCellBase(ctx, layout.cx, layout.cy, layout.r);
+        } else {
+          drawDotCodeCellBase(ctx, x * data.cellSize, y * data.cellSize, data.cellSize);
+        }
       }
     }
   }
@@ -1834,7 +1972,7 @@ export const exportToCanvas = (
 
   ctx.restore();
 
-  if (showMagnifier && data.gridType === "dot-code" && colored && transparentBg) {
+  if (showMagnifier && data.gridType === "square-mark" && colored && transparentBg) {
     const magnifier = getDotCodeMagnifierLayout({
       pageW,
       pageH,
@@ -1949,9 +2087,9 @@ export const exportPaletteToCanvas = (
     return a.localeCompare(b);
   });
 
-  if (data.gridType === "dot-code") {
-    for (const code of DOT_CODE_CODES) {
-      if ((rawCodeToCount.get(code) ?? 0) <= 0) continue;
+  if (isMarkGridType(data.gridType)) {
+    for (const code of markCodesForGridType(data.gridType)) {
+      if (data.gridType !== "hexagon-mark" && (rawCodeToCount.get(code) ?? 0) <= 0) continue;
       codeToColor.set(code, rawCodeToColor.get(code) ?? "#ffffff");
       codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
       codeToName.set(code, code);
@@ -1980,7 +2118,11 @@ export const exportPaletteToCanvas = (
     }
   }
 
-  const codes = data.gridType === "dot-code" ? DOT_CODE_CODES.filter((code) => (codeToCount.get(code) ?? 0) > 0) : [...codeToColor.keys()].sort((a, b) => {
+  const codes = isMarkGridType(data.gridType)
+    ? data.gridType === "hexagon-mark"
+      ? markCodesForGridType(data.gridType)
+      : markCodesForGridType(data.gridType).filter((code) => (codeToCount.get(code) ?? 0) > 0)
+    : [...codeToColor.keys()].sort((a, b) => {
     const aN = parseInt(a, 10),
       bN = parseInt(b, 10);
     if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
@@ -2036,7 +2178,8 @@ export const exportPaletteToCanvas = (
     | "islamic"
     | "fish-scale"
     | "trapezoid"
-    | "dot-code" =
+    | "square-mark"
+    | "hexagon-mark" =
     data.gridType === "honeycomb"
       ? "circle"
       : data.gridType === "diamond"
@@ -2051,8 +2194,10 @@ export const exportPaletteToCanvas = (
                 ? "fish-scale"
                 : data.gridType === "trapezoid"
                   ? "trapezoid"
-                  : data.gridType === "dot-code"
-                    ? "dot-code"
+                  : data.gridType === "square-mark"
+                    ? "square-mark"
+                    : data.gridType === "hexagon-mark"
+                      ? "hexagon-mark"
                     : "square";
 
   // ── Layout constants ──
@@ -2093,17 +2238,26 @@ export const exportPaletteToCanvas = (
   const itemW = itemCx + Math.max(sInputW / 2, arcTotalW);
 
   // Horizontal gap between items
-  const hGap = Math.round(0.4 * EXPORT_DPI); // Increased horizontal gap for spacious layout
+  const hGap =
+    data.gridType === "hexagon-mark"
+      ? Math.round(0.55 * EXPORT_DPI)
+      : Math.round(0.4 * EXPORT_DPI); // Increased horizontal gap for spacious layout
   // Items per row
   const maxItemsPerRow = 6;
-  const itemsPerRow = Math.max(
-    1,
-    Math.min(maxItemsPerRow, Math.floor((contentW + hGap) / (itemW + hGap))),
-  );
+  const itemsPerRow =
+    data.gridType === "hexagon-mark"
+      ? 4
+      : Math.max(
+          1,
+          Math.min(maxItemsPerRow, Math.floor((contentW + hGap) / (itemW + hGap))),
+        );
 
   // Item height: swatch + gap + droplet top padding + droplets + inputGap + inputH
   const itemH = sSW + sGap + sDropletTopPad + sDH + sInputGap + sInputH;
-  const vGap = Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
+  const vGap =
+    data.gridType === "hexagon-mark"
+      ? Math.round(0.8 * EXPORT_DPI)
+      : Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
 
   const numRows = Math.ceil(codes.length / itemsPerRow);
   const totalH = numRows * itemH + Math.max(0, numRows - 1) * vGap;
@@ -2172,6 +2326,7 @@ export const exportPaletteToCanvas = (
     const cx = ix + itemCx * scale;
     const swCY = iy + sw / 2;
     const count = codeToCount.get(code) ?? 0;
+    const isMarkShape = shape === "square-mark" || shape === "hexagon-mark";
     const coverage = count / Math.max(1, data.width * data.height);
     const dotCodeFillRatio =
       count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
@@ -2186,9 +2341,13 @@ export const exportPaletteToCanvas = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(255,255,255,0.6)";
     ctx.lineWidth = 2;
-    const displayCode = shape === "dot-code" ? code : codeMap.get(code) || code;
-    if (shape === "dot-code") {
-      drawDotCodeSymbol(ctx, displayCode, cx, swCY, sw * 1.15);
+    const displayCode = isMarkShape ? code : codeMap.get(code) || code;
+    if (isMarkShape) {
+      if (shape === "hexagon-mark") {
+        drawHexagonMarkSymbol(ctx, displayCode, cx, swCY, sw * 1.25, (sw * 1.25) / 2);
+      } else {
+        drawDotCodeSymbol(ctx, displayCode, cx, swCY, sw * 1.15);
+      }
       ctx.save();
       ctx.fillStyle = "#000000";
       ctx.font = `700 ${Math.max(18 * scale, sw * (sLbl / sSW) * 1.05)}px 'Noto Sans', sans-serif`;
@@ -2199,7 +2358,7 @@ export const exportPaletteToCanvas = (
 
       drawDropletShape(
         ctx,
-        cx + (sw * 1.15) / 2 + sArcGap * 3.4 * scale + (sDW * 1.45 * scale) / 2,
+        cx + (sw * (shape === "hexagon-mark" ? 1.25 : 1.15)) / 2 + sArcGap * 3.4 * scale + (sDW * 1.45 * scale) / 2,
         swCY - (sDH * 1.45 * scale) / 2,
         sDW * 1.45 * scale,
         sDH * 1.45 * scale,
@@ -2216,19 +2375,19 @@ export const exportPaletteToCanvas = (
       iy +
       sw +
       (sGap + sDropletTopPad) * scale +
-      (shape === "dot-code" ? sLbl * 0.7 * scale : 0);
+      (isMarkShape ? sLbl * 0.7 * scale : 0);
     const dW = sDW * scale;
     const dH = sDH * scale;
     const dGapS = sDGap * scale;
     const totalDropW = PAL_DROPLET_COUNT * dW + (PAL_DROPLET_COUNT - 1) * dGapS;
     const dropStartX = cx - totalDropW / 2 + dW / 2;
     const coverageRatio =
-      shape === "dot-code"
+      isMarkShape
         ? dotCodeFillRatio
         : count / maxCount;
     const displayDroplets =
       count > 0 ? Math.max(0.5, coverageRatio * PAL_DROPLET_COUNT) : 0;
-    for (let d = 0; shape !== "dot-code" && d < PAL_DROPLET_COUNT; d++) {
+    for (let d = 0; !isMarkShape && d < PAL_DROPLET_COUNT; d++) {
       let fillType = 0;
       if (d + 1 <= displayDroplets) fillType = 1;
       else if (d + 0.5 <= displayDroplets) fillType = 0.5;
@@ -2243,7 +2402,7 @@ export const exportPaletteToCanvas = (
       );
     }
 
-    if (shape === "dot-code") return;
+    if (isMarkShape) return;
 
     // ── Arc shapes to the right of swatch (outline only, same as palette in main image) ──
     const arcCenterX = cx + sw / 2 + sArcGap * scale + sArcRadius * scale;

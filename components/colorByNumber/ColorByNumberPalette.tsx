@@ -35,7 +35,7 @@ export default function ColorByNumberPalette() {
       }
     }
 
-    const codes = [...codeToColor.keys()].sort((a, b) => {
+    const codes = data.gridType === "hexagon-mark" ? [".", "1", "2", "3", "4", "5", "6"] : [...codeToColor.keys()].sort((a, b) => {
       const aNum = Number.parseInt(a, 10);
       const bNum = Number.parseInt(b, 10);
       if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;

@@ -11,7 +11,8 @@ export type ColorByNumberGridType =
   | "islamic"
   | "fish-scale"
   | "trapezoid"
-  | "dot-code";
+  | "square-mark"
+  | "hexagon-mark";
 
 export interface ColorByNumberCell {
   x: number;

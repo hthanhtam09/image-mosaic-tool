@@ -3,21 +3,36 @@ import type { ColorByNumberCell, ColorByNumberData } from "./types";
 export const isDotCodeObjectFocus = (
   data: Pick<ColorByNumberData, "gridType"> | null | undefined,
   removeBackground?: boolean,
-): boolean => Boolean(removeBackground && data?.gridType === "dot-code");
+): boolean =>
+  Boolean(
+    removeBackground &&
+    (data?.gridType === "square-mark" || data?.gridType === "hexagon-mark"),
+  );
 
 export const shouldShowCodes = (
   data: Pick<ColorByNumberData, "gridType"> | null | undefined,
   removeBackground: boolean | undefined,
   fallback: boolean,
-): boolean => (isDotCodeObjectFocus(data, removeBackground) ? true : removeBackground ? false : fallback);
+): boolean =>
+  isDotCodeObjectFocus(data, removeBackground)
+    ? true
+    : removeBackground
+      ? false
+      : fallback;
 
 export const shouldUseTightCrop = (
   data: Pick<ColorByNumberData, "gridType"> | null | undefined,
   removeBackground?: boolean,
-): boolean => Boolean(removeBackground && data?.gridType !== "dot-code");
+): boolean =>
+  Boolean(
+    removeBackground &&
+    data?.gridType !== "square-mark" &&
+    data?.gridType !== "hexagon-mark",
+  );
 
-export const getBackgroundCellSet = (data: Pick<ColorByNumberData, "backgroundCells">): Set<string> =>
-  new Set(data.backgroundCells ?? []);
+export const getBackgroundCellSet = (
+  data: Pick<ColorByNumberData, "backgroundCells">,
+): Set<string> => new Set(data.backgroundCells ?? []);
 
 export const isTransparentCell = (
   data: Pick<ColorByNumberData, "gridType" | "backgroundCells">,
@@ -25,7 +40,7 @@ export const isTransparentCell = (
   transparentBg?: boolean,
 ): boolean => {
   if (!transparentBg) return false;
-  if (data.gridType === "dot-code") {
+  if (data.gridType === "square-mark" || data.gridType === "hexagon-mark") {
     return getBackgroundCellSet(data).has(`${cell.x},${cell.y}`);
   }
   return !cell.code;

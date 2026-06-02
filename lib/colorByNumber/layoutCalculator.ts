@@ -22,7 +22,8 @@ export interface CellLayout {
     | "islamic"
     | "fish-scale"
     | "trapezoid"
-    | "dot-code";
+    | "square-mark"
+    | "hexagon-mark";
 }
 
 const CELL_GAP_DEFAULT = 2;
@@ -52,7 +53,21 @@ const getDotCodeCellLayout = (
   const cx = x * cellSize + cellSize / 2;
   const cy = y * cellSize + cellSize / 2;
   const r = cellSize / 2;
-  return { cx, cy, r, shape: "dot-code" };
+  return { cx, cy, r, shape: "square-mark" };
+};
+
+const getHexagonMarkCellLayout = (
+  x: number,
+  y: number,
+  cellSize: number,
+  _gap: number,
+): CellLayout => {
+  const r = cellSize / Math.sqrt(3);
+  const rowStep = 1.5 * r;
+  const rowOffset = y % 2 === 1 ? cellSize / 2 : 0;
+  const cx = x * cellSize + cellSize / 2 + rowOffset;
+  const cy = (y + 0.5) * rowStep;
+  return { cx, cy, r, shape: "hexagon-mark" };
 };
 
 /**
@@ -245,8 +260,10 @@ export const getCellLayout = (
       return getFishScaleCellLayout(x, y, cellSize, gap);
     case "trapezoid":
       return getTrapezoidCellLayout(x, y, cellSize, gap);
-    case "dot-code":
+    case "square-mark":
       return getDotCodeCellLayout(x, y, cellSize, gap);
+    case "hexagon-mark":
+      return getHexagonMarkCellLayout(x, y, cellSize, gap);
     case "standard":
     default:
       return getStandardCellLayout(x, y, cellSize, gap);
@@ -287,6 +304,14 @@ export const getGridDimensions = (
     return { width: gridW, height: gridH };
   }
 
+  if (gridType === "hexagon-mark") {
+    const r = cellSize / Math.sqrt(3);
+    const rowStep = 1.5 * r;
+    const gridW = width * cellSize + (height > 1 ? cellSize / 2 : 0);
+    const gridH = height * rowStep;
+    return { width: gridW, height: gridH };
+  }
+
   if (gridType === "fish-scale") {
     const r = cellSize / 2;
     const rowStep = r;
@@ -302,7 +327,7 @@ export const getGridDimensions = (
     return { width: gridW, height: gridH };
   }
 
-  // Standard, Puzzle, Islamic, and Dot Code grids use the same dimensions.
+  // Standard, Puzzle, Islamic, and Square Mark grids use the same dimensions.
   const gridW = width * cellSize;
   const gridH = height * cellSize;
   return { width: gridW, height: gridH };
@@ -363,7 +388,7 @@ export const hitTestCell = (
     gridType === "standard" ||
     gridType === "puzzle" ||
     gridType === "islamic" ||
-    gridType === "dot-code"
+    gridType === "square-mark"
   ) {
     const col = Math.floor(px / cellSize);
     const row = Math.floor(py / cellSize);
@@ -511,6 +536,52 @@ export const hitTestCell = (
         if (inside) return { x: colCandidate, y: rCandidate };
       }
     }
+  }
+
+  if (gridType === "hexagon-mark") {
+    const r = cellSize / Math.sqrt(3);
+    const rowStep = 1.5 * r;
+    const row = Math.floor(py / rowStep);
+    const candidates = [row - 1, row, row + 1];
+
+    for (const rCandidate of candidates) {
+      if (rCandidate < 0 || rCandidate >= height) continue;
+      const rowOffset = rCandidate % 2 === 1 ? cellSize / 2 : 0;
+      const colCandidate = Math.floor((px - rowOffset) / cellSize);
+      if (colCandidate < 0 || colCandidate >= width) continue;
+
+      const layout = getHexagonMarkCellLayout(
+        colCandidate,
+        rCandidate,
+        cellSize,
+        gap,
+      );
+      const polyPoints = [-90, -30, 30, 90, 150, 210].map((deg) => {
+        const rad = (deg * Math.PI) / 180;
+        return {
+          x: layout.cx + layout.r * Math.cos(rad),
+          y: layout.cy + layout.r * Math.sin(rad),
+        };
+      });
+
+      let inside = false;
+      for (
+        let i = 0, j = polyPoints.length - 1;
+        i < polyPoints.length;
+        j = i++
+      ) {
+        const xi = polyPoints[i].x;
+        const yi = polyPoints[i].y;
+        const xj = polyPoints[j].x;
+        const yj = polyPoints[j].y;
+        const intersect =
+          yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+        if (intersect) inside = !inside;
+      }
+
+      if (inside) return { x: colCandidate, y: rCandidate };
+    }
+    return null;
   }
 
   if (gridType === "fish-scale") {

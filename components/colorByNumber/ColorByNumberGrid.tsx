@@ -38,7 +38,11 @@ import {
   shouldShowCodes,
   shouldUseTightCrop,
 } from "@/lib/colorByNumber/objectFocus";
-import type { ColorByNumberData, ColorByNumberCell, PageLayout } from "@/lib/colorByNumber";
+import type {
+  ColorByNumberData,
+  ColorByNumberCell,
+  PageLayout,
+} from "@/lib/colorByNumber";
 
 import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
 
@@ -49,6 +53,9 @@ const TEXT_COLOR_ON_DARK = "#ffffff";
 const PAGE_GAP = 30; // gap between the two pages in the viewport
 
 const WHITE_THRESHOLD = 250;
+
+const isMarkGridType = (gridType: ColorByNumberData["gridType"]): boolean =>
+  gridType === "square-mark" || gridType === "hexagon-mark";
 
 const isWhiteColor = (hex: string): boolean => {
   const s = hex.replace("#", "");
@@ -97,7 +104,7 @@ const DotCodeSymbol = ({
     strokeLinecap: "round" as const,
   };
 
-  if (code === "5") {
+  if (false && code === "5") {
     const bleed = Math.max(0.75, size * 0.035);
     return (
       <rect
@@ -164,7 +171,9 @@ const DotCodeCellBase = ({
 
   return (
     <g>
-      {showBackground && <rect x={x} y={y} width={size} height={size} fill="#ffffff" />}
+      {showBackground && (
+        <rect x={x} y={y} width={size} height={size} fill="#ffffff" />
+      )}
       {dots.map((dot, i) => (
         <circle
           key={i}
@@ -175,6 +184,150 @@ const DotCodeCellBase = ({
           opacity={dot.corner ? 1 : 0.28}
         />
       ))}
+    </g>
+  );
+};
+
+const getHexagonPoints = (cx: number, cy: number, r: number) =>
+  [-90, -30, 30, 90, 150, 210].map((deg) => {
+    const rad = (deg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  });
+
+const HexagonMarkCellBase = ({
+  cx,
+  cy,
+  r,
+  showBackground = true,
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  showBackground?: boolean;
+}) => {
+  const points = getHexagonPoints(cx, cy, r);
+  const d = getRoundedPolygonPath(points, r * 0.04);
+  const dotR = Math.max(1.1, r * 0.085);
+  const edgeWidth = Math.max(0.55, r * 0.025);
+
+  return (
+    <g>
+      {showBackground && <path d={d} fill="#ffffff" />}
+      {points.map((start, i) => {
+        const end = points[(i + 1) % points.length];
+        return (
+        <line
+          key={`edge-${i}`}
+          x1={start.x}
+          y1={start.y}
+          x2={end.x}
+          y2={end.y}
+          stroke="#000000"
+          strokeWidth={edgeWidth}
+          strokeLinecap="round"
+          opacity={0.28}
+        />
+        );
+      })}
+      {points.map((point, i) => (
+        <circle key={i} cx={point.x} cy={point.y} r={dotR} fill="#000000" />
+      ))}
+    </g>
+  );
+};
+
+const HexagonMarkSymbol = ({
+  code,
+  cx,
+  cy,
+  size,
+  markRadius,
+}: {
+  code: string;
+  cx: number;
+  cy: number;
+  size: number;
+  markRadius?: number;
+}) => {
+  const r = markRadius ?? size / Math.sqrt(3);
+  const points = getHexagonPoints(cx, cy, r);
+  const [top, upperRight, lowerRight, bottom, lowerLeft, upperLeft] = points;
+  const strokeWidth = Math.max(1.4, size * 0.11);
+  const common = {
+    stroke: "#000000",
+    strokeWidth,
+    strokeLinecap: "round" as const,
+  };
+
+  if (code === ".") {
+    return <circle cx={cx} cy={cy} r={Math.max(1.4, size * 0.075)} fill="#000000" />;
+  }
+
+  if (false && code === "5") {
+    return (
+      <text
+        x={cx}
+        y={cy}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={size * 0.82}
+        fontWeight={800}
+        fontFamily="'Noto Sans Symbols 2', 'Noto Sans', sans-serif"
+        fill="#000000"
+      >
+        ✱
+      </text>
+    );
+  }
+
+  if (code === "6") {
+    return <path d={getRoundedPolygonPath(points, r * 0.04)} fill="#000000" />;
+  }
+
+  return (
+    <g>
+      {code === "1" && (
+        <line x1={top.x} y1={top.y} x2={bottom.x} y2={bottom.y} {...common} />
+      )}
+      {code === "2" && (
+        <line
+          x1={lowerLeft.x}
+          y1={lowerLeft.y}
+          x2={upperRight.x}
+          y2={upperRight.y}
+          {...common}
+        />
+      )}
+      {code === "3" && (
+        <line
+          x1={upperLeft.x}
+          y1={upperLeft.y}
+          x2={lowerRight.x}
+          y2={lowerRight.y}
+          {...common}
+        />
+      )}
+      {(code === "4" || code === "5") && (
+        <>
+          <line
+            x1={lowerLeft.x}
+            y1={lowerLeft.y}
+            x2={upperRight.x}
+            y2={upperRight.y}
+            {...common}
+          />
+          <line
+            x1={upperLeft.x}
+            y1={upperLeft.y}
+            x2={lowerRight.x}
+            y2={lowerRight.y}
+            {...common}
+          />
+        </>
+      )}
+      {code === "5" && (
+        <line x1={top.x} y1={top.y} x2={bottom.x} y2={bottom.y} {...common} />
+      )}
     </g>
   );
 };
@@ -206,7 +359,7 @@ const DotCodeDroplet = ({
       ${cx} ${topY}
     Z
   `;
-  const clipId = `dot-code-drop-${cx}-${topY}`;
+  const clipId = `square-mark-drop-${cx}-${topY}`;
   const clamped = Math.max(0, Math.min(1, fillRatio));
 
   return (
@@ -222,7 +375,9 @@ const DotCodeDroplet = ({
         </clipPath>
       </defs>
       <path d={pathData} fill="#ffffff" stroke="#ffffff" strokeWidth={3} />
-      {clamped > 0 && <path d={pathData} fill="#000000" clipPath={`url(#${clipId})`} />}
+      {clamped > 0 && (
+        <path d={pathData} fill="#000000" clipPath={`url(#${clipId})`} />
+      )}
       <path d={pathData} fill="none" stroke="#555555" strokeWidth={1.5} />
     </g>
   );
@@ -241,7 +396,7 @@ const DotCodeMagnifier = ({
   data: ColorByNumberData;
   transparentBg?: boolean;
 }) => {
-  const clipId = `dot-code-magnifier-${Math.round(cx)}-${Math.round(cy)}`;
+  const clipId = `square-mark-magnifier-${Math.round(cx)}-${Math.round(cy)}`;
   const cell = r * 0.25;
   const cols = 7;
   const rows = 7;
@@ -263,7 +418,13 @@ const DotCodeMagnifier = ({
         <circle cx={cx} cy={cy} r={r * 0.91} />
       </clipPath>
       <g clipPath={`url(#${clipId})`}>
-        <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} fill="#ffffff" />
+        <rect
+          x={cx - r}
+          y={cy - r}
+          width={r * 2}
+          height={r * 2}
+          fill="#ffffff"
+        />
         {Array.from({ length: rows }).flatMap((_, row) =>
           Array.from({ length: cols }).map((__, col) => {
             const x = startX + col * cell;
@@ -273,7 +434,12 @@ const DotCodeMagnifier = ({
             const rowCode = codeAt(row, col);
             return (
               <g key={`${row}-${col}`}>
-                <DotCodeCellBase x={x} y={y} size={cell} showBackground={false} />
+                <DotCodeCellBase
+                  x={x}
+                  y={y}
+                  size={cell}
+                  showBackground={false}
+                />
                 {col < 3 && (
                   <text
                     x={midX}
@@ -289,18 +455,29 @@ const DotCodeMagnifier = ({
                   </text>
                 )}
                 {col >= 3 && (
-                  <DotCodeSymbol code={rowCode} cx={midX} cy={midY} size={cell} />
+                  <DotCodeSymbol
+                    code={rowCode}
+                    cx={midX}
+                    cy={midY}
+                    size={cell}
+                  />
                 )}
               </g>
             );
           }),
         )}
       </g>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#000000" strokeWidth={Math.max(10, r * 0.08)} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke="#000000"
+        strokeWidth={Math.max(10, r * 0.08)}
+      />
     </g>
   );
 };
-
 
 const getRoundedPolygonPath = (
   points: { x: number; y: number }[],
@@ -403,9 +580,11 @@ const PaletteColumnSVG = ({
                 ? "fish-scale"
                 : data.gridType === "trapezoid"
                   ? "trapezoid"
-                  : data.gridType === "dot-code"
-                    ? "dot-code"
-                    : "square";
+                  : data.gridType === "square-mark"
+                    ? "square-mark"
+                    : data.gridType === "hexagon-mark"
+                      ? "hexagon-mark"
+                      : "square";
 
   return (
     <g>
@@ -419,7 +598,10 @@ const PaletteColumnSVG = ({
         const yPos = sTop + rowIndex * (itemHeight + verticalGap);
 
         const cx = xPos + itemCx;
-        const color = data.gridType === "dot-code" ? "#000000" : codeToColor.get(code) ?? "#999";
+        const isMarkShape = shape === "square-mark" || shape === "hexagon-mark";
+        const color = isMarkGridType(data.gridType)
+          ? "#000000"
+          : (codeToColor.get(code) ?? "#999");
         const swCY = yPos + sSW / 2;
 
         let s = sSW;
@@ -430,7 +612,8 @@ const PaletteColumnSVG = ({
         else if (shape === "islamic") s = sSW * 1.7;
         else if (shape === "fish-scale") s = sSW * 1.35;
         else if (shape === "trapezoid") s = sSW * 1.25;
-        else if (shape === "dot-code") s = sSW * 1.15;
+        else if (shape === "square-mark") s = sSW * 1.15;
+        else if (shape === "hexagon-mark") s = sSW * 1.25;
 
         const count = codeToCount.get(code) ?? 0;
         const coverage = count / Math.max(1, data.width * data.height);
@@ -453,72 +636,189 @@ const PaletteColumnSVG = ({
             {/* Swatch Shape */}
             {shape === "circle" && (
               <g>
-                <circle cx={cx} cy={swCY} r={s / 2} fill="none" stroke="#ffffff" strokeWidth={4} />
-                <circle cx={cx} cy={swCY} r={s / 2} fill={color} stroke="#333" strokeWidth={2} />
+                <circle
+                  cx={cx}
+                  cy={swCY}
+                  r={s / 2}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={4}
+                />
+                <circle
+                  cx={cx}
+                  cy={swCY}
+                  r={s / 2}
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
               </g>
             )}
             {shape === "square" && (
               <g>
-                <rect x={cx - s / 2} y={swCY - s / 2} width={s} height={s} rx={s * 0.15} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
-                <rect x={cx - s / 2} y={swCY - s / 2} width={s} height={s} rx={s * 0.15} fill={color} stroke="#333" strokeWidth={2} />
+                <rect
+                  x={cx - s / 2}
+                  y={swCY - s / 2}
+                  width={s}
+                  height={s}
+                  rx={s * 0.15}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={4}
+                  strokeLinejoin="round"
+                />
+                <rect
+                  x={cx - s / 2}
+                  y={swCY - s / 2}
+                  width={s}
+                  height={s}
+                  rx={s * 0.15}
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
               </g>
             )}
             {shape === "diamond" && (
               <g transform={`rotate(45, ${cx}, ${swCY})`}>
-                <rect x={cx - (s * 0.6) / 2} y={swCY - (s * 0.6) / 2} width={s * 0.6} height={s * 0.6} rx={(s * 0.6) * 0.15} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
-                <rect x={cx - (s * 0.6) / 2} y={swCY - (s * 0.6) / 2} width={s * 0.6} height={s * 0.6} rx={(s * 0.6) * 0.15} fill={color} stroke="#333" strokeWidth={2} />
+                <rect
+                  x={cx - (s * 0.6) / 2}
+                  y={swCY - (s * 0.6) / 2}
+                  width={s * 0.6}
+                  height={s * 0.6}
+                  rx={s * 0.6 * 0.15}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={4}
+                  strokeLinejoin="round"
+                />
+                <rect
+                  x={cx - (s * 0.6) / 2}
+                  y={swCY - (s * 0.6) / 2}
+                  width={s * 0.6}
+                  height={s * 0.6}
+                  rx={s * 0.6 * 0.15}
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
               </g>
             )}
-            {shape === "pentagon" && (() => {
-              const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
-              const r = s / 2;
-              const points = angles.map((angle) => ({ x: cx + r * Math.cos(angle), y: swCY + r * Math.sin(angle) }));
-              const d = getRoundedPolygonPath(points, r * 0.15);
-              return (
-                <g>
-                  <path d={d} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
-                  <path d={d} fill={color} stroke="#333" strokeWidth={2} />
-                </g>
-              );
-            })()}
-            {shape === "trapezoid" && (() => {
-              const slant = s * TRAPEZOID_SLANT_FACTOR;
-              const startY = swCY - (s + slant) / 2;
-              const half = s / 2;
-              const pts = [
-                `${cx - half},${startY}`,
-                `${cx + half},${startY + slant}`,
-                `${cx + half},${startY + s + slant}`,
-                `${cx - half},${startY + s}`,
-              ].join(" ");
-              return (
-                <g>
-                  <polygon points={pts} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
-                  <polygon points={pts} fill={color} stroke="#333" strokeWidth={2} />
-                </g>
-              );
-            })()}
+            {shape === "pentagon" &&
+              (() => {
+                const angles = [-90, -30, 30, 90, 150, 210].map(
+                  (deg) => (deg * Math.PI) / 180,
+                );
+                const r = s / 2;
+                const points = angles.map((angle) => ({
+                  x: cx + r * Math.cos(angle),
+                  y: swCY + r * Math.sin(angle),
+                }));
+                const d = getRoundedPolygonPath(points, r * 0.15);
+                return (
+                  <g>
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="#ffffff"
+                      strokeWidth={4}
+                      strokeLinejoin="round"
+                    />
+                    <path d={d} fill={color} stroke="#333" strokeWidth={2} />
+                  </g>
+                );
+              })()}
+            {shape === "trapezoid" &&
+              (() => {
+                const slant = s * TRAPEZOID_SLANT_FACTOR;
+                const startY = swCY - (s + slant) / 2;
+                const half = s / 2;
+                const pts = [
+                  `${cx - half},${startY}`,
+                  `${cx + half},${startY + slant}`,
+                  `${cx + half},${startY + s + slant}`,
+                  `${cx - half},${startY + s}`,
+                ].join(" ");
+                return (
+                  <g>
+                    <polygon
+                      points={pts}
+                      fill="none"
+                      stroke="#ffffff"
+                      strokeWidth={4}
+                      strokeLinejoin="round"
+                    />
+                    <polygon
+                      points={pts}
+                      fill={color}
+                      stroke="#333"
+                      strokeWidth={2}
+                    />
+                  </g>
+                );
+              })()}
             {shape === "puzzle" && (
               <g>
-                <path d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
-                <path d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)} fill={color} stroke="#333" strokeWidth={2} />
+                <path
+                  d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={4}
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={getPuzzlePiecePath(cx, swCY, s, 0, 2, 3, 3)}
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
               </g>
             )}
             {shape === "islamic" && (
               <g>
-                <path d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)} fill="none" stroke="#ffffff" strokeWidth={4} strokeLinejoin="round" />
-                <path d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)} fill={color} stroke="#333" strokeWidth={2} />
+                <path
+                  d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={4}
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={getIslamicTilePath(cx, swCY, s * 0.7, 0, 0)}
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
               </g>
             )}
             {shape === "fish-scale" && (
               <g>
-                <circle cx={cx} cy={swCY} r={s / 2} fill="none" stroke="#ffffff" strokeWidth={4} />
-                <circle cx={cx} cy={swCY} r={s / 2} fill={color} stroke="#333" strokeWidth={2} />
+                <circle
+                  cx={cx}
+                  cy={swCY}
+                  r={s / 2}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={4}
+                />
+                <circle
+                  cx={cx}
+                  cy={swCY}
+                  r={s / 2}
+                  fill={color}
+                  stroke="#333"
+                  strokeWidth={2}
+                />
               </g>
             )}
-            {shape === "dot-code" && (
+            {shape === "square-mark" && (
               <g>
-                <DotCodeCellBase x={cx - s / 2} y={swCY - s / 2} size={s} showBackground={false} />
+                <DotCodeCellBase
+                  x={cx - s / 2}
+                  y={swCY - s / 2}
+                  size={s}
+                  showBackground={false}
+                />
                 <DotCodeSymbol code={code} cx={cx} cy={swCY} size={s} />
                 <DotCodeDroplet
                   cx={singleDropCx}
@@ -541,8 +841,44 @@ const PaletteColumnSVG = ({
                 </text>
               </g>
             )}
+            {shape === "hexagon-mark" && (
+              <g>
+                <HexagonMarkCellBase
+                  cx={cx}
+                  cy={swCY}
+                  r={s / 2}
+                  showBackground={false}
+                />
+                <HexagonMarkSymbol
+                  code={code}
+                  cx={cx}
+                  cy={swCY}
+                  size={s}
+                  markRadius={s / 2}
+                />
+                <DotCodeDroplet
+                  cx={singleDropCx}
+                  topY={singleDropTop}
+                  width={singleDropW}
+                  height={singleDropH}
+                  fillRatio={dotCodeFillRatio}
+                />
+                <text
+                  x={cx}
+                  y={codeLabelY}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={Math.max(18, sLbl * 1.05)}
+                  fontWeight={700}
+                  fontFamily="'Noto Sans', sans-serif"
+                  fill="#000000"
+                >
+                  {code}
+                </text>
+              </g>
+            )}
 
-            {shape !== "dot-code" && (
+            {!isMarkShape && (
               <text
                 x={cx}
                 y={swCY}
@@ -561,31 +897,33 @@ const PaletteColumnSVG = ({
             )}
 
             {/* Droplets */}
-            {shape !== "dot-code" && Array.from({ length: PAL_DROPLET_COUNT }).map((_, d) => {
-              const dx = dropStartX + d * (sDW + sDGap);
-              let displayDroplets = 0;
+            {!isMarkShape &&
+              Array.from({ length: PAL_DROPLET_COUNT }).map((_, d) => {
+                const dx = dropStartX + d * (sDW + sDGap);
+                let displayDroplets = 0;
 
-              if (count > 0) {
-                const ratio =
-                  data.gridType === "dot-code" ? dotCodeFillRatio : count / maxCount;
-                displayDroplets = ratio * PAL_DROPLET_COUNT;
-                // If colored at all, show at least half a drop
-                if (displayDroplets < 0.5) displayDroplets = 0.5;
-              }
+                if (count > 0) {
+                  const ratio = isMarkGridType(data.gridType)
+                    ? dotCodeFillRatio
+                    : count / maxCount;
+                  displayDroplets = ratio * PAL_DROPLET_COUNT;
+                  // If colored at all, show at least half a drop
+                  if (displayDroplets < 0.5) displayDroplets = 0.5;
+                }
 
-              const isFull = d + 1 <= displayDroplets;
-              const isHalf = !isFull && d + 0.5 <= displayDroplets;
+                const isFull = d + 1 <= displayDroplets;
+                const isHalf = !isFull && d + 0.5 <= displayDroplets;
 
-              const w = sDW;
-              const h = sDH;
+                const w = sDW;
+                const h = sDH;
 
-              const tipY = dropTop;
-              const bottomY = dropTop + h;
-              const halfW = w / 2;
-              const bodyTopY = dropTop + h * 0.35;
+                const tipY = dropTop;
+                const bottomY = dropTop + h;
+                const halfW = w / 2;
+                const bodyTopY = dropTop + h * 0.35;
 
-              // Path: standard tear drop centered at dx
-              const pathData = `
+                // Path: standard tear drop centered at dx
+                const pathData = `
                 M ${dx} ${tipY}
                 C ${dx - halfW * 0.3} ${bodyTopY},
                   ${dx - halfW} ${bodyTopY + (bottomY - bodyTopY) * 0.2},
@@ -597,204 +935,224 @@ const PaletteColumnSVG = ({
                 Z
               `;
 
-              const clipId = `clip-half-${code}-${d}`;
+                const clipId = `clip-half-${code}-${d}`;
 
-              return (
-                <g key={d}>
-                  {isHalf && (
-                    <defs>
-                      <clipPath id={clipId}>
-                        <rect x={dx - halfW} y={tipY} width={halfW} height={h} />
-                      </clipPath>
-                    </defs>
-                  )}
+                return (
+                  <g key={d}>
+                    {isHalf && (
+                      <defs>
+                        <clipPath id={clipId}>
+                          <rect
+                            x={dx - halfW}
+                            y={tipY}
+                            width={halfW}
+                            height={h}
+                          />
+                        </clipPath>
+                      </defs>
+                    )}
 
-                  {/* Outer base white border */}
-                  <path
-                    d={pathData}
-                    fill="none"
-                    stroke="#ffffff"
-                    strokeWidth={3}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
+                    {/* Outer base white border */}
+                    <path
+                      d={pathData}
+                      fill="none"
+                      stroke="#ffffff"
+                      strokeWidth={3}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
 
-                  {/* Base white background so uncolored portion is white */}
-                  <path d={pathData} fill="#ffffff" />
+                    {/* Base white background so uncolored portion is white */}
+                    <path d={pathData} fill="#ffffff" />
 
-                  {/* Fill */}
-                  {isFull && <path d={pathData} fill={color} />}
-                  {isHalf && (
-                    <path d={pathData} fill={color} clipPath={`url(#${clipId})`} />
-                  )}
+                    {/* Fill */}
+                    {isFull && <path d={pathData} fill={color} />}
+                    {isHalf && (
+                      <path
+                        d={pathData}
+                        fill={color}
+                        clipPath={`url(#${clipId})`}
+                      />
+                    )}
 
-                  {/* Outline */}
-                  <path
-                    d={pathData}
-                    fill="none"
-                    stroke="#555"
-                    strokeWidth={1.5}
-                  />
-                </g>
-              );
-            })}
+                    {/* Outline */}
+                    <path
+                      d={pathData}
+                      fill="none"
+                      stroke="#555"
+                      strokeWidth={1.5}
+                    />
+                  </g>
+                );
+              })}
 
             {/* 3 shapes in arc to the right of swatch (top → bottom), outline only; shape follows pattern (circle/square/diamond). Square uses inscribed size so they don't overlap. */}
-            {shape !== "dot-code" && (() => {
-              const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
-              const arcCenterY = swCY;
-              const arcAngles = [-80, 0, 80].map(
-                (deg) => (deg * Math.PI) / 180,
-              );
-              const r = sArcCircleR;
-              const rSquare = r / Math.SQRT2; // half-size for square only, so squares don't overlap
+            {!isMarkShape &&
+              (() => {
+                const arcCenterX = cx + sSW / 2 + sArcGap + sArcRadius;
+                const arcCenterY = swCY;
+                const arcAngles = [-80, 0, 80].map(
+                  (deg) => (deg * Math.PI) / 180,
+                );
+                const r = sArcCircleR;
+                const rSquare = r / Math.SQRT2; // half-size for square only, so squares don't overlap
 
-              return arcAngles.map((angle, i) => {
-                const shapeX = arcCenterX + sArcRadius * Math.cos(angle);
-                let shapeY = arcCenterY + sArcRadius * Math.sin(angle);
+                return arcAngles.map((angle, i) => {
+                  const shapeX = arcCenterX + sArcRadius * Math.cos(angle);
+                  let shapeY = arcCenterY + sArcRadius * Math.sin(angle);
 
-                if (shape === "circle") {
-                  return (
-                    <circle
-                      key={i}
-                      cx={shapeX}
-                      cy={shapeY}
-                      r={r}
-                      fill="#ffffff"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
-                  );
-                } else if (shape === "square") {
-                  return (
-                    <rect
-                      key={i}
-                      x={shapeX - rSquare}
-                      y={shapeY - rSquare}
-                      width={rSquare * 2}
-                      height={rSquare * 2}
-                      rx={rSquare * 2 * 0.15}
-                      fill="#ffffff"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
-                  );
-                } else if (shape === "diamond") {
-                  // Approximating diamond with rotated rect
-                  const side = r * 2 * 0.707 * 0.9;
-                  return (
-                    <g key={i} transform={`rotate(45, ${shapeX}, ${shapeY})`}>
-                      <rect
-                        x={shapeX - side / 2}
-                        y={shapeY - side / 2}
-                        width={side}
-                        height={side}
-                        rx={side * 0.15}
+                  if (shape === "circle") {
+                    return (
+                      <circle
+                        key={i}
+                        cx={shapeX}
+                        cy={shapeY}
+                        r={r}
                         fill="#ffffff"
                         stroke="#555"
                         strokeWidth={1.5}
                       />
-                    </g>
-                  );
-                } else if (shape === "puzzle") {
-                  return (
-                    <path
-                      key={i}
-                      d={getPuzzlePiecePath(shapeX, shapeY, r * 1.4, 0, 2, 3, 3)}
-                      fill="#ffffff"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
-                  );
-                } else if (shape === "islamic") {
-                  return (
-                    <path
-                      key={i}
-                      d={getIslamicTilePath(shapeX, shapeY, r * 1.4, 0, 0)}
-                      fill="#ffffff"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
-                  );
-                } else if (shape === "fish-scale") {
-                  return (
-                    <path
-                      key={i}
-                      d={getFishScalePath(shapeX, shapeY, r * 2)}
-                      fill="#ffffff"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
-                  );
-                } else if (shape === "trapezoid") {
-                  if (i === 1) shapeY += r * 0.2; // Shift middle shape down
-                  const size = rSquare * 2;
-                  const slant = size * TRAPEZOID_SLANT_FACTOR;
-                  const startY = shapeY - (size + slant) / 2;
-                  return (
-                    <polygon
-                      key={i}
-                      points={[
-                        `${shapeX - rSquare},${startY}`,
-                        `${shapeX + rSquare},${startY + slant}`,
-                        `${shapeX + rSquare},${startY + size + slant}`,
-                        `${shapeX - rSquare},${startY + size}`,
-                      ].join(" ")}
-                      fill="#ffffff"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
-                  );
-                } else {
-                  // Pentagon (Visual: Hexagon) - rounded
-                  const pAngles = [-90, -30, 30, 90, 150, 210].map(
-                    (deg) => (deg * Math.PI) / 180,
-                  );
-                  const points = pAngles.map((a) => ({
-                    x: shapeX + r * Math.cos(a),
-                    y: shapeY + r * Math.sin(a),
-                  }));
-                  return (
-                    <path
-                      key={i}
-                      d={getRoundedPolygonPath(points, r * 0.15)}
-                      fill="#ffffff"
-                      stroke="#555"
-                      strokeWidth={1.5}
-                    />
-                  );
-                }
-              });
-            })()}
+                    );
+                  } else if (shape === "square") {
+                    return (
+                      <rect
+                        key={i}
+                        x={shapeX - rSquare}
+                        y={shapeY - rSquare}
+                        width={rSquare * 2}
+                        height={rSquare * 2}
+                        rx={rSquare * 2 * 0.15}
+                        fill="#ffffff"
+                        stroke="#555"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  } else if (shape === "diamond") {
+                    // Approximating diamond with rotated rect
+                    const side = r * 2 * 0.707 * 0.9;
+                    return (
+                      <g key={i} transform={`rotate(45, ${shapeX}, ${shapeY})`}>
+                        <rect
+                          x={shapeX - side / 2}
+                          y={shapeY - side / 2}
+                          width={side}
+                          height={side}
+                          rx={side * 0.15}
+                          fill="#ffffff"
+                          stroke="#555"
+                          strokeWidth={1.5}
+                        />
+                      </g>
+                    );
+                  } else if (shape === "puzzle") {
+                    return (
+                      <path
+                        key={i}
+                        d={getPuzzlePiecePath(
+                          shapeX,
+                          shapeY,
+                          r * 1.4,
+                          0,
+                          2,
+                          3,
+                          3,
+                        )}
+                        fill="#ffffff"
+                        stroke="#555"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  } else if (shape === "islamic") {
+                    return (
+                      <path
+                        key={i}
+                        d={getIslamicTilePath(shapeX, shapeY, r * 1.4, 0, 0)}
+                        fill="#ffffff"
+                        stroke="#555"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  } else if (shape === "fish-scale") {
+                    return (
+                      <path
+                        key={i}
+                        d={getFishScalePath(shapeX, shapeY, r * 2)}
+                        fill="#ffffff"
+                        stroke="#555"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  } else if (shape === "trapezoid") {
+                    if (i === 1) shapeY += r * 0.2; // Shift middle shape down
+                    const size = rSquare * 2;
+                    const slant = size * TRAPEZOID_SLANT_FACTOR;
+                    const startY = shapeY - (size + slant) / 2;
+                    return (
+                      <polygon
+                        key={i}
+                        points={[
+                          `${shapeX - rSquare},${startY}`,
+                          `${shapeX + rSquare},${startY + slant}`,
+                          `${shapeX + rSquare},${startY + size + slant}`,
+                          `${shapeX - rSquare},${startY + size}`,
+                        ].join(" ")}
+                        fill="#ffffff"
+                        stroke="#555"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  } else {
+                    // Pentagon (Visual: Hexagon) - rounded
+                    const pAngles = [-90, -30, 30, 90, 150, 210].map(
+                      (deg) => (deg * Math.PI) / 180,
+                    );
+                    const points = pAngles.map((a) => ({
+                      x: shapeX + r * Math.cos(a),
+                      y: shapeY + r * Math.sin(a),
+                    }));
+                    return (
+                      <path
+                        key={i}
+                        d={getRoundedPolygonPath(points, r * 0.15)}
+                        fill="#ffffff"
+                        stroke="#555"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  }
+                });
+              })()}
 
             {/* Input box below droplets: white, rounded, pencil icon + dotted placeholder */}
-            {shape !== "dot-code" && <foreignObject
-              x={cx - sInputW / 2}
-              y={dropTop + sDH + sInputGap}
-              width={sInputW}
-              height={sInputH}
-              className="overflow-visible"
-            >
-              <div
-                className="flex h-full w-full items-end gap-2 rounded-lg bg-white shadow-sm"
-                style={{
-                  boxSizing: "border-box",
-                  paddingTop: sInputPad * 2,
-                  paddingBottom: sInputPad,
-                  paddingLeft: sInputPad * 1.5,
-                  paddingRight: sInputPad * 1.5,
-                }}
+            {!isMarkShape && (
+              <foreignObject
+                x={cx - sInputW / 2}
+                y={dropTop + sDH + sInputGap}
+                width={sInputW}
+                height={sInputH}
+                className="overflow-visible"
               >
-                <input
-                  type="text"
-                  className="min-w-0 flex-1 border-0 bg-transparent pb-0.5 text-center text-xs text-[#333] outline-none placeholder:text-[#999]"
-                  style={{ boxSizing: "border-box" }}
-                  placeholder="· · · · · · · · · · ·"
-                  aria-label={`Input for color ${code}`}
-                  defaultValue=""
-                />
-              </div>
-            </foreignObject>}
+                <div
+                  className="flex h-full w-full items-end gap-2 rounded-lg bg-white shadow-sm"
+                  style={{
+                    boxSizing: "border-box",
+                    paddingTop: sInputPad * 2,
+                    paddingBottom: sInputPad,
+                    paddingLeft: sInputPad * 1.5,
+                    paddingRight: sInputPad * 1.5,
+                  }}
+                >
+                  <input
+                    type="text"
+                    className="min-w-0 flex-1 border-0 bg-transparent pb-0.5 text-center text-xs text-[#333] outline-none placeholder:text-[#999]"
+                    style={{ boxSizing: "border-box" }}
+                    placeholder="· · · · · · · · · · ·"
+                    aria-label={`Input for color ${code}`}
+                    defaultValue=""
+                  />
+                </div>
+              </foreignObject>
+            )}
           </g>
         );
       })}
@@ -840,10 +1198,10 @@ const getPuzzlePiecePath = (
   //
   // Boundary edges always get blank. Internal edges alternate tab/blank
   // such that adjacent cells have complementary edges.
-  const rightDir = (x < gridW - 1 && x % 2 === 0) ? 1 : -1;
-  const bottomDir = (y < gridH - 1 && y % 2 === 0) ? 1 : -1;
-  const leftDir = (x > 0 && x % 2 === 0) ? -1 : 1;
-  const topDir = (y > 0 && y % 2 === 0) ? -1 : 1;
+  const rightDir = x < gridW - 1 && x % 2 === 0 ? 1 : -1;
+  const bottomDir = y < gridH - 1 && y % 2 === 0 ? 1 : -1;
+  const leftDir = x > 0 && x % 2 === 0 ? -1 : 1;
+  const topDir = y > 0 && y % 2 === 0 ? -1 : 1;
 
   let d = "";
 
@@ -892,9 +1250,9 @@ const getIslamicTilePath = (
 ): string => {
   const h = size / 2;
   const SQRT2 = Math.SQRT2;
-  const R_star = h * SQRT2;          // Distance to star tips
-  const v = h * (SQRT2 - 1);         // Distance to star inner valleys
-  const R_cross = h * (2 - SQRT2);   // Distance to cross inner pinches (2h - R_star)
+  const R_star = h * SQRT2; // Distance to star tips
+  const v = h * (SQRT2 - 1); // Distance to star inner valleys
+  const R_cross = h * (2 - SQRT2); // Distance to cross inner pinches (2h - R_star)
 
   const isStar = (x + y) % 2 === 0;
 
@@ -902,44 +1260,44 @@ const getIslamicTilePath = (
     // 8-pointed star: 16 vertices
     // Cardinal points stick out into neighbor cells.
     return [
-      `M ${cx} ${cy - R_star}`,              // N tip
-      `L ${cx + v} ${cy - h}`,               // N-NE valley
-      `L ${cx + h} ${cy - h}`,               // NE corner
-      `L ${cx + h} ${cy - v}`,               // E-NE valley
-      `L ${cx + R_star} ${cy}`,              // E tip
-      `L ${cx + h} ${cy + v}`,               // E-SE valley
-      `L ${cx + h} ${cy + h}`,               // SE corner
-      `L ${cx + v} ${cy + h}`,               // S-SE valley
-      `L ${cx} ${cy + R_star}`,              // S tip
-      `L ${cx - v} ${cy + h}`,               // S-SW valley
-      `L ${cx - h} ${cy + h}`,               // SW corner
-      `L ${cx - h} ${cy + v}`,               // W-SW valley
-      `L ${cx - R_star} ${cy}`,              // W tip
-      `L ${cx - h} ${cy - v}`,               // W-NW valley
-      `L ${cx - h} ${cy - h}`,               // NW corner
-      `L ${cx - v} ${cy - h}`,               // N-NW valley
+      `M ${cx} ${cy - R_star}`, // N tip
+      `L ${cx + v} ${cy - h}`, // N-NE valley
+      `L ${cx + h} ${cy - h}`, // NE corner
+      `L ${cx + h} ${cy - v}`, // E-NE valley
+      `L ${cx + R_star} ${cy}`, // E tip
+      `L ${cx + h} ${cy + v}`, // E-SE valley
+      `L ${cx + h} ${cy + h}`, // SE corner
+      `L ${cx + v} ${cy + h}`, // S-SE valley
+      `L ${cx} ${cy + R_star}`, // S tip
+      `L ${cx - v} ${cy + h}`, // S-SW valley
+      `L ${cx - h} ${cy + h}`, // SW corner
+      `L ${cx - h} ${cy + v}`, // W-SW valley
+      `L ${cx - R_star} ${cy}`, // W tip
+      `L ${cx - h} ${cy - v}`, // W-NW valley
+      `L ${cx - h} ${cy - h}`, // NW corner
+      `L ${cx - v} ${cy - h}`, // N-NW valley
       `Z`,
     ].join(" ");
   } else {
     // Cross/X shape: 16 vertices
     // Contours perfectly around the 4 adjacent stars.
     return [
-      `M ${cx - v} ${cy - h}`,               // Top edge, left of center
-      `L ${cx} ${cy - R_cross}`,             // N inward valley
-      `L ${cx + v} ${cy - h}`,               // Top edge, right of center
-      `L ${cx + h} ${cy - h}`,               // TR corner
-      `L ${cx + h} ${cy - v}`,               // Right edge, top of center
-      `L ${cx + R_cross} ${cy}`,             // E inward valley
-      `L ${cx + h} ${cy + v}`,               // Right edge, bottom of center
-      `L ${cx + h} ${cy + h}`,               // BR corner
-      `L ${cx + v} ${cy + h}`,               // Bottom edge, right of center
-      `L ${cx} ${cy + R_cross}`,             // S inward valley
-      `L ${cx - v} ${cy + h}`,               // Bottom edge, left of center
-      `L ${cx - h} ${cy + h}`,               // BL corner
-      `L ${cx - h} ${cy + v}`,               // Left edge, bottom of center
-      `L ${cx - R_cross} ${cy}`,             // W inward valley
-      `L ${cx - h} ${cy - v}`,               // Left edge, top of center
-      `L ${cx - h} ${cy - h}`,               // TL corner
+      `M ${cx - v} ${cy - h}`, // Top edge, left of center
+      `L ${cx} ${cy - R_cross}`, // N inward valley
+      `L ${cx + v} ${cy - h}`, // Top edge, right of center
+      `L ${cx + h} ${cy - h}`, // TR corner
+      `L ${cx + h} ${cy - v}`, // Right edge, top of center
+      `L ${cx + R_cross} ${cy}`, // E inward valley
+      `L ${cx + h} ${cy + v}`, // Right edge, bottom of center
+      `L ${cx + h} ${cy + h}`, // BR corner
+      `L ${cx + v} ${cy + h}`, // Bottom edge, right of center
+      `L ${cx} ${cy + R_cross}`, // S inward valley
+      `L ${cx - v} ${cy + h}`, // Bottom edge, left of center
+      `L ${cx - h} ${cy + h}`, // BL corner
+      `L ${cx - h} ${cy + v}`, // Left edge, bottom of center
+      `L ${cx - R_cross} ${cy}`, // W inward valley
+      `L ${cx - h} ${cy - v}`, // Left edge, top of center
+      `L ${cx - h} ${cy - h}`, // TL corner
       `Z`,
     ].join(" ");
   }
@@ -1001,8 +1359,6 @@ const CellTrapezoid = ({
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
-
-
   const W = data.cellSize;
   const H = data.cellSize;
   const slant = W * TRAPEZOID_SLANT_FACTOR;
@@ -1041,13 +1397,13 @@ const CellTrapezoid = ({
           fontFamily="'Noto Sans', sans-serif"
           {...(isCellColored
             ? {
-              stroke:
-                textFill === TEXT_COLOR_ON_DARK
-                  ? "rgba(0,0,0,0.6)"
-                  : "rgba(255,255,255,0.8)",
-              strokeWidth: W * 0.1,
-              paintOrder: "stroke",
-            }
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: W * 0.1,
+                paintOrder: "stroke",
+              }
             : {})}
         >
           {cell.code}
@@ -1078,16 +1434,16 @@ const CellFishScale = ({
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    if (partialColorMode === 'diagonal-bl-tr') {
-      isCellColored = ny <= (1 - nx);
-    } else if (partialColorMode === 'diagonal-tl-br') {
+    if (partialColorMode === "diagonal-bl-tr") {
+      isCellColored = ny <= 1 - nx;
+    } else if (partialColorMode === "diagonal-tl-br") {
       isCellColored = ny <= nx;
-    } else if (partialColorMode === 'horizontal-middle') {
+    } else if (partialColorMode === "horizontal-middle") {
       isCellColored = ny <= 0.5;
-    } else if (partialColorMode === 'horizontal-sides') {
+    } else if (partialColorMode === "horizontal-sides") {
       isCellColored = ny > 0.5;
     }
   }
@@ -1123,11 +1479,16 @@ const CellFishScale = ({
           fontSize={r * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
-          {...(isCellColored ? {
-            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
-            strokeWidth: r * 0.15,
-            paintOrder: "stroke",
-          } : {})}
+          {...(isCellColored
+            ? {
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: r * 0.15,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {cell.code}
         </text>
@@ -1157,16 +1518,16 @@ const CellIslamic = ({
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    if (partialColorMode === 'diagonal-bl-tr') {
-      isCellColored = ny <= (1 - nx);
-    } else if (partialColorMode === 'diagonal-tl-br') {
+    if (partialColorMode === "diagonal-bl-tr") {
+      isCellColored = ny <= 1 - nx;
+    } else if (partialColorMode === "diagonal-tl-br") {
       isCellColored = ny <= nx;
-    } else if (partialColorMode === 'horizontal-middle') {
+    } else if (partialColorMode === "horizontal-middle") {
       isCellColored = ny <= 0.5;
-    } else if (partialColorMode === 'horizontal-sides') {
+    } else if (partialColorMode === "horizontal-sides") {
       isCellColored = ny > 0.5;
     }
   }
@@ -1200,11 +1561,16 @@ const CellIslamic = ({
           fontSize={layout.r * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
-          {...(isCellColored ? {
-            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
-            strokeWidth: s * 0.1,
-            paintOrder: "stroke",
-          } : {})}
+          {...(isCellColored
+            ? {
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: s * 0.1,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {cell.code}
         </text>
@@ -1234,16 +1600,16 @@ const CellPuzzle = ({
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    if (partialColorMode === 'diagonal-bl-tr') {
-      isCellColored = ny <= (1 - nx);
-    } else if (partialColorMode === 'diagonal-tl-br') {
+    if (partialColorMode === "diagonal-bl-tr") {
+      isCellColored = ny <= 1 - nx;
+    } else if (partialColorMode === "diagonal-tl-br") {
       isCellColored = ny <= nx;
-    } else if (partialColorMode === 'horizontal-middle') {
+    } else if (partialColorMode === "horizontal-middle") {
       isCellColored = ny <= 0.5;
-    } else if (partialColorMode === 'horizontal-sides') {
+    } else if (partialColorMode === "horizontal-sides") {
       isCellColored = ny > 0.5;
     }
   }
@@ -1262,7 +1628,15 @@ const CellPuzzle = ({
   return (
     <g>
       <path
-        d={getPuzzlePiecePath(layout.cx, layout.cy, s, cell.x, cell.y, data.width, data.height)}
+        d={getPuzzlePiecePath(
+          layout.cx,
+          layout.cy,
+          s,
+          cell.x,
+          cell.y,
+          data.width,
+          data.height,
+        )}
         fill={fillColor}
         stroke={STROKE_COLOR}
         strokeWidth={1.2}
@@ -1277,11 +1651,16 @@ const CellPuzzle = ({
           fontSize={layout.r * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
-          {...(isCellColored ? {
-            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
-            strokeWidth: s * 0.1,
-            paintOrder: "stroke",
-          } : {})}
+          {...(isCellColored
+            ? {
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: s * 0.1,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {cell.code}
         </text>
@@ -1311,16 +1690,16 @@ const CellPentagon = ({
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    if (partialColorMode === 'diagonal-bl-tr') {
-      isCellColored = ny <= (1 - nx);
-    } else if (partialColorMode === 'diagonal-tl-br') {
+    if (partialColorMode === "diagonal-bl-tr") {
+      isCellColored = ny <= 1 - nx;
+    } else if (partialColorMode === "diagonal-tl-br") {
       isCellColored = ny <= nx;
-    } else if (partialColorMode === 'horizontal-middle') {
+    } else if (partialColorMode === "horizontal-middle") {
       isCellColored = ny <= 0.5;
-    } else if (partialColorMode === 'horizontal-sides') {
+    } else if (partialColorMode === "horizontal-sides") {
       isCellColored = ny > 0.5;
     }
   }
@@ -1338,7 +1717,9 @@ const CellPentagon = ({
   const cx = layout.cx;
   const cy = layout.cy;
 
-  const angles = [-90, -30, 30, 90, 150, 210].map((deg) => (deg * Math.PI) / 180);
+  const angles = [-90, -30, 30, 90, 150, 210].map(
+    (deg) => (deg * Math.PI) / 180,
+  );
   const points = angles.map((angle) => ({
     x: cx + r * Math.cos(angle),
     y: cy + r * Math.sin(angle),
@@ -1362,11 +1743,16 @@ const CellPentagon = ({
           fontSize={r * 1.4}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
-          {...(isCellColored ? {
-            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
-            strokeWidth: r * 0.15,
-            paintOrder: "stroke",
-          } : {})}
+          {...(isCellColored
+            ? {
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: r * 0.15,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {cell.code}
         </text>
@@ -1396,16 +1782,16 @@ const CellCircle = ({
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    if (partialColorMode === 'diagonal-bl-tr') {
-      isCellColored = ny <= (1 - nx);
-    } else if (partialColorMode === 'diagonal-tl-br') {
+    if (partialColorMode === "diagonal-bl-tr") {
+      isCellColored = ny <= 1 - nx;
+    } else if (partialColorMode === "diagonal-tl-br") {
       isCellColored = ny <= nx;
-    } else if (partialColorMode === 'horizontal-middle') {
+    } else if (partialColorMode === "horizontal-middle") {
       isCellColored = ny <= 0.5;
-    } else if (partialColorMode === 'horizontal-sides') {
+    } else if (partialColorMode === "horizontal-sides") {
       isCellColored = ny > 0.5;
     }
   }
@@ -1418,7 +1804,6 @@ const CellCircle = ({
     ? getCellFillColor(cell.color, filled)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
-
 
   return (
     <g>
@@ -1440,11 +1825,16 @@ const CellCircle = ({
           fontSize={layout.r * 1.4}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
-          {...(isCellColored ? {
-            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
-            strokeWidth: layout.r * 0.15,
-            paintOrder: "stroke",
-          } : {})}
+          {...(isCellColored
+            ? {
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: layout.r * 0.15,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {cell.code}
         </text>
@@ -1474,16 +1864,16 @@ const CellSquare = ({
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    if (partialColorMode === 'diagonal-bl-tr') {
-      isCellColored = ny <= (1 - nx);
-    } else if (partialColorMode === 'diagonal-tl-br') {
+    if (partialColorMode === "diagonal-bl-tr") {
+      isCellColored = ny <= 1 - nx;
+    } else if (partialColorMode === "diagonal-tl-br") {
       isCellColored = ny <= nx;
-    } else if (partialColorMode === 'horizontal-middle') {
+    } else if (partialColorMode === "horizontal-middle") {
       isCellColored = ny <= 0.5;
-    } else if (partialColorMode === 'horizontal-sides') {
+    } else if (partialColorMode === "horizontal-sides") {
       isCellColored = ny > 0.5;
     }
   }
@@ -1498,11 +1888,11 @@ const CellSquare = ({
   const textFill = getTextColor(fillColor);
 
   const s = data.cellSize;
-  const isDotCode = data.gridType === "dot-code";
+  const isMarkGrid = isMarkGridType(data.gridType);
 
   return (
     <g>
-      {isDotCode ? (
+      {isMarkGrid ? (
         <g />
       ) : (
         <rect
@@ -1516,9 +1906,33 @@ const CellSquare = ({
           strokeWidth={1.2}
         />
       )}
-      {isDotCode && showNumbers && (
-        colored ? (
-          <DotCodeSymbol code={cell.code} cx={layout.cx} cy={layout.cy} size={s} />
+      {isMarkGrid &&
+        showNumbers &&
+        (colored ? (
+          data.gridType === "hexagon-mark" ? (
+            <HexagonMarkSymbol
+              code={cell.code}
+              cx={layout.cx}
+              cy={layout.cy}
+              size={s}
+              markRadius={layout.r}
+            />
+          ) : (
+            <DotCodeSymbol
+              code={cell.code}
+              cx={layout.cx}
+              cy={layout.cy}
+              size={s}
+            />
+          )
+        ) : data.gridType === "hexagon-mark" && cell.code === "." ? (
+          <circle
+            cx={layout.cx}
+            cy={layout.cy}
+            r={Math.max(1.1, s * 0.045)}
+            fill="#8a8a8a"
+            opacity={0.55}
+          />
         ) : (
           <text
             x={layout.cx}
@@ -1533,9 +1947,8 @@ const CellSquare = ({
           >
             {cell.code}
           </text>
-        )
-      )}
-      {!isDotCode && showNumbers && (
+        ))}
+      {!isMarkGrid && showNumbers && (
         <text
           x={layout.cx}
           y={layout.cy}
@@ -1545,11 +1958,16 @@ const CellSquare = ({
           fontSize={s * 0.7}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
-          {...(isCellColored ? {
-            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
-            strokeWidth: s * 0.1,
-            paintOrder: "stroke",
-          } : {})}
+          {...(isCellColored
+            ? {
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: s * 0.1,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {cell.code}
         </text>
@@ -1579,16 +1997,16 @@ const CellDiamond = ({
 }) => {
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
-  if (colored && partialColorMode && partialColorMode !== 'none' && gridDims) {
+  if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
     const nx = layout.cx / gridDims.width;
     const ny = layout.cy / gridDims.height;
-    if (partialColorMode === 'diagonal-bl-tr') {
-      isCellColored = ny <= (1 - nx);
-    } else if (partialColorMode === 'diagonal-tl-br') {
+    if (partialColorMode === "diagonal-bl-tr") {
+      isCellColored = ny <= 1 - nx;
+    } else if (partialColorMode === "diagonal-tl-br") {
       isCellColored = ny <= nx;
-    } else if (partialColorMode === 'horizontal-middle') {
+    } else if (partialColorMode === "horizontal-middle") {
       isCellColored = ny <= 0.5;
-    } else if (partialColorMode === 'horizontal-sides') {
+    } else if (partialColorMode === "horizontal-sides") {
       isCellColored = ny > 0.5;
     }
   }
@@ -1629,11 +2047,16 @@ const CellDiamond = ({
           fontSize={half * 1.1}
           fontWeight={400}
           fontFamily="'Noto Sans', sans-serif"
-          {...(isCellColored ? {
-            stroke: textFill === TEXT_COLOR_ON_DARK ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
-            strokeWidth: half * 0.15,
-            paintOrder: "stroke",
-          } : {})}
+          {...(isCellColored
+            ? {
+                stroke:
+                  textFill === TEXT_COLOR_ON_DARK
+                    ? "rgba(0,0,0,0.6)"
+                    : "rgba(255,255,255,0.8)",
+                strokeWidth: half * 0.15,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {cell.code}
         </text>
@@ -1671,12 +2094,7 @@ const PageGrid = ({
   pageBgColor?: string;
   removeBackground?: boolean;
 }) => {
-  const {
-    gridLayout,
-    paletteLayout,
-    paletteVisualTop,
-    gridVisualTop,
-  } = layout;
+  const { gridLayout, paletteLayout, paletteVisualTop, gridVisualTop } = layout;
   const pagePaddingX = getPagePaddingX(data);
 
   const gridDims = getGridDimensions(data);
@@ -1701,7 +2119,9 @@ const PageGrid = ({
     pagePaddingX +
     CONTENT_SAFE_INSET_LEFT +
     (paletteLayout && !removeBackground ? PALETTE_X_OFFSET : 0) +
-    (paletteLayout && !removeBackground ? paletteLayout.palColW + PALETTE_GAP : 0) +
+    (paletteLayout && !removeBackground
+      ? paletteLayout.palColW + PALETTE_GAP
+      : 0) +
     gridLayout.offsetX +
     (layout.gridVisualLeftOffset || 0) +
     (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0);
@@ -1712,7 +2132,7 @@ const PageGrid = ({
   const magnifier = null;
 
   // Checker pattern ID for transparent background preview
-  const checkerId = `checker-${colored ? 'c' : 'u'}`;
+  const checkerId = `checker-${colored ? "c" : "u"}`;
 
   return (
     <g>
@@ -1721,7 +2141,14 @@ const PageGrid = ({
         // Transparent mode: show checker pattern so user sees transparency
         <>
           <defs>
-            <pattern id={checkerId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+            <pattern
+              id={checkerId}
+              x="0"
+              y="0"
+              width="20"
+              height="20"
+              patternUnits="userSpaceOnUse"
+            >
               <rect width="10" height="10" fill="#cccccc" />
               <rect x="10" y="0" width="10" height="10" fill="#ffffff" />
               <rect x="0" y="10" width="10" height="10" fill="#ffffff" />
@@ -1765,17 +2192,31 @@ const PageGrid = ({
         transform={`translate(${gridPageX}, ${gridPageY}) scale(${gridLayout.scale})`}
       >
         <g transform={`translate(0, 0)`}>
-          {data.gridType === "dot-code" &&
-            Array.from({ length: data.height }).flatMap((_, y) =>
-              Array.from({ length: data.width }).map((__, x) => ({ x, y })),
-            ).filter(({ x, y }) => shouldRenderDotCodeBaseCell(data, x, y, removeBackground)).map(({ x, y }) => (
-              <DotCodeCellBase
-                key={`base-${x},${y}`}
-                x={x * data.cellSize}
-                y={y * data.cellSize}
-                size={data.cellSize}
-              />
-            ))}
+          {isMarkGridType(data.gridType) &&
+            Array.from({ length: data.height })
+              .flatMap((_, y) =>
+                Array.from({ length: data.width }).map((__, x) => ({ x, y })),
+              )
+              .filter(({ x, y }) =>
+                shouldRenderDotCodeBaseCell(data, x, y, removeBackground),
+              )
+              .map(({ x, y }) =>
+                data.gridType === "hexagon-mark" ? (
+                  <HexagonMarkCellBase
+                    key={`base-${x},${y}`}
+                    cx={getCellLayout(x, y, data).cx}
+                    cy={getCellLayout(x, y, data).cy}
+                    r={getCellLayout(x, y, data).r}
+                  />
+                ) : (
+                  <DotCodeCellBase
+                    key={`base-${x},${y}`}
+                    x={x * data.cellSize}
+                    y={y * data.cellSize}
+                    size={data.cellSize}
+                  />
+                ),
+              )}
           {data.cells.map((cell) => (
             <CellComponent
               key={`${cell.x},${cell.y}`}
@@ -1814,21 +2255,28 @@ export default function ColorByNumberGrid({
   } = useColorByNumberStore();
 
   // Helper to get active project data safely
-  const activeProject = projects.find(p => p.id === activeProjectId);
+  const activeProject = projects.find((p) => p.id === activeProjectId);
   const data = activeProject?.data || null;
   const filled = activeProject?.filled || {};
   const zoom = activeProject?.zoom || 1;
   const panX = activeProject?.panX || 0;
   const panY = activeProject?.panY || 0;
-  const showNumbers = shouldShowCodes(data, activeProject?.removeBackground, globalShowNumbers);
-  const showPalette = activeProject?.removeBackground ? false : globalShowPalette;
-  const partialColorMode = (activeProject?.partialColorMode ?? 'none') as PartialColorMode;
+  const showNumbers = shouldShowCodes(
+    data,
+    activeProject?.removeBackground,
+    globalShowNumbers,
+  );
+  const showPalette = activeProject?.removeBackground
+    ? false
+    : globalShowPalette;
+  const partialColorMode = (activeProject?.partialColorMode ??
+    "none") as PartialColorMode;
   const theme = getThemeById(globalTheme);
   const bgColor = theme.backgroundColor;
 
-
   // Actions wrapper
-  const setPan = (x: number, y: number) => updateActiveProject({ panX: x, panY: y });
+  const setPan = (x: number, y: number) =>
+    updateActiveProject({ panX: x, panY: y });
 
   const fillCell = (x: number, y: number) => {
     if (!activeProject || !data || !activeProject.selectedCode) return;
@@ -1854,8 +2302,8 @@ export default function ColorByNumberGrid({
     const preventScroll = (e: WheelEvent) => {
       e.preventDefault();
     };
-    el.addEventListener('wheel', preventScroll, { passive: false });
-    return () => el.removeEventListener('wheel', preventScroll);
+    el.addEventListener("wheel", preventScroll, { passive: false });
+    return () => el.removeEventListener("wheel", preventScroll);
   }, []);
 
   // Determine layout based on data (shared for both pages and hit testing)
@@ -1915,13 +2363,18 @@ export default function ColorByNumberGrid({
 
     const gridLayout = getPageLayout(data, maxGridW, maxGridH);
 
-    const gridVisualTop = PAGE_PADDING_Y + CONTENT_SAFE_INSET + gridVisualTopOffset;
+    const gridVisualTop =
+      PAGE_PADDING_Y + CONTENT_SAFE_INSET + gridVisualTopOffset;
 
     // Vertical positioning: align palette swatches with grid rows (matching export.ts)
     const firstCell = getCellLayout(0, 0, data);
     const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
-    const paletteFirstSwatchCenterY = pLayout ? pLayout.sTop + pLayout.sSW / 2 : 0;
-    const paletteVisualTop = pLayout ? gridFirstRowCenterY - paletteFirstSwatchCenterY + 25 : gridVisualTop;
+    const paletteFirstSwatchCenterY = pLayout
+      ? pLayout.sTop + pLayout.sSW / 2
+      : 0;
+    const paletteVisualTop = pLayout
+      ? gridFirstRowCenterY - paletteFirstSwatchCenterY + 25
+      : gridVisualTop;
 
     return {
       gridLayout,
@@ -1940,11 +2393,13 @@ export default function ColorByNumberGrid({
   );
 
   // Actually, we usually show just ONE page (the colored/uncolored one) or both?
-  // The code below renders BOTH side-by-side. 
+  // The code below renders BOTH side-by-side.
   // User might only want to zoom into one?
   // For now, keep existing logic: 2 pages side-by-side.
 
-  const totalContentW = activeProject?.removeBackground ? LETTER_OUTPUT_WIDTH : LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
+  const totalContentW = activeProject?.removeBackground
+    ? LETTER_OUTPUT_WIDTH
+    : LETTER_OUTPUT_WIDTH * 2 + PAGE_GAP;
   const totalContentH = LETTER_OUTPUT_HEIGHT;
 
   // Initial center (before pan)
@@ -2015,19 +2470,36 @@ export default function ColorByNumberGrid({
     let hitY = -1;
 
     // Check Left Page
-    if (localX >= 0 && localX <= LETTER_OUTPUT_WIDTH && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
+    if (
+      localX >= 0 &&
+      localX <= LETTER_OUTPUT_WIDTH &&
+      localY >= 0 &&
+      localY <= LETTER_OUTPUT_HEIGHT
+    ) {
       hitX = localX;
       hitY = localY;
     }
     // Check Right Page
-    else if (!activeProject?.removeBackground && localX >= LETTER_OUTPUT_WIDTH + PAGE_GAP && localX <= totalContentW && localY >= 0 && localY <= LETTER_OUTPUT_HEIGHT) {
+    else if (
+      !activeProject?.removeBackground &&
+      localX >= LETTER_OUTPUT_WIDTH + PAGE_GAP &&
+      localX <= totalContentW &&
+      localY >= 0 &&
+      localY <= LETTER_OUTPUT_HEIGHT
+    ) {
       hitX = localX - (LETTER_OUTPUT_WIDTH + PAGE_GAP);
       hitY = localY;
     }
 
     if (hitX >= 0 && hitY >= 0) {
       // Inverse PageGrid transform
-      const { gridLayout, paletteLayout, gridVisualTop, gridVisualLeftOffset = 0, visualBounds } = pageLayout;
+      const {
+        gridLayout,
+        paletteLayout,
+        gridVisualTop,
+        gridVisualLeftOffset = 0,
+        visualBounds,
+      } = pageLayout;
       const removeBackground = activeProject?.removeBackground;
       const gridXOffset =
         getPagePaddingX(data) +
@@ -2038,7 +2510,10 @@ export default function ColorByNumberGrid({
         gridLayout.offsetX +
         gridVisualLeftOffset +
         (removeBackground ? -visualBounds.minX * gridLayout.scale : 0);
-      const gridYOffset = gridVisualTop + (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) + (removeBackground ? -visualBounds.minY * gridLayout.scale : 0);
+      const gridYOffset =
+        gridVisualTop +
+        (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) +
+        (removeBackground ? -visualBounds.minY * gridLayout.scale : 0);
       const gridScale = gridLayout.scale;
 
       const cellX = (hitX - gridXOffset) / gridScale;
@@ -2079,7 +2554,7 @@ export default function ColorByNumberGrid({
           updateActiveProject({
             zoom: newZoom,
             panX: newPanX,
-            panY: newPanY
+            panY: newPanY,
           });
         }
       }
@@ -2087,7 +2562,7 @@ export default function ColorByNumberGrid({
       // Pan
       updateActiveProject({
         panX: panX - e.deltaX,
-        panY: panY - e.deltaY
+        panY: panY - e.deltaY,
       });
     }
   };
@@ -2115,11 +2590,7 @@ export default function ColorByNumberGrid({
       onClick={handleClick}
       onWheel={handleWheel}
     >
-      <svg
-        width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-      >
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         <g transform={`translate(${finalX}, ${finalY}) scale(${finalScale})`}>
           {/* Left Page: Colored Preview */}
           <g>
@@ -2135,9 +2606,13 @@ export default function ColorByNumberGrid({
             />
             {/* Page Border/Shadow for realism */}
             <rect
-              x={0} y={0}
-              width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT}
-              fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1"
+              x={0}
+              y={0}
+              width={LETTER_OUTPUT_WIDTH}
+              height={LETTER_OUTPUT_HEIGHT}
+              fill="none"
+              stroke="rgba(0,0,0,0.1)"
+              strokeWidth="1"
             />
           </g>
 
@@ -2154,9 +2629,13 @@ export default function ColorByNumberGrid({
                 removeBackground={activeProject?.removeBackground}
               />
               <rect
-                x={0} y={0}
-                width={LETTER_OUTPUT_WIDTH} height={LETTER_OUTPUT_HEIGHT}
-                fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1"
+                x={0}
+                y={0}
+                width={LETTER_OUTPUT_WIDTH}
+                height={LETTER_OUTPUT_HEIGHT}
+                fill="none"
+                stroke="rgba(0,0,0,0.1)"
+                strokeWidth="1"
               />
             </g>
           )}

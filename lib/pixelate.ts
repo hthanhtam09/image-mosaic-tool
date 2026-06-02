@@ -83,6 +83,7 @@ export interface MosaicBlock {
   y: number;
   paletteIndex: number;
   color: RGB;
+  avgColor?: RGB;
   isTransparent?: boolean;
 }
 
@@ -383,10 +384,29 @@ export const createMosaicBlocks = (
         const blockY = row * blockSize;
         
         let opaqueCount = 0;
+        let sumR = 0;
+        let sumG = 0;
+        let sumB = 0;
+        let totalRgbWeight = 0;
         for (let dy = 0; dy < blockSize && blockY + dy < height; dy++) {
           for (let dx = 0; dx < blockSize && blockX + dx < width; dx++) {
             const idx = (blockY + dy) * width + (blockX + dx);
-            if ((data[idx * 4 + 3] ?? 255) >= 128) opaqueCount++;
+            const alpha = data[idx * 4 + 3] ?? 255;
+            if (alpha >= 128) {
+              opaqueCount++;
+              const i = idx * 4;
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              const max = Math.max(r, g, b);
+              const min = Math.min(r, g, b);
+              const chroma = max - min;
+              const weight = 1 + Math.min(2, chroma / 42);
+              sumR += r * weight;
+              sumG += g * weight;
+              sumB += b * weight;
+              totalRgbWeight += weight;
+            }
           }
         }
 
@@ -400,6 +420,14 @@ export const createMosaicBlocks = (
           y: blockY,
           paletteIndex: bestIndex,
           color: palette[bestIndex],
+          avgColor:
+            totalRgbWeight > 0
+              ? {
+                  r: Math.round(sumR / totalRgbWeight),
+                  g: Math.round(sumG / totalRgbWeight),
+                  b: Math.round(sumB / totalRgbWeight),
+                }
+              : palette[bestIndex],
           isTransparent: opaqueCount === 0,
         });
       }
