@@ -5,6 +5,7 @@ import {
   rgbToLab,
   deltaE2000,
   removeBackgroundBlocks,
+  type MosaicBlock,
 } from "../pixelate";
 import { quantizeImage } from "../quantize";
 import { FIXED_PALETTE } from "../palette";
@@ -52,37 +53,157 @@ const markCodesForGridType = (gridType: string): string[] =>
     ? [".", "1", "2", "3", "4", "5", "6"]
     : ["1", "2", "3", "4", "5"];
 
-const brightnessOf = (color: RGB): number =>
-  color.r * 0.299 + color.g * 0.587 + color.b * 0.114;
+const MARK_DENSITY_GAMMA = 0.82;
+const MARK_EDGE_THRESHOLD = 0.12;
+const MARK_EDGE_BOOST = 0.18;
+const MARK_SMOOTH_THRESHOLD = 1.5;
 
-const hueDegreesFromLab = (a: number, b: number): number => {
-  const deg = (Math.atan2(b, a) * 180) / Math.PI;
-  return deg < 0 ? deg + 360 : deg;
+const markValueOf = (color: RGB): number => rgbToLab(color).L;
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value));
+
+const percentile = (values: number[], p: number): number => {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = clamp((sorted.length - 1) * p, 0, sorted.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sorted[lower];
+  const t = index - lower;
+  return sorted[lower] * (1 - t) + sorted[upper] * t;
 };
 
-const circularHueDistance = (a: number, b: number): number => {
-  const diff = Math.abs(a - b) % 360;
-  return Math.min(diff, 360 - diff);
+type MarkEntry = {
+  ordinal: number;
+  x: number;
+  y: number;
+  value: number;
 };
 
-const markToneOf = (color: RGB): { score: number; hue: number; chroma: number } => {
-  const lab = rgbToLab(color);
-  const chroma = Math.hypot(lab.a, lab.b);
-  const hue = hueDegreesFromLab(lab.a, lab.b);
+const getNeighborOffsets = (
+  gridType: string,
+  y: number,
+): Array<[number, number]> =>
+  gridType === "hexagon-mark"
+    ? [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+        [y % 2 === 0 ? -1 : 1, -1],
+        [y % 2 === 0 ? -1 : 1, 1],
+      ]
+    : [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ];
 
-  // OKLab L is the primary tone. Chroma/hue nudges separate warm, cool, and neutral
-  // colors that have similar lightness but should use different marks.
-  const warmHueProximity = 1 - circularHueDistance(hue, 75) / 180;
-  const coolHueProximity = 1 - circularHueDistance(hue, 265) / 180;
-  const neutralPenalty = Math.max(0, 0.035 - chroma) * 0.45;
-  const score =
-    lab.L +
-    chroma * 0.18 +
-    chroma * warmHueProximity * 0.1 -
-    chroma * coolHueProximity * 0.06 -
-    neutralPenalty;
+const assignMarkCodesByValue = (
+  blocks: MosaicBlock[],
+  gridType: string,
+  cellSize: number,
+  backgroundCellKeys?: Set<string>,
+): string[] => {
+  const markCodes = markCodesForGridType(gridType);
+  const codes = new Array<string>(blocks.length).fill("");
+  if (blocks.length === 0) return codes;
 
-  return { score, hue, chroma };
+  const entries: MarkEntry[] = blocks.flatMap((block, ordinal) => {
+    const x = Math.round(block.x / cellSize);
+    const y = Math.round(block.y / cellSize);
+    if (block.isTransparent || backgroundCellKeys?.has(`${x},${y}`)) return [];
+
+    const value = markValueOf(block.avgColor ?? block.color);
+    return [{ ordinal, x, y, value }];
+  });
+
+  if (entries.length === 0) return codes;
+
+  const values = entries.map((entry) => entry.value);
+  const low = percentile(values, 0.02);
+  const high = percentile(values, 0.98);
+  const range = high - low;
+  const safeRange = range > 0 ? range : 1;
+
+  const entryByCoord = new Map<string, MarkEntry>();
+  for (const entry of entries) {
+    entryByCoord.set(`${entry.x},${entry.y}`, entry);
+  }
+
+  const levelByOrdinal = new Map<number, number>();
+  const normalizedEdgeByOrdinal = new Map<number, number>();
+
+  for (const entry of entries) {
+    const neighbors = getNeighborOffsets(gridType, entry.y)
+      .map(([dx, dy]) => entryByCoord.get(`${entry.x + dx},${entry.y + dy}`))
+      .filter((neighbor): neighbor is MarkEntry => Boolean(neighbor));
+    const neighborAverageValue =
+      neighbors.length > 0
+        ? neighbors.reduce((sum, neighbor) => sum + neighbor.value, 0) /
+          neighbors.length
+        : entry.value;
+    const edgeStrength = Math.abs(entry.value - neighborAverageValue);
+    const normalizedEdge = clamp(edgeStrength / safeRange, 0, 1);
+    const normalized =
+      range > 0 ? clamp((entry.value - low) / safeRange, 0, 1) : 0.5;
+    const baseDensity = 1 - normalized;
+    const curvedDensity = Math.pow(baseDensity, MARK_DENSITY_GAMMA);
+    const edgeBoost =
+      normalizedEdge > MARK_EDGE_THRESHOLD
+        ? normalizedEdge * MARK_EDGE_BOOST
+        : 0;
+    const density = clamp(curvedDensity + edgeBoost, 0, 1);
+    const codeIndex = Math.round(density * (markCodes.length - 1));
+
+    normalizedEdgeByOrdinal.set(entry.ordinal, normalizedEdge);
+    levelByOrdinal.set(entry.ordinal, clamp(codeIndex, 0, markCodes.length - 1));
+  }
+
+  for (const entry of entries) {
+    const level = levelByOrdinal.get(entry.ordinal);
+    if (level === undefined) continue;
+
+    const neighborLevels: number[] = [];
+    for (const [dx, dy] of getNeighborOffsets(gridType, entry.y)) {
+      const neighbor = entryByCoord.get(`${entry.x + dx},${entry.y + dy}`);
+      if (!neighbor) continue;
+      const neighborLevel = levelByOrdinal.get(neighbor.ordinal);
+      if (neighborLevel !== undefined) neighborLevels.push(neighborLevel);
+    }
+
+    let smoothedLevel = level;
+    const normalizedEdge = normalizedEdgeByOrdinal.get(entry.ordinal) ?? 0;
+    if (normalizedEdge <= MARK_EDGE_THRESHOLD && neighborLevels.length >= 3) {
+      const average =
+        neighborLevels.reduce((sum, neighborLevel) => sum + neighborLevel, 0) /
+        neighborLevels.length;
+      const lightNeighbors = neighborLevels.filter(
+        (neighborLevel) => neighborLevel <= level - 2,
+      ).length;
+      const darkNeighbors = neighborLevels.filter(
+        (neighborLevel) => neighborLevel >= level + 2,
+      ).length;
+
+      if (
+        level - average >= MARK_SMOOTH_THRESHOLD &&
+        lightNeighbors >= neighborLevels.length - 1
+      ) {
+        smoothedLevel = level - 1;
+      } else if (
+        average - level >= MARK_SMOOTH_THRESHOLD &&
+        darkNeighbors >= neighborLevels.length - 1
+      ) {
+        smoothedLevel = level + 1;
+      }
+    }
+
+    codes[entry.ordinal] = markCodes[clamp(smoothedLevel, 0, markCodes.length - 1)];
+  }
+
+  return codes;
 };
 
 /**
@@ -317,49 +438,7 @@ self.onmessage = (e: MessageEvent) => {
   );
   let seq = 0;
   const indexToCode = new Map<number, string>();
-  if (isMarkGrid(gridType)) {
-    const markCodes = markCodesForGridType(gridType);
-    const paletteCounts = new Int32Array(usedPalette.length);
-    for (const block of blocks) {
-      paletteCounts[block.paletteIndex]++;
-    }
-    const brightEntries = usedPalette.map((color, index) => {
-      const tone = markToneOf(color);
-      return {
-        index,
-        score: tone.score,
-        hue: tone.hue,
-        chroma: tone.chroma,
-        count: paletteCounts[index],
-        brightness: brightnessOf(color),
-        isLight: color.r >= 245 && color.g >= 245 && color.b >= 245,
-      };
-    });
-    for (const entry of brightEntries) {
-      if (entry.isLight) indexToCode.set(entry.index, "");
-    }
-    const ranked = brightEntries
-      .filter((entry) => !entry.isLight)
-      .sort((a, b) => {
-        const toneDiff = b.score - a.score;
-        if (Math.abs(toneDiff) > 0.018) return toneDiff;
-        const chromaDiff = b.chroma - a.chroma;
-        if (Math.abs(chromaDiff) > 0.015) return chromaDiff;
-        const hueDiff = a.hue - b.hue;
-        if (Math.abs(hueDiff) > 8) return hueDiff;
-        const countDiff = b.count - a.count;
-        if (countDiff !== 0) return countDiff;
-        return b.brightness - a.brightness;
-      });
-    const maxRank = Math.max(1, ranked.length - 1);
-    ranked.forEach((entry, rank) => {
-      const codeIndex =
-        ranked.length === 1
-          ? markCodes.length - 1
-          : Math.round((rank / maxRank) * (markCodes.length - 1));
-      indexToCode.set(entry.index, markCodes[Math.max(0, Math.min(markCodes.length - 1, codeIndex))]);
-    });
-  } else {
+  if (!isMarkGrid(gridType)) {
     for (let i = 0; i < usedPalette.length; i++) {
       if (indexIsWhite[i]) {
         indexToCode.set(i, "");
@@ -372,41 +451,12 @@ self.onmessage = (e: MessageEvent) => {
 
   let markBlockCodes: string[] | undefined;
   if (isMarkGrid(gridType)) {
-    const markCodes = markCodesForGridType(gridType);
-    const entries = blocks.map((block, ordinal) => {
-      const color = block.avgColor ?? block.color;
-      const tone = markToneOf(color);
-      return {
-        ordinal,
-        score: tone.score,
-        hue: tone.hue,
-        chroma: tone.chroma,
-        brightness: brightnessOf(color),
-        isLight: color.r >= 245 && color.g >= 245 && color.b >= 245,
-      };
-    });
-
-    markBlockCodes = new Array(blocks.length).fill("");
-    const rankedBlocks = entries
-      .filter((entry) => !entry.isLight)
-      .sort((a, b) => {
-        const toneDiff = b.score - a.score;
-        if (Math.abs(toneDiff) > 0.012) return toneDiff;
-        const chromaDiff = b.chroma - a.chroma;
-        if (Math.abs(chromaDiff) > 0.01) return chromaDiff;
-        const hueDiff = a.hue - b.hue;
-        if (Math.abs(hueDiff) > 6) return hueDiff;
-        return b.brightness - a.brightness;
-      });
-    const maxRank = Math.max(1, rankedBlocks.length - 1);
-    rankedBlocks.forEach((entry, rank) => {
-      const codeIndex =
-        rankedBlocks.length === 1
-          ? markCodes.length - 1
-          : Math.round((rank / maxRank) * (markCodes.length - 1));
-      markBlockCodes![entry.ordinal] =
-        markCodes[Math.max(0, Math.min(markCodes.length - 1, codeIndex))];
-    });
+    markBlockCodes = assignMarkCodesByValue(
+      blocks,
+      gridType,
+      cellSize,
+      backgroundCellKeys ? new Set(backgroundCellKeys) : undefined,
+    );
   }
 
   // 6. Convert to cells
