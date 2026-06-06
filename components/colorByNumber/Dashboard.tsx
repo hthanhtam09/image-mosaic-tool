@@ -139,9 +139,10 @@ export default function Dashboard() {
 
   /* ── Import Image (Batch) ── */
   const handleImportClick = useCallback(() => {
+    if (isConverting) return;
     setKeepImportScreen(false);
     imageInputRef.current?.click();
-  }, []);
+  }, [isConverting]);
 
   const handleImageFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -261,12 +262,14 @@ export default function Dashboard() {
           setCurrentStep(1);
           setPreviewProjectId(newProjectIds[0]);
           setIsConverting(true);
-          await convertAllIdleProjects();
-          setIsConverting(false);
+          try {
+            await convertAllIdleProjects();
+          } finally {
+            setIsConverting(false);
+          }
         }
       } catch (err) {
         console.error("Failed to import transparent images:", err);
-        setIsConverting(false);
       } finally {
         e.target.value = "";
       }
@@ -585,9 +588,13 @@ export default function Dashboard() {
   ];
 
   const handleConvertAll = async () => {
+    if (isConverting) return;
     setIsConverting(true);
-    await convertAllIdleProjects();
-    setIsConverting(false);
+    try {
+      await convertAllIdleProjects();
+    } finally {
+      setIsConverting(false);
+    }
   }; // --- PDF Setup Handlers ---
   const readFileAsDataURL = (file: File): Promise<string> =>
     new Promise((resolve) => {
@@ -1105,32 +1112,42 @@ export default function Dashboard() {
           <GlobalSettings
             showSettings={showSettings}
             setShowSettings={setShowSettings}
+            disabled={isConverting}
           />
 
           <button
             onClick={handleImportClick}
-            className="px-4 py-2 text-sm font-medium text-(--text-primary) border border-(--border-default) rounded-lg hover:bg-white/5 transition-colors"
+            disabled={isConverting}
+            className="px-4 py-2 text-sm font-medium text-(--text-primary) border border-(--border-default) rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add More
           </button>
-          {idleCount > 0 && (
+          {(idleCount > 0 || isConverting) && (
             <button
               onClick={handleConvertAll}
               disabled={isConverting}
-              className="px-6 py-2 text-sm font-medium text-(--bg-primary) bg-(--accent) hover:bg-(--accent-hover) rounded-lg shadow-sm transition-colors disabled:opacity-50"
+              className="px-6 py-2 text-sm font-medium text-(--bg-primary) bg-(--accent) hover:bg-(--accent-hover) rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-[150px]"
             >
-              {isConverting ? "Converting..." : `Convert All (${idleCount})`}
+              {isConverting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Converting...
+                </>
+              ) : (
+                `Convert All (${idleCount})`
+              )}
             </button>
           )}
           {currentStep === 1 &&
             (projects.length > 0 || directImages.length > 0) &&
-            idleCount === 0 && (
+            idleCount === 0 &&
+            !isConverting && (
               <div className="flex gap-3">
                 {projects.length > 0 && (
                   <button
                     onClick={handleDownloadAllImages}
-                    disabled={isZipping}
-                    className="px-6 py-2 text-sm font-medium text-(--accent) border border-(--accent)/30 bg-(--accent)/5 hover:bg-(--accent)/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
+                    disabled={isZipping || isConverting}
+                    className="px-6 py-2 text-sm font-medium text-(--accent) border border-(--accent)/30 bg-(--accent)/5 hover:bg-(--accent)/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isZipping ? (
                       <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1154,8 +1171,8 @@ export default function Dashboard() {
                 {directImages.some((img) => img.colorUrl && img.uncolorUrl) && (
                   <button
                     onClick={handleDownloadBeforeAfter}
-                    disabled={isZipping}
-                    className="px-6 py-2 text-sm font-medium text-yellow-300 border border-yellow-400/40 bg-yellow-400/10 hover:bg-yellow-400/15 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2"
+                    disabled={isZipping || isConverting}
+                    className="px-6 py-2 text-sm font-medium text-yellow-300 border border-yellow-400/40 bg-yellow-400/10 hover:bg-yellow-400/15 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isZipping ? (
                       <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1178,7 +1195,7 @@ export default function Dashboard() {
                 <button
                   onClick={handleNextToSetup}
                   disabled={isConverting || isPreparingStep2}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 min-w-[160px]"
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 min-w-[160px] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isPreparingStep2 ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1206,6 +1223,7 @@ export default function Dashboard() {
             accept="image/png,image/jpeg,image/jpg"
             className="hidden"
             multiple
+            disabled={isConverting}
             onChange={handleImageFileChange}
           />
         </div>
@@ -1359,6 +1377,7 @@ export default function Dashboard() {
                 setPreviewProjectId={setPreviewProjectId}
                 SPLIT_COLOR_MODES={SPLIT_COLOR_MODES}
                 GRID_TYPES={GRID_TYPES}
+                isConverting={isConverting}
               />
             </>
           )}

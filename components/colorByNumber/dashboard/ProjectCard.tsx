@@ -13,6 +13,7 @@ interface ProjectCardProps {
     setPreviewProjectId: (id: string | null) => void;
     SPLIT_COLOR_MODES: { value: PartialColorMode; label: string; icon: string }[];
     GRID_TYPES: { value: ColorByNumberGridType; label: string }[];
+    isConverting: boolean;
 }
 
 export default function ProjectCard({
@@ -22,6 +23,7 @@ export default function ProjectCard({
     setPreviewProjectId,
     SPLIT_COLOR_MODES,
     GRID_TYPES,
+    isConverting,
 }: ProjectCardProps) {
     const { updateProject, removeProject } = useColorByNumberStore();
 
@@ -67,9 +69,11 @@ export default function ProjectCard({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (isConverting) return;
                         if (confirm('Delete this project?')) removeProject(project.id);
                     }}
-                    className="absolute top-2 left-2 p-1.5 opacity-0 group-hover:opacity-100 bg-black/50 text-white rounded hover:bg-red-500/80 transition-all"
+                    disabled={isConverting}
+                    className="absolute top-2 left-2 p-1.5 opacity-0 group-hover:opacity-100 bg-black/50 text-white rounded hover:bg-red-500/80 transition-all disabled:cursor-not-allowed disabled:opacity-40"
                     title="Delete"
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -95,8 +99,8 @@ export default function ProjectCard({
                         <select
                             value={project.gridType}
                             onChange={(e) => updateProject(project.id, { gridType: e.target.value as ColorByNumberGridType, status: 'idle' })}
-                            disabled={project.status === 'processing'}
-                            className="w-full text-sm bg-(--bg-primary) border border-(--border-default) rounded-lg px-2 py-1.5 text-(--text-primary) focus:outline-none focus:border-(--accent)"
+                            disabled={project.status === 'processing' || isConverting}
+                            className="w-full text-sm bg-(--bg-primary) border border-(--border-default) rounded-lg px-2 py-1.5 text-(--text-primary) focus:outline-none focus:border-(--accent) disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {GRID_TYPES.map(t => (
                                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -111,8 +115,8 @@ export default function ProjectCard({
                             <select
                                 value={project.partialColorMode}
                                 onChange={(e) => updateProject(project.id, { partialColorMode: e.target.value as PartialColorMode, status: 'idle' })}
-                                disabled={project.status === 'processing'}
-                                className="flex-1 text-sm bg-(--bg-primary) border border-(--border-default) rounded-lg px-2 py-1.5 text-(--text-primary) focus:outline-none focus:border-(--accent)"
+                                disabled={project.status === 'processing' || isConverting}
+                                className="flex-1 text-sm bg-(--bg-primary) border border-(--border-default) rounded-lg px-2 py-1.5 text-(--text-primary) focus:outline-none focus:border-(--accent) disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {SPLIT_COLOR_MODES.map(m => (
                                     <option key={m.value} value={m.value}>{m.icon} {m.label}</option>
@@ -126,7 +130,8 @@ export default function ProjectCard({
                 {project.status === 'completed' ? (
                     <button
                         onClick={() => setPreviewProjectId(project.id)}
-                        className="w-full py-2 text-sm font-medium text-(--accent) bg-(--accent)/10 hover:bg-(--accent)/20 rounded-lg transition-colors border border-(--accent)/20"
+                        disabled={isConverting}
+                        className="w-full py-2 text-sm font-medium text-(--accent) bg-(--accent)/10 hover:bg-(--accent)/20 rounded-lg transition-colors border border-(--accent)/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Open Preview
                     </button>

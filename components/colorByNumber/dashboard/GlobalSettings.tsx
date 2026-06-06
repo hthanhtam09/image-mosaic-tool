@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 interface GlobalSettingsProps {
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  disabled?: boolean;
 }
 
 const GRID_TYPE_OPTIONS: {
@@ -47,6 +48,7 @@ const ToggleSwitch = ({
 export default function GlobalSettings({
   showSettings,
   setShowSettings,
+  disabled = false,
 }: GlobalSettingsProps) {
   const {
     globalCellSize,
@@ -79,15 +81,20 @@ export default function GlobalSettings({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [setShowSettings]);
 
+  useEffect(() => {
+    if (disabled) setShowSettings(false);
+  }, [disabled, setShowSettings]);
+
   return (
     <div className="relative" ref={settingsRef}>
       <button
         onClick={() => setShowSettings(!showSettings)}
+        disabled={disabled}
         className={`p-2 rounded-lg border transition-colors ${
           showSettings
             ? "bg-(--accent)/20 border-(--accent) text-(--accent)"
             : "border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5"
-        }`}
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
         title="Global Settings"
       >
         <svg

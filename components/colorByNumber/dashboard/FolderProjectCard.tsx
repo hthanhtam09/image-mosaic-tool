@@ -3,11 +3,13 @@
 interface FolderProjectCardProps {
     img: { name: string; colorUrl: string; uncolorUrl: string };
     removeDirectImage: (name: string) => void;
+    isConverting: boolean;
 }
 
 export default function FolderProjectCard({
     img,
     removeDirectImage,
+    isConverting,
 }: FolderProjectCardProps) {
     return (
         <div className="flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow relative group">
@@ -22,7 +24,8 @@ export default function FolderProjectCard({
                 </div>
                 <button
                     onClick={() => removeDirectImage(img.name)}
-                    className="absolute top-2 left-2 p-1.5 opacity-0 group-hover:opacity-100 bg-black/50 text-white rounded hover:bg-red-500/80 transition-all shadow-sm"
+                    disabled={isConverting}
+                    className="absolute top-2 left-2 p-1.5 opacity-0 group-hover:opacity-100 bg-black/50 text-white rounded hover:bg-red-500/80 transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                     title="Remove"
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>

@@ -16,6 +16,7 @@ interface ProjectGridProps {
     setPreviewProjectId: (id: string | null) => void;
     SPLIT_COLOR_MODES: { value: PartialColorMode; label: string; icon: string }[];
     GRID_TYPES: { value: ColorByNumberGridType; label: string }[];
+    isConverting: boolean;
 }
 
 export default function ProjectGrid({
@@ -28,6 +29,7 @@ export default function ProjectGrid({
     setPreviewProjectId,
     SPLIT_COLOR_MODES,
     GRID_TYPES,
+    isConverting,
 }: ProjectGridProps) {
     return (
         <div className="flex-1 overflow-y-auto pr-2 no-scrollbar">
@@ -38,6 +40,7 @@ export default function ProjectGrid({
                         key={img.name}
                         img={img}
                         removeDirectImage={removeDirectImage}
+                        isConverting={isConverting}
                     />
                 ))}
 
@@ -54,6 +57,7 @@ export default function ProjectGrid({
                             setPreviewProjectId={setPreviewProjectId}
                             SPLIT_COLOR_MODES={SPLIT_COLOR_MODES}
                             GRID_TYPES={GRID_TYPES}
+                            isConverting={isConverting}
                         />
                     ))}
             </div>
