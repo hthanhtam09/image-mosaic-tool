@@ -1,6 +1,9 @@
 "use client";
 
-import { useColorByNumberStore } from "@/store/useColorByNumberStore";
+import {
+  useColorByNumberStore,
+  type Project,
+} from "@/store/useColorByNumberStore";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ColorByNumberGridType,
@@ -75,6 +78,7 @@ export default function Dashboard() {
   const suffixInputRef = useRef<HTMLInputElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const solutionCollageInputRef = useRef<HTMLInputElement>(null);
+  const solutionNamesInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const transparentImageInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +95,7 @@ export default function Dashboard() {
   const [solutionCollagePages, setSolutionCollagePages] = useState<string[]>(
     [],
   );
+  const [solutionNameList, setSolutionNameList] = useState<string[]>([]);
   const [uploadedFolders, setUploadedFolders] = useState<{
     color: boolean;
     uncolor: boolean;
@@ -435,11 +440,13 @@ export default function Dashboard() {
     try {
       const gridType =
         globalGridType === "auto" ? "square-mark" : globalGridType;
+      const isMarkGrid =
+        gridType === "square-mark" || gridType === "hexagon-mark";
       const data = await imageToColorByNumber(file, {
         gridType,
         cellSize: globalCellSize,
         useDithering: true,
-        removeWhiteBackground: false,
+        removeWhiteBackground: isMarkGrid,
         removeBottomWatermark: globalExportPalette,
       });
       const theme = getThemeById(globalTheme);
@@ -658,6 +665,177 @@ export default function Dashboard() {
     }
   };
 
+  const parseSolutionNamesCsv = (csvText: string): string[] => {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let cell = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < csvText.length; i++) {
+      const ch = csvText[i];
+      if (inQuotes) {
+        if (ch === '"' && csvText[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          cell += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        row.push(cell);
+        cell = "";
+      } else if (ch === "\n") {
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = "";
+      } else if (ch !== "\r") {
+        cell += ch;
+      }
+    }
+
+    row.push(cell);
+    rows.push(row);
+
+    const nonEmptyRows = rows.filter((csvRow) =>
+      csvRow.some((value) => value.trim()),
+    );
+    if (nonEmptyRows.length === 0) return [];
+
+    const headers = nonEmptyRows[0].map((value, index) =>
+      (index === 0 ? value.replace(/^\uFEFF/, "") : value)
+        .trim()
+        .toLowerCase(),
+    );
+    const textIndex = headers.indexOf("text");
+    if (textIndex === -1) return [];
+
+    return nonEmptyRows
+      .slice(1)
+      .map((csvRow) => csvRow[textIndex]?.trim() ?? "")
+      .filter(Boolean);
+  };
+
+  const getSolutionLabelForIndex = (index: number): string | undefined =>
+    solutionNameList[index];
+
+  const getReadyProjects = (): Project[] =>
+    [...projects]
+      .filter((p) => p.status === "completed")
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
+      );
+
+  const createProjectColorCanvas = (project: Project): HTMLCanvasElement | null => {
+    if (!project.data) return null;
+    const theme = getThemeById(globalTheme);
+    const shouldShowPalette = project.removeBackground
+      ? false
+      : globalExportPalette
+        ? false
+        : globalShowPalette;
+
+    return exportToCanvas(project.data, project.filled, {
+      showCodes: shouldShowCodes(
+        project.data,
+        project.removeBackground,
+        globalShowNumbers,
+      ),
+      colored: true,
+      showPalette: shouldShowPalette,
+      partialColorMode: project.partialColorMode,
+      bgColor: theme.backgroundColor,
+      transparentBg: project.removeBackground,
+      tightCrop: shouldUseTightCrop(project.data, project.removeBackground),
+      removeBgColorCells: globalExportPalette,
+      showMagnifier: false,
+    });
+  };
+
+  const createSolutionThumbCanvas = (
+    sourceCanvas: HTMLCanvasElement,
+  ): HTMLCanvasElement => {
+    const maxDim = 600;
+    const scale = Math.min(
+      1,
+      maxDim / Math.max(sourceCanvas.width, sourceCanvas.height),
+    );
+    const thumbCanvas = document.createElement("canvas");
+    thumbCanvas.width = sourceCanvas.width * scale;
+    thumbCanvas.height = sourceCanvas.height * scale;
+    const ctx = thumbCanvas.getContext("2d");
+    ctx?.drawImage(sourceCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+    return thumbCanvas;
+  };
+
+  const generateSolutionCollagePageDataUrls = async (
+    readyProjects: Project[],
+    labels: string[] = solutionNameList,
+  ): Promise<string[]> => {
+    const theme = getThemeById(globalTheme);
+    const colorCanvases: HTMLCanvasElement[] = [];
+    const collageLabels: Array<string | undefined> = [];
+
+    for (let idx = 0; idx < readyProjects.length; idx++) {
+      const fullCanvas = createProjectColorCanvas(readyProjects[idx]);
+      if (!fullCanvas) continue;
+
+      colorCanvases.push(createSolutionThumbCanvas(fullCanvas));
+      collageLabels.push(labels[idx]);
+      fullCanvas.width = 0;
+      fullCanvas.height = 0;
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    if (colorCanvases.length === 0) return [];
+
+    const generatedPages = exportCollagePagesToCanvas(colorCanvases, {
+      bgColor: theme.backgroundColor,
+      labels: collageLabels,
+    });
+    colorCanvases.forEach((canvas) => {
+      canvas.width = 0;
+      canvas.height = 0;
+    });
+
+    return generatedPages.map((canvas) => {
+      const dataUrl = canvas.toDataURL("image/png");
+      canvas.width = 0;
+      canvas.height = 0;
+      return dataUrl;
+    });
+  };
+
+  const handleSolutionNamesChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const labels = parseSolutionNamesCsv(await file.text());
+    if (labels.length === 0) {
+      alert('File CSV import name phải có header "text" và ít nhất một dòng.');
+      e.target.value = "";
+      return;
+    }
+
+    setSolutionNameList(labels);
+    if (directImages.length === 0 && globalExportPalette) {
+      const generatedPages = await generateSolutionCollagePageDataUrls(
+        getReadyProjects(),
+        labels,
+      );
+      setSolutionCollagePages(generatedPages);
+    }
+    e.target.value = "";
+  };
+
   const handleCsvChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -746,14 +924,7 @@ export default function Dashboard() {
   };
 
   const handleDownloadAllImages = async () => {
-    const readyProjects = [...projects]
-      .filter((p) => p.status === "completed")
-      .sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
-      );
+    const readyProjects = getReadyProjects();
     if (readyProjects.length === 0) return;
 
     setIsZipping(true);
@@ -761,14 +932,15 @@ export default function Dashboard() {
     const rootFolder = zip.folder("converted_images");
     const colorFolder = rootFolder?.folder("color");
     const uncolorFolder = rootFolder?.folder("uncolor");
-    const subjectUncolorFolder = rootFolder?.folder("subject_uncolor");
-    const circleFolder = rootFolder?.folder("circle");
+    let subjectUncolorFolder: JSZip | null = null;
+    let circleFolder: JSZip | null = null;
     const collageFolder = rootFolder?.folder("solutions_collage");
     const paletteFolder = globalExportPalette
       ? rootFolder?.folder("palette")
       : null;
 
     const coloredCanvases: HTMLCanvasElement[] = [];
+    const collageLabels: Array<string | undefined> = [];
 
     try {
       for (let i = 0; i < readyProjects.length; i++) {
@@ -776,53 +948,21 @@ export default function Dashboard() {
         const baseName = project.name.replace(/\.[^/.]+$/, "");
         const theme = getThemeById(globalTheme);
 
-        // When exporting palette separately, hide the inline palette so the image is full-width
         const shouldShowPalette = project.removeBackground
           ? false
           : globalExportPalette
             ? false
             : globalShowPalette;
-
-        const showProjectCodes = shouldShowCodes(
-          project.data,
-          project.removeBackground,
-          globalShowNumbers,
-        );
         const useObjectTightCrop = shouldUseTightCrop(
           project.data,
           project.removeBackground,
         );
 
         // Color version
-        const canvasColor = exportToCanvas(project.data!, project.filled, {
-          showCodes: showProjectCodes,
-          colored: true,
-          showPalette: shouldShowPalette,
-          partialColorMode: project.partialColorMode,
-          bgColor: theme.backgroundColor,
-          transparentBg: project.removeBackground,
-          tightCrop: useObjectTightCrop,
-          removeBgColorCells: globalExportPalette,
-          showMagnifier: false,
-        });
-
-        const maxDim = 600;
-        const scale = Math.min(
-          1,
-          maxDim / Math.max(canvasColor.width, canvasColor.height),
-        );
-        const thumbCanvas = document.createElement("canvas");
-        thumbCanvas.width = canvasColor.width * scale;
-        thumbCanvas.height = canvasColor.height * scale;
-        const tCtx = thumbCanvas.getContext("2d");
-        tCtx?.drawImage(
-          canvasColor,
-          0,
-          0,
-          thumbCanvas.width,
-          thumbCanvas.height,
-        );
-        coloredCanvases.push(thumbCanvas);
+        const canvasColor = createProjectColorCanvas(project);
+        if (!canvasColor) continue;
+        coloredCanvases.push(createSolutionThumbCanvas(canvasColor));
+        collageLabels.push(getSolutionLabelForIndex(i));
 
         const base64Color = canvasColor.toDataURL("image/png").split(",")[1];
         colorFolder?.file(`${baseName}.png`, base64Color, { base64: true });
@@ -837,6 +977,7 @@ export default function Dashboard() {
           const base64Circle = canvasCircle
             .toDataURL("image/png")
             .split(",")[1];
+          circleFolder ??= rootFolder?.folder("circle") ?? null;
           circleFolder?.file(`${baseName}.png`, base64Circle, { base64: true });
           canvasCircle.width = 0;
           canvasCircle.height = 0;
@@ -864,7 +1005,12 @@ export default function Dashboard() {
           .toDataURL("image/png")
           .split(",")[1];
         uncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
-        if (project.removeBackground) {
+        if (
+          project.removeBackground &&
+          project.data?.gridType !== "hexagon-mark"
+        ) {
+          subjectUncolorFolder ??=
+            rootFolder?.folder("subject_uncolor") ?? null;
           subjectUncolorFolder?.file(`${baseName}.png`, base64Uncolor, {
             base64: true,
           });
@@ -901,6 +1047,7 @@ export default function Dashboard() {
         const theme = getThemeById(globalTheme);
         const collagePages = exportCollagePagesToCanvas(coloredCanvases, {
           bgColor: theme.backgroundColor,
+          labels: collageLabels,
         });
         collagePages.forEach((pageCanvas, idx) => {
           const base64Page = pageCanvas.toDataURL("image/png").split(",")[1];
@@ -921,14 +1068,7 @@ export default function Dashboard() {
 
   const handleNextToSetup = async () => {
     setIsPreparingStep2(true);
-    const readyProjects = [...projects]
-      .filter((p) => p.status === "completed")
-      .sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
-      );
+    const readyProjects = getReadyProjects();
     const theme = getThemeById(globalTheme);
 
     // Auto-fill palette images if Export Palette is enabled and we have converted projects (Standard Mode)
@@ -962,44 +1102,8 @@ export default function Dashboard() {
       readyProjects.length > 0 &&
       directImages.length === 0
     ) {
-      const colorCanvases: HTMLCanvasElement[] = [];
-      for (const project of readyProjects) {
-        if (!project.data) continue;
-        const showProjectCodes = shouldShowCodes(
-          project.data,
-          project.removeBackground,
-          false,
-        );
-        const fullCanvas = exportToCanvas(project.data, project.filled, {
-          showCodes: showProjectCodes,
-          colored: true,
-          showPalette: false,
-          partialColorMode: project.partialColorMode,
-          bgColor: theme.backgroundColor,
-          transparentBg: project.removeBackground,
-          tightCrop: shouldUseTightCrop(project.data, project.removeBackground),
-        });
-        const maxDim = 600;
-        const scale = Math.min(
-          1,
-          maxDim / Math.max(fullCanvas.width, fullCanvas.height),
-        );
-        const thumbCanvas = document.createElement("canvas");
-        thumbCanvas.width = fullCanvas.width * scale;
-        thumbCanvas.height = fullCanvas.height * scale;
-        const ctx = thumbCanvas.getContext("2d");
-        ctx?.drawImage(fullCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
-        colorCanvases.push(thumbCanvas);
-        fullCanvas.width = 0;
-        fullCanvas.height = 0;
-        await new Promise((r) => setTimeout(r, 0));
-      }
-
-      const generatedSolutionPages = exportCollagePagesToCanvas(colorCanvases, {
-        bgColor: theme.backgroundColor,
-      });
       setSolutionCollagePages(
-        generatedSolutionPages.map((c) => c.toDataURL("image/png")),
+        await generateSolutionCollagePageDataUrls(readyProjects),
       );
     }
 
@@ -1424,6 +1528,9 @@ export default function Dashboard() {
           setSolutionCollagePages={setSolutionCollagePages}
           solutionCollageInputRef={solutionCollageInputRef}
           handleSolutionCollageChange={handleSolutionCollageChange}
+          solutionNameList={solutionNameList}
+          solutionNamesInputRef={solutionNamesInputRef}
+          handleSolutionNamesChange={handleSolutionNamesChange}
         />
       )}
 

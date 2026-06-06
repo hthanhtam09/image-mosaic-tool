@@ -50,13 +50,32 @@ const isMarkGrid = (gridType: string): boolean =>
 
 const markCodesForGridType = (gridType: string): string[] =>
   gridType === "hexagon-mark"
-    ? [".", "1", "2", "3", "4", "5", "6"]
+    ? [".", "1", "2", "3", "4", "5"]
     : ["1", "2", "3", "4", "5"];
 
 const MARK_DENSITY_GAMMA = 0.82;
 const MARK_EDGE_THRESHOLD = 0.12;
 const MARK_EDGE_BOOST = 0.18;
+// Hexagon mark pages are monochrome, so color is translated into mark density.
+// Keep midtones lighter; otherwise soft shadows and warm browns jump into dense
+// black symbols too early and the converted image looks blotchy.
+const HEXAGON_MARK_DENSITY_GAMMA = 1.15;
+const HEXAGON_MARK_EDGE_THRESHOLD = 0.14;
+const HEXAGON_MARK_EDGE_BOOST = 0.06;
 const MARK_SMOOTH_THRESHOLD = 1.5;
+
+const getMarkToneConfig = (gridType: string) =>
+  gridType === "hexagon-mark"
+    ? {
+        densityGamma: HEXAGON_MARK_DENSITY_GAMMA,
+        edgeThreshold: HEXAGON_MARK_EDGE_THRESHOLD,
+        edgeBoost: HEXAGON_MARK_EDGE_BOOST,
+      }
+    : {
+        densityGamma: MARK_DENSITY_GAMMA,
+        edgeThreshold: MARK_EDGE_THRESHOLD,
+        edgeBoost: MARK_EDGE_BOOST,
+      };
 
 const markValueOf = (color: RGB): number => rgbToLab(color).L;
 
@@ -79,6 +98,57 @@ type MarkEntry = {
   x: number;
   y: number;
   value: number;
+};
+
+const ensureAllHexagonMarkLevels = (
+  entries: MarkEntry[],
+  levelByOrdinal: Map<number, number>,
+  rawLevelByOrdinal: Map<number, number>,
+  levelCount: number,
+): void => {
+  if (entries.length < levelCount) return;
+
+  const counts = new Array<number>(levelCount).fill(0);
+  for (const entry of entries) {
+    const level = levelByOrdinal.get(entry.ordinal);
+    if (level !== undefined) counts[level]++;
+  }
+
+  const claimedOrdinals = new Set<number>();
+  for (let missingLevel = 0; missingLevel < levelCount; missingLevel++) {
+    if (counts[missingLevel] > 0) continue;
+
+    let bestEntry: MarkEntry | undefined;
+    let bestCurrentLevel = -1;
+    let bestScore = Infinity;
+
+    for (const entry of entries) {
+      if (claimedOrdinals.has(entry.ordinal)) continue;
+
+      const currentLevel = levelByOrdinal.get(entry.ordinal);
+      if (currentLevel === undefined || currentLevel === missingLevel) continue;
+      if (counts[currentLevel] <= 1) continue;
+
+      const rawLevel = rawLevelByOrdinal.get(entry.ordinal) ?? currentLevel;
+      const score =
+        Math.abs(rawLevel - missingLevel) +
+        Math.abs(currentLevel - missingLevel) * 0.15 -
+        Math.min(counts[currentLevel], 1000) * 0.000001;
+
+      if (score < bestScore) {
+        bestEntry = entry;
+        bestCurrentLevel = currentLevel;
+        bestScore = score;
+      }
+    }
+
+    if (!bestEntry) continue;
+
+    counts[bestCurrentLevel]--;
+    counts[missingLevel]++;
+    claimedOrdinals.add(bestEntry.ordinal);
+    levelByOrdinal.set(bestEntry.ordinal, missingLevel);
+  }
 };
 
 const getNeighborOffsets = (
@@ -122,6 +192,7 @@ const assignMarkCodesByValue = (
 
   if (entries.length === 0) return codes;
 
+  const toneConfig = getMarkToneConfig(gridType);
   const values = entries.map((entry) => entry.value);
   const low = percentile(values, 0.02);
   const high = percentile(values, 0.98);
@@ -134,6 +205,7 @@ const assignMarkCodesByValue = (
   }
 
   const levelByOrdinal = new Map<number, number>();
+  const rawLevelByOrdinal = new Map<number, number>();
   const normalizedEdgeByOrdinal = new Map<number, number>();
 
   for (const entry of entries) {
@@ -150,18 +222,21 @@ const assignMarkCodesByValue = (
     const normalized =
       range > 0 ? clamp((entry.value - low) / safeRange, 0, 1) : 0.5;
     const baseDensity = 1 - normalized;
-    const curvedDensity = Math.pow(baseDensity, MARK_DENSITY_GAMMA);
+    const curvedDensity = Math.pow(baseDensity, toneConfig.densityGamma);
     const edgeBoost =
-      normalizedEdge > MARK_EDGE_THRESHOLD
-        ? normalizedEdge * MARK_EDGE_BOOST
+      normalizedEdge > toneConfig.edgeThreshold
+        ? normalizedEdge * toneConfig.edgeBoost
         : 0;
     const density = clamp(curvedDensity + edgeBoost, 0, 1);
-    const codeIndex = Math.round(density * (markCodes.length - 1));
+    const rawLevel = density * (markCodes.length - 1);
+    const codeIndex = Math.round(rawLevel);
 
     normalizedEdgeByOrdinal.set(entry.ordinal, normalizedEdge);
+    rawLevelByOrdinal.set(entry.ordinal, rawLevel);
     levelByOrdinal.set(entry.ordinal, clamp(codeIndex, 0, markCodes.length - 1));
   }
 
+  const smoothedLevelByOrdinal = new Map<number, number>();
   for (const entry of entries) {
     const level = levelByOrdinal.get(entry.ordinal);
     if (level === undefined) continue;
@@ -176,7 +251,7 @@ const assignMarkCodesByValue = (
 
     let smoothedLevel = level;
     const normalizedEdge = normalizedEdgeByOrdinal.get(entry.ordinal) ?? 0;
-    if (normalizedEdge <= MARK_EDGE_THRESHOLD && neighborLevels.length >= 3) {
+    if (normalizedEdge <= toneConfig.edgeThreshold && neighborLevels.length >= 3) {
       const average =
         neighborLevels.reduce((sum, neighborLevel) => sum + neighborLevel, 0) /
         neighborLevels.length;
@@ -200,7 +275,25 @@ const assignMarkCodesByValue = (
       }
     }
 
-    codes[entry.ordinal] = markCodes[clamp(smoothedLevel, 0, markCodes.length - 1)];
+    smoothedLevelByOrdinal.set(
+      entry.ordinal,
+      clamp(smoothedLevel, 0, markCodes.length - 1),
+    );
+  }
+
+  if (gridType === "hexagon-mark") {
+    ensureAllHexagonMarkLevels(
+      entries,
+      smoothedLevelByOrdinal,
+      rawLevelByOrdinal,
+      markCodes.length,
+    );
+  }
+
+  for (const entry of entries) {
+    const level = smoothedLevelByOrdinal.get(entry.ordinal);
+    if (level === undefined) continue;
+    codes[entry.ordinal] = markCodes[level];
   }
 
   return codes;
@@ -485,21 +578,40 @@ self.onmessage = (e: MessageEvent) => {
   let finalCells = rawCells;
   let finalCols = cols;
   let finalRows = rows;
+  let finalBackgroundCellKeys = backgroundCellKeys;
 
-  if (removeWhiteBackground && rawCells.length > 0) {
-    // Padding logic: keep standard cells padding 1 cell if possible
-    minX = Math.max(0, minX - 1);
-    minY = Math.max(0, minY - 1);
-    maxX = Math.min(cols - 1, maxX + 1);
-    maxY = Math.min(rows - 1, maxY + 1);
+  if (
+    removeWhiteBackground &&
+    rawCells.length > 0 &&
+    gridType !== "hexagon-mark"
+  ) {
+    const boundCells = isMarkGrid(gridType)
+      ? rawCells.filter((c) => Boolean(c.code))
+      : rawCells;
+    const cellsForBounds = boundCells.length > 0 ? boundCells : rawCells;
+    const cropPadding = isMarkGrid(gridType) ? 2 : 1;
+
+    minX = Math.max(0, Math.min(...cellsForBounds.map((c) => c.x)) - cropPadding);
+    minY = Math.max(0, Math.min(...cellsForBounds.map((c) => c.y)) - cropPadding);
+    maxX = Math.min(cols - 1, Math.max(...cellsForBounds.map((c) => c.x)) + cropPadding);
+    maxY = Math.min(rows - 1, Math.max(...cellsForBounds.map((c) => c.y)) + cropPadding);
 
     finalCols = maxX - minX + 1;
     finalRows = maxY - minY + 1;
-    finalCells = rawCells.map((c) => ({
-      ...c,
-      x: c.x - minX,
-      y: c.y - minY,
-    }));
+    finalCells = rawCells
+      .filter((c) => c.x >= minX && c.x <= maxX && c.y >= minY && c.y <= maxY)
+      .map((c) => ({
+        ...c,
+        x: c.x - minX,
+        y: c.y - minY,
+      }));
+    finalBackgroundCellKeys = backgroundCellKeys
+      ?.map((key) => {
+        const [x, y] = key.split(",").map(Number);
+        return { x, y };
+      })
+      .filter(({ x, y }) => x >= minX && x <= maxX && y >= minY && y <= maxY)
+      .map(({ x, y }) => `${x - minX},${y - minY}`);
   }
 
   if (isMarkGrid(gridType)) {
@@ -533,7 +645,7 @@ self.onmessage = (e: MessageEvent) => {
     cellSize,
     cellGap: gridType === "honeycomb" ? 2 : 0,
     rotationDeg: gridType === "diamond" ? 45 : 0,
-    backgroundCells: backgroundCellKeys,
+    backgroundCells: finalBackgroundCellKeys,
     cells: finalCells,
   };
 

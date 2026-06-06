@@ -44,6 +44,9 @@ interface PdfSetupStepProps {
     setSolutionCollagePages: (pages: string[]) => void;
     solutionCollageInputRef: React.RefObject<HTMLInputElement | null>;
     handleSolutionCollageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    solutionNameList: string[];
+    solutionNamesInputRef: React.RefObject<HTMLInputElement | null>;
+    handleSolutionNamesChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export default function PdfSetupStep({
@@ -84,6 +87,9 @@ export default function PdfSetupStep({
     setSolutionCollagePages,
     solutionCollageInputRef,
     handleSolutionCollageChange,
+    solutionNameList,
+    solutionNamesInputRef,
+    handleSolutionNamesChange,
 }: PdfSetupStepProps) {
     return (
         <div className="flex-1 flex flex-col py-2 overflow-y-auto no-scrollbar">
@@ -328,7 +334,14 @@ export default function PdfSetupStep({
                                     <span className="text-sm font-medium text-(--text-primary)">Ready to Auto Add</span>
                                 </div>
                             )}
+                            {directImages.length === 0 && (
+                                <button onClick={() => solutionNamesInputRef.current?.click()} className="mt-3 px-3 py-1.5 text-xs font-medium text-(--accent) border border-(--accent)/30 bg-(--accent)/5 hover:bg-(--accent)/10 rounded-lg transition-colors">
+                                    Import Names CSV
+                                    {solutionNameList.length > 0 ? ` (${solutionNameList.length})` : ""}
+                                </button>
+                            )}
                             <input ref={solutionCollageInputRef} type="file" accept="image/png,image/jpeg" multiple className="hidden" onChange={handleSolutionCollageChange} />
+                            <input ref={solutionNamesInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleSolutionNamesChange} />
                         </div>
                         {solutionCollagePages.length > 0 && <div className="absolute top-4 right-4 bg-green-500/10 text-green-500 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Loaded ({solutionCollagePages.length})</div>}
                         {solutionCollagePages.length === 0 && <div className="absolute top-4 right-4 bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase">Optional</div>}

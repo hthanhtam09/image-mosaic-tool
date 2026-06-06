@@ -249,11 +249,13 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
         if (!p) break;
 
         try {
+          const isMarkProject =
+            p.gridType === "square-mark" || p.gridType === "hexagon-mark";
           const result = await imageToColorByNumber(p.originalFile, {
             gridType: p.gridType,
             cellSize: globalCellSize,
             useDithering: p.useDithering,
-            removeWhiteBackground: p.removeBackground,
+            removeWhiteBackground: p.removeBackground || isMarkProject,
             removeBottomWatermark: globalExportPalette,
           });
           updateProject(p.id, { data: result, status: "completed" });

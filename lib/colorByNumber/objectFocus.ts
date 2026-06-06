@@ -47,11 +47,14 @@ export const isTransparentCell = (
 };
 
 export const shouldRenderDotCodeBaseCell = (
-  data: Pick<ColorByNumberData, "backgroundCells">,
+  data: Pick<ColorByNumberData, "gridType" | "backgroundCells">,
   x: number,
   y: number,
   transparentBg?: boolean,
-): boolean => !transparentBg || !getBackgroundCellSet(data).has(`${x},${y}`);
+): boolean =>
+  data.gridType === "hexagon-mark" ||
+  !transparentBg ||
+  !getBackgroundCellSet(data).has(`${x},${y}`);
 
 export const getDotCodeMagnifierLayout = ({
   pageW,

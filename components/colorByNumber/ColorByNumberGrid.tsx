@@ -280,10 +280,6 @@ const HexagonMarkSymbol = ({
     );
   }
 
-  if (code === "6") {
-    return <path d={getRoundedPolygonPath(points, r * 0.04)} fill="#000000" />;
-  }
-
   return (
     <g>
       {code === "1" && (
@@ -847,7 +843,7 @@ const PaletteColumnSVG = ({
                   cx={cx}
                   cy={swCY}
                   r={s / 2}
-                  showBackground={false}
+                  showBackground
                 />
                 <HexagonMarkSymbol
                   code={code}
@@ -855,13 +851,6 @@ const PaletteColumnSVG = ({
                   cy={swCY}
                   size={s}
                   markRadius={s / 2}
-                />
-                <DotCodeDroplet
-                  cx={singleDropCx}
-                  topY={singleDropTop}
-                  width={singleDropW}
-                  height={singleDropH}
-                  fillRatio={dotCodeFillRatio}
                 />
                 <text
                   x={cx}

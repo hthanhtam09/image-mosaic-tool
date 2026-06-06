@@ -125,7 +125,7 @@ export const imageToColorByNumber = async (
     maxColors = gridType === "square-mark"
       ? 6
       : gridType === "hexagon-mark"
-        ? 8
+        ? 14
         : 20,
     removeWhiteBackground = true,
     removeBottomWatermark = false,

@@ -58,7 +58,7 @@ export const getPagePaddingX = (data: ColorByNumberData): number =>
   data.gridType === "square-mark" || data.gridType === "hexagon-mark" ? DOT_CODE_PAGE_PADDING_X : PAGE_PADDING_X;
 
 const DOT_CODE_CODES = ["1", "2", "3", "4", "5"];
-const HEXAGON_MARK_CODES = [".", "1", "2", "3", "4", "5", "6"];
+const HEXAGON_MARK_CODES = [".", "1", "2", "3", "4", "5"];
 
 const isMarkGridType = (gridType: ColorByNumberData["gridType"]): boolean =>
   gridType === "square-mark" || gridType === "hexagon-mark";
@@ -364,7 +364,6 @@ const drawHexagonMarkSymbol = (
     ctx.lineTo(x2, y2);
     ctx.stroke();
   };
-
   if (code === ".") {
     ctx.beginPath();
     ctx.arc(cx, cy, Math.max(1.4, size * 0.075), 0, Math.PI * 2);
@@ -385,9 +384,6 @@ const drawHexagonMarkSymbol = (
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("✱", cx, cy + size * 0.02);
-  } else if (code === "6") {
-    getRoundedPolygonPath(ctx, points, r * 0.04);
-    ctx.fill();
   }
 
   ctx.restore();
@@ -1179,7 +1175,7 @@ const drawPalSwatch = (
   } else if (shape === "square-mark") {
     drawDotCodeCellBase(ctx, cx - half, cy - half, s, false);
   } else if (shape === "hexagon-mark") {
-    drawHexagonMarkCellBase(ctx, cx, cy, half, false);
+    drawHexagonMarkCellBase(ctx, cx, cy, half, true);
   } else {
     // rounded square
     const r = s * 0.12;
@@ -1324,15 +1320,17 @@ const renderPaletteColumnCBN = (
       ctx.fillText(displayCode, cx, yPos + sSW + sGap + sDH / 2);
       ctx.restore();
 
-      drawDropletShape(
-        ctx,
-        cx + (sSW * 1.15) / 2 + sArcGap * 3.4 + (sDW * 1.45) / 2,
-        swCY - (sDH * 1.45) / 2,
-        sDW * 1.45,
-        sDH * 1.45,
-        dotCodeFillRatio,
-        "#000000",
-      );
+      if (shape === "square-mark") {
+        drawDropletShape(
+          ctx,
+          cx + (sSW * 1.15) / 2 + sArcGap * 3.4 + (sDW * 1.45) / 2,
+          swCY - (sDH * 1.45) / 2,
+          sDW * 1.45,
+          sDH * 1.45,
+          dotCodeFillRatio,
+          "#000000",
+        );
+      }
     } else {
       ctx.strokeText(displayCode, cx, swCY);
       ctx.fillText(displayCode, cx, swCY);
@@ -2166,6 +2164,7 @@ export const exportPaletteToCanvas = (
   const [bgR, bgG, bgB] = parseHex(bgHex);
   const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
   const isDarkBg = options?.transparentBg ? false : bgBrightness < 128;
+  const markLabelFill = options?.transparentBg || bgBrightness < 128 ? "#ffffff" : "#000000";
   const separatorColor = "rgba(255,255,255,0.15)";
 
   // ── Swatch shape ──
@@ -2252,15 +2251,21 @@ export const exportPaletteToCanvas = (
           Math.min(maxItemsPerRow, Math.floor((contentW + hGap) / (itemW + hGap))),
         );
 
-  // Item height: swatch + gap + droplet top padding + droplets + inputGap + inputH
-  const itemH = sSW + sGap + sDropletTopPad + sDH + sInputGap + sInputH;
+  const isHexagonMarkPalette = data.gridType === "hexagon-mark";
+  // Item height: swatch + label area for mark pages; full swatch + droplets + input for color palettes.
+  const itemH = isHexagonMarkPalette
+    ? sSW + Math.round(0.3 * EXPORT_DPI)
+    : sSW + sGap + sDropletTopPad + sDH + sInputGap + sInputH;
   const vGap =
-    data.gridType === "hexagon-mark"
-      ? Math.round(0.8 * EXPORT_DPI)
+    isHexagonMarkPalette
+      ? Math.round(0.08 * EXPORT_DPI)
       : Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
 
   const numRows = Math.ceil(codes.length / itemsPerRow);
   const totalH = numRows * itemH + Math.max(0, numRows - 1) * vGap;
+  const bannerToMarksGap = isHexagonMarkPalette
+    ? Math.round(0.85 * EXPORT_DPI)
+    : 120;
 
   let bannerHeight = 0;
   if (options?.pageNumber != null) {
@@ -2279,7 +2284,7 @@ export const exportPaletteToCanvas = (
     const cx = pageW / 2;
     const bw = 360; // banner width
     const bh = 120; // banner height
-    const cy = startY - 120 - bh / 2; // Position 60px above the color blocks (increased from 30px)
+    const cy = startY - bannerToMarksGap - bh / 2;
 
     ctx.save();
 
@@ -2349,22 +2354,24 @@ export const exportPaletteToCanvas = (
         drawDotCodeSymbol(ctx, displayCode, cx, swCY, sw * 1.15);
       }
       ctx.save();
-      ctx.fillStyle = "#000000";
+      ctx.fillStyle = markLabelFill;
       ctx.font = `700 ${Math.max(18 * scale, sw * (sLbl / sSW) * 1.05)}px 'Noto Sans', sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(displayCode, cx, iy + sw + (sGap + sDropletTopPad) * scale + (sDH * scale) / 2);
       ctx.restore();
 
-      drawDropletShape(
-        ctx,
-        cx + (sw * (shape === "hexagon-mark" ? 1.25 : 1.15)) / 2 + sArcGap * 3.4 * scale + (sDW * 1.45 * scale) / 2,
-        swCY - (sDH * 1.45 * scale) / 2,
-        sDW * 1.45 * scale,
-        sDH * 1.45 * scale,
-        dotCodeFillRatio,
-        "#000000",
-      );
+      if (shape === "square-mark") {
+        drawDropletShape(
+          ctx,
+          cx + (sw * 1.15) / 2 + sArcGap * 3.4 * scale + (sDW * 1.45 * scale) / 2,
+          swCY - (sDH * 1.45 * scale) / 2,
+          sDW * 1.45 * scale,
+          sDH * 1.45 * scale,
+          dotCodeFillRatio,
+          "#000000",
+        );
+      }
     } else {
       ctx.strokeText(displayCode, cx, swCY);
       ctx.fillText(displayCode, cx, swCY);
@@ -2579,7 +2586,7 @@ export const exportPaletteToCanvas = (
  */
 export const exportCollagePagesToCanvas = (
   canvases: HTMLCanvasElement[],
-  options?: { bgColor?: string },
+  options?: { bgColor?: string; labels?: Array<string | undefined> },
 ): HTMLCanvasElement[] => {
   const pageW = EXPORT_PAGE_W; // 2550
   const pageH = EXPORT_PAGE_H; // 3300
@@ -2656,16 +2663,38 @@ export const exportCollagePagesToCanvas = (
 
       ctx.drawImage(imgCanvas, drawX, drawY, drawW, drawH);
 
-      // Draw number below the image
+      // Draw number, with an optional imported image name beside it.
       ctx.fillStyle = textColor;
-      ctx.font = `bold 40px 'Noto Sans', sans-serif`;
-      ctx.textAlign = "center";
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(
-        imageNumber.toString(),
-        cx + cellW / 2,
-        cy + cellH - textHeight + 10,
-      );
+      const label = options?.labels?.[i + idx]?.trim();
+      const textY = cy + cellH - textHeight + 10;
+      const numberText = imageNumber.toString();
+      if (label) {
+        const gap = 14;
+        const maxLabelW = cellW - 90;
+        ctx.font = `bold 40px 'Noto Sans', sans-serif`;
+        const numberW = ctx.measureText(numberText).width;
+        ctx.font = `500 32px 'Noto Sans', sans-serif`;
+        let displayLabel = label;
+        while (
+          displayLabel.length > 1 &&
+          ctx.measureText(displayLabel).width > maxLabelW
+        ) {
+          displayLabel = displayLabel.slice(0, -1);
+        }
+        if (displayLabel !== label) displayLabel = `${displayLabel.slice(0, -1)}...`;
+        const labelW = ctx.measureText(displayLabel).width;
+        const startX = cx + (cellW - numberW - gap - labelW) / 2;
+        ctx.font = `bold 40px 'Noto Sans', sans-serif`;
+        ctx.fillText(numberText, startX, textY);
+        ctx.font = `500 32px 'Noto Sans', sans-serif`;
+        ctx.fillText(displayLabel, startX + numberW + gap, textY + 6);
+      } else {
+        ctx.font = `bold 40px 'Noto Sans', sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(numberText, cx + cellW / 2, textY);
+      }
     });
 
     pages.push(canvas);
