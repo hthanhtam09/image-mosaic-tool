@@ -3,7 +3,7 @@
 import { THEMES } from "@/lib/colorByNumber/themes";
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import type { ColorByNumberGridType } from "@/lib/colorByNumber";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface GlobalSettingsProps {
   showSettings: boolean;
@@ -11,10 +11,12 @@ interface GlobalSettingsProps {
   disabled?: boolean;
 }
 
-const GRID_TYPE_OPTIONS: {
+type GridTypeOption = {
   value: ColorByNumberGridType | "auto";
   label: string;
-}[] = [
+};
+
+const PATTERN_OPTIONS: GridTypeOption[] = [
   { value: "auto", label: "Auto (Cycle)" },
   { value: "standard", label: "Square" },
   { value: "honeycomb", label: "Circle" },
@@ -24,9 +26,16 @@ const GRID_TYPE_OPTIONS: {
   { value: "islamic", label: "Islamic" },
   { value: "fish-scale", label: "Fish Scale" },
   { value: "trapezoid", label: "Trapezoid" },
+];
+
+const MARK_OPTIONS: GridTypeOption[] = [
   { value: "square-mark", label: "Square mark" },
   { value: "hexagon-mark", label: "Hexagon mark" },
 ];
+
+const isMarkGridType = (
+  value: ColorByNumberGridType | "auto",
+): boolean => value === "square-mark" || value === "hexagon-mark";
 
 const ToggleSwitch = ({
   on,
@@ -66,6 +75,18 @@ export default function GlobalSettings({
   } = useColorByNumberStore();
 
   const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Import Pattern has two tabs: regular patterns and mark patterns.
+  const [patternTab, setPatternTab] = useState<"pattern" | "mark">(
+    isMarkGridType(globalGridType) ? "mark" : "pattern",
+  );
+  // Switch tab to match the grid type when it changes elsewhere (adjust state
+  // during render instead of in an effect to avoid cascading renders).
+  const [prevGridType, setPrevGridType] = useState(globalGridType);
+  if (prevGridType !== globalGridType) {
+    setPrevGridType(globalGridType);
+    setPatternTab(isMarkGridType(globalGridType) ? "mark" : "pattern");
+  }
 
   // Close settings dropdown when clicking outside
   useEffect(() => {
@@ -216,21 +237,51 @@ export default function GlobalSettings({
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
-              {GRID_TYPE_OPTIONS.map((opt) => (
+
+            {/* Tabs: regular patterns vs mark patterns */}
+            <div className="flex gap-1 p-1 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-default)]">
+              {(
+                [
+                  { id: "pattern" as const, label: "Patterns" },
+                  { id: "mark" as const, label: "Mark" },
+                ]
+              ).map((tab) => (
                 <button
-                  key={opt.value}
-                  onClick={() => setGlobalGridType(opt.value)}
-                  className={`px-3 py-2 text-[10px] font-medium rounded-lg transition-all border ${
-                    globalGridType === opt.value
-                      ? "bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] shadow-sm"
-                      : "bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)]"
+                  key={tab.id}
+                  onClick={() => setPatternTab(tab.id)}
+                  className={`flex-1 px-3 py-1.5 text-[10px] font-medium rounded-md transition-all ${
+                    patternTab === tab.id
+                      ? "bg-[var(--accent)]/15 text-[var(--accent)] shadow-sm"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   }`}
                 >
-                  {opt.label}
+                  {tab.label}
                 </button>
               ))}
             </div>
+
+            <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {(patternTab === "mark" ? MARK_OPTIONS : PATTERN_OPTIONS).map(
+                (opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setGlobalGridType(opt.value)}
+                    className={`px-3 py-2 text-[10px] font-medium rounded-lg transition-all border ${
+                      globalGridType === opt.value
+                        ? "bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] shadow-sm"
+                        : "bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)]"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ),
+              )}
+            </div>
+            {patternTab === "mark" && (
+              <p className="text-[10px] text-[var(--text-muted)]">
+                Mark patterns auto-enable Export Palette (per image).
+              </p>
+            )}
           </div>
 
           <div className="border-t border-[var(--border-subtle)]" />

@@ -12,11 +12,14 @@ export default function AccessModal() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    const granted = localStorage.getItem(ACCESS_KEY);
-    if (granted === "true") {
-      setIsGranted(true);
-    }
+    // Defer state updates out of the effect body to avoid cascading renders.
+    const raf = requestAnimationFrame(() => {
+      setMounted(true);
+      if (localStorage.getItem(ACCESS_KEY) === "true") {
+        setIsGranted(true);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -27,6 +27,12 @@ export default function ProjectCard({
 }: ProjectCardProps) {
     const { updateProject, removeProject } = useColorByNumberStore();
 
+    // Object Focus projects only support the mark grid types (square / hexagon).
+    const isObjectFocus = project.removeBackground === true;
+    const gridTypeOptions = isObjectFocus
+        ? GRID_TYPES.filter(t => t.value === "square-mark" || t.value === "hexagon-mark")
+        : GRID_TYPES;
+
     return (
         <div
             className="flex flex-col bg-(--bg-secondary) border border-(--border-subtle) rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
@@ -102,13 +108,14 @@ export default function ProjectCard({
                             disabled={project.status === 'processing' || isConverting}
                             className="w-full text-sm bg-(--bg-primary) border border-(--border-default) rounded-lg px-2 py-1.5 text-(--text-primary) focus:outline-none focus:border-(--accent) disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {GRID_TYPES.map(t => (
+                            {gridTypeOptions.map(t => (
                                 <option key={t.value} value={t.value}>{t.label}</option>
                             ))}
                         </select>
                     </div>
 
                     {/* Split Color Mode */}
+                    {!isObjectFocus && (
                     <div className="relative" ref={splitColorDropdownId === project.id ? splitColorRef : undefined}>
                         <label className="text-xs text-(--text-secondary) block mb-1">Split Color</label>
                         <div className="flex items-center gap-2">
@@ -124,6 +131,7 @@ export default function ProjectCard({
                             </select>
                         </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Action Button */}

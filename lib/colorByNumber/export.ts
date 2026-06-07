@@ -313,24 +313,27 @@ const drawHexagonMarkCellBase = (
   }
 
   const dotR = Math.max(1.1, r * 0.085);
-  const edgeWidth = Math.max(0.55, r * 0.025);
+  const smallR = Math.max(0.55, r * 0.04);
+  const steps = 4;
   ctx.save();
 
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = edgeWidth;
-  ctx.lineCap = "round";
+  // Dotted edges (3 dots per edge) to match the square-mark cell style.
+  ctx.fillStyle = "#000000";
   ctx.globalAlpha = 0.28;
   for (let i = 0; i < points.length; i++) {
     const start = points[i];
     const end = points[(i + 1) % points.length];
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      const dx = start.x + (end.x - start.x) * t;
+      const dy = start.y + (end.y - start.y) * t;
+      ctx.beginPath();
+      ctx.arc(dx, dy, smallR, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   ctx.globalAlpha = 1;
-  ctx.fillStyle = "#000000";
   for (const point of points) {
     ctx.beginPath();
     ctx.arc(point.x, point.y, dotR, 0, Math.PI * 2);
@@ -398,12 +401,19 @@ const drawDotCodeMagnifier = (
   transparentBg: boolean,
 ) => {
   const cell = r * 0.25;
+  const isHex = data.gridType === "hexagon-mark";
+  // Hexagon mark has 6 density levels (including the dot); square dot-code has 5.
+  const markCodes = isHex
+    ? [".", "1", "2", "3", "4", "5"]
+    : ["1", "2", "3", "4", "5"];
   const cols = 7;
-  const rows = 7;
-  const startX = cx - (cols * cell) / 2;
-  const startY = cy - (rows * cell) / 2;
+  const rows = isHex ? 9 : 7;
+  // Hexagons tile as a pointy-top honeycomb (matches the real grid layout).
+  const hexR = cell / Math.sqrt(3);
+  const rowStep = isHex ? 1.5 * hexR : cell;
+  // Cycle through every mark so the legend always shows all of them.
   const codeAt = (row: number, col: number): string =>
-    String(((row * 2 + col * 3 + (row % 2 === 0 ? 1 : 4)) % 5) + 1);
+    markCodes[(row * 2 + col * 3 + (row % 2 === 0 ? 1 : 4)) % markCodes.length];
 
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.32)";
@@ -425,20 +435,36 @@ const drawDotCodeMagnifier = (
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const x = startX + col * cell;
-      const y = startY + row * cell;
+      const rowOffset = isHex && row % 2 === 1 ? cell / 2 : 0;
+      const midX =
+        cx + (col - (cols - 1) / 2) * cell + rowOffset - (isHex ? cell / 4 : 0);
+      const midY = cy + (row - (rows - 1) / 2) * rowStep;
       const rowCode = codeAt(row, col);
-      drawDotCodeCellBase(ctx, x, y, cell, false);
-      const midX = x + cell / 2;
-      const midY = y + cell / 2;
+      if (isHex) {
+        drawHexagonMarkCellBase(ctx, midX, midY, hexR, false);
+      } else {
+        drawDotCodeCellBase(ctx, midX - cell / 2, midY - cell / 2, cell, false);
+      }
       if (col < 3) {
-        ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.34)";
-        ctx.font = `700 ${cell * 0.5}px 'Noto Sans', sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(rowCode, midX, midY);
-        ctx.restore();
+        if (isHex && rowCode === ".") {
+          // The dot level renders as a dot in the uncolored grid, not text.
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.34)";
+          ctx.beginPath();
+          ctx.arc(midX, midY, Math.max(1.4, cell * 0.09), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.34)";
+          ctx.font = `700 ${cell * 0.7}px 'Noto Sans', sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(rowCode, midX, midY);
+          ctx.restore();
+        }
+      } else if (isHex) {
+        drawHexagonMarkSymbol(ctx, rowCode, midX, midY, cell, hexR);
       } else {
         drawDotCodeSymbol(ctx, rowCode, midX, midY, cell);
       }
@@ -1994,8 +2020,9 @@ export const exportDotCodeMagnifierToCanvas = (
     bgColor?: string;
   },
 ): HTMLCanvasElement => {
-  const r = 320;
-  const pad = 70;
+  // Size in inches × 300 DPI so the standalone circle is print-resolution.
+  const r = Math.round(2 * EXPORT_DPI); // 600px ≈ 2 inch radius (4 inch circle)
+  const pad = Math.round(0.3 * EXPORT_DPI); // 90px
   const size = r * 2 + pad * 2;
   const canvas = document.createElement("canvas");
   canvas.width = size;

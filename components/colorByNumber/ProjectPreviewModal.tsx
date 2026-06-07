@@ -7,6 +7,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import ColorByNumberGrid from "./ColorByNumberGrid";
 import {
+  canvasToDpiPngDataUrl,
   exportDotCodeMagnifierToCanvas,
   exportToCanvas,
 } from "@/lib/colorByNumber";
@@ -24,7 +25,7 @@ interface ProjectPreviewModalProps {
 const downloadCanvas = (canvas: HTMLCanvasElement, filename: string): void => {
   const link = document.createElement("a");
   link.download = filename;
-  link.href = canvas.toDataURL("image/png");
+  link.href = canvasToDpiPngDataUrl(canvas);
   link.click();
 };
 
@@ -86,10 +87,15 @@ export default function ProjectPreviewModal({
 
   useEffect(() => {
     if (!activeProject || !activeProject.data) return;
-    setIsGenerating(true);
-    // Timeout to allow UI to render
-    setTimeout(() => {
-      const theme = getThemeById(globalTheme);
+    let cancelled = false;
+    // Defer state updates out of the effect body to avoid cascading renders.
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
+      setIsGenerating(true);
+      // Timeout to allow the loading state to paint before the heavy render.
+      setTimeout(() => {
+        if (cancelled) return;
+        const theme = getThemeById(globalTheme);
       const shouldShowPalette = activeProject.removeBackground
         ? false
         : globalExportPalette
@@ -118,7 +124,12 @@ export default function ProjectPreviewModal({
       });
       setPreviewUrl(canvas.toDataURL("image/png"));
       setIsGenerating(false);
-    }, 50);
+      }, 50);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
   }, [
     activeProject?.data,
     activeProject?.filled,
@@ -177,7 +188,8 @@ export default function ProjectPreviewModal({
 
     if (
       activeProject.removeBackground &&
-      activeProject.data.gridType === "square-mark"
+      (activeProject.data.gridType === "square-mark" ||
+        activeProject.data.gridType === "hexagon-mark")
     ) {
       setTimeout(() => {
         const circleCanvas = exportDotCodeMagnifierToCanvas(
@@ -188,31 +200,6 @@ export default function ProjectPreviewModal({
         );
         downloadCanvas(circleCanvas, `circle-${baseName}.png`);
       }, 300);
-    }
-
-    if (activeProject.removeBackground) {
-      setTimeout(() => {
-        const canvasSubjectUncolor = exportToCanvas(
-          activeProject.data!,
-          activeProject.filled,
-          {
-            showCodes: shouldShowCodes(
-              activeProject.data,
-              activeProject.removeBackground,
-              true,
-            ),
-            colored: false,
-            showPalette: false,
-            partialColorMode: activeProject.partialColorMode,
-            bgColor: theme.backgroundColor,
-            transparentBg: true,
-            tightCrop: useObjectTightCrop,
-            removeBgColorCells: globalExportPalette,
-            showMagnifier: false,
-          },
-        );
-        downloadCanvas(canvasSubjectUncolor, `subject-uncolor-${baseName}.png`);
-      }, 500);
     }
 
     // Uncolored (only for full color projects)

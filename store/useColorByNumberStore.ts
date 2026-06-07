@@ -156,6 +156,10 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   setGlobalGridType: (gridType) =>
     set((state) => ({
       globalGridType: gridType,
+      // Mark patterns (square-mark / hexagon-mark) auto-enable per-image palette export.
+      ...(gridType === "square-mark" || gridType === "hexagon-mark"
+        ? { globalExportPalette: true, globalShowPalette: false }
+        : {}),
       // When a specific pattern is selected (not 'auto'), update ALL existing standard projects
       // to use the new grid type and reset them so they re-convert
       projects: gridType === 'auto'

@@ -24,6 +24,10 @@ import {
   exportDotCodeMagnifierToCanvas,
 } from "@/lib/colorByNumber/export";
 import {
+  canvasToDpiPngBase64,
+  canvasToDpiPngBlob,
+} from "@/lib/colorByNumber/pngDpi";
+import {
   exportBeforeAfterToCanvas,
   type BeforeAfterTheme,
 } from "@/lib/colorByNumber/beforeAfter";
@@ -225,7 +229,10 @@ export default function Dashboard() {
             sensitivity: "base",
           }),
         );
-        const newProjectIds: string[] = [];
+
+        // Object Focus only supports the mark grid types (square / hexagon).
+        const pattern: ColorByNumberGridType =
+          globalGridType === "hexagon-mark" ? "hexagon-mark" : "square-mark";
 
         // Process sequentially to preserve order
         for (let index = 0; index < fileList.length; index++) {
@@ -237,49 +244,24 @@ export default function Dashboard() {
             reader.readAsDataURL(file);
           });
 
-          const pattern: ColorByNumberGridType =
-            globalGridType === "auto" ? "square-mark" : globalGridType;
-          const id = crypto.randomUUID();
-
-          const sourceDataUrl =
-            pattern === "square-mark" || pattern === "hexagon-mark"
-              ? dataUrl
-              : await padImageDataUrl(dataUrl, 130);
-          const sourceFile =
-            pattern === "square-mark" || pattern === "hexagon-mark"
-              ? file
-              : await dataUrlToFile(
-                  sourceDataUrl,
-                  file.name,
-                  file.type || "image/png",
-                );
-
-          addProject(sourceFile, sourceDataUrl, {
-            id,
+          addProject(file, dataUrl, {
+            id: crypto.randomUUID(),
             gridType: pattern,
             removeBackground: true,
           });
-          newProjectIds.push(id);
         }
 
-        if (newProjectIds.length > 0) {
-          // Keep user on import step and open preview in-place for Object Focus flow.
-          setCurrentStep(1);
-          setPreviewProjectId(newProjectIds[0]);
-          setIsConverting(true);
-          try {
-            await convertAllIdleProjects();
-          } finally {
-            setIsConverting(false);
-          }
-        }
+        // Show the project list (like Standard Import) so the user can pick
+        // square-mark / hexagon-mark before converting, instead of converting now.
+        setKeepImportScreen(false);
+        setCurrentStep(1);
       } catch (err) {
         console.error("Failed to import transparent images:", err);
       } finally {
         e.target.value = "";
       }
     },
-    [addProject, convertAllIdleProjects, globalGridType],
+    [addProject, globalGridType],
   );
 
   const handleDirUploadChange = async (
@@ -542,11 +524,8 @@ export default function Dashboard() {
       beforeAfterJob.afterUrl,
       beforeAfterTheme,
     );
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const baseName = beforeAfterJob.name.replace(/\.[^/.]+$/, "");
-      saveAs(blob, `before-after-${baseName}.png`);
-    }, "image/png");
+    const baseName = beforeAfterJob.name.replace(/\.[^/.]+$/, "");
+    saveAs(canvasToDpiPngBlob(canvas), `before-after-${baseName}.png`);
     canvas.width = 0;
     canvas.height = 0;
   };
@@ -566,7 +545,7 @@ export default function Dashboard() {
           beforeAfterTheme,
         );
         const baseName = img.name.replace(/\.[^/.]+$/, "");
-        const base64 = canvas.toDataURL("image/png").split(",")[1];
+        const base64 = canvasToDpiPngBase64(canvas);
         folder?.file(`${baseName}.png`, base64, { base64: true });
         canvas.width = 0;
         canvas.height = 0;
@@ -932,7 +911,6 @@ export default function Dashboard() {
     const rootFolder = zip.folder("converted_images");
     const colorFolder = rootFolder?.folder("color");
     const uncolorFolder = rootFolder?.folder("uncolor");
-    let subjectUncolorFolder: JSZip | null = null;
     let circleFolder: JSZip | null = null;
     const collageFolder = rootFolder?.folder("solutions_collage");
     const paletteFolder = globalExportPalette
@@ -964,19 +942,18 @@ export default function Dashboard() {
         coloredCanvases.push(createSolutionThumbCanvas(canvasColor));
         collageLabels.push(getSolutionLabelForIndex(i));
 
-        const base64Color = canvasColor.toDataURL("image/png").split(",")[1];
+        const base64Color = canvasToDpiPngBase64(canvasColor);
         colorFolder?.file(`${baseName}.png`, base64Color, { base64: true });
 
         if (
           project.removeBackground &&
-          project.data?.gridType === "square-mark"
+          (project.data?.gridType === "square-mark" ||
+            project.data?.gridType === "hexagon-mark")
         ) {
           const canvasCircle = exportDotCodeMagnifierToCanvas(project.data, {
             transparentBg: true,
           });
-          const base64Circle = canvasCircle
-            .toDataURL("image/png")
-            .split(",")[1];
+          const base64Circle = canvasToDpiPngBase64(canvasCircle);
           circleFolder ??= rootFolder?.folder("circle") ?? null;
           circleFolder?.file(`${baseName}.png`, base64Circle, { base64: true });
           canvasCircle.width = 0;
@@ -1001,20 +978,8 @@ export default function Dashboard() {
           tightCrop: useObjectTightCrop,
           removeBgColorCells: globalExportPalette,
         });
-        const base64Uncolor = canvasUncolor
-          .toDataURL("image/png")
-          .split(",")[1];
+        const base64Uncolor = canvasToDpiPngBase64(canvasUncolor);
         uncolorFolder?.file(`${baseName}.png`, base64Uncolor, { base64: true });
-        if (
-          project.removeBackground &&
-          project.data?.gridType !== "hexagon-mark"
-        ) {
-          subjectUncolorFolder ??=
-            rootFolder?.folder("subject_uncolor") ?? null;
-          subjectUncolorFolder?.file(`${baseName}.png`, base64Uncolor, {
-            base64: true,
-          });
-        }
 
         canvasUncolor.width = 0;
         canvasUncolor.height = 0;
@@ -1028,9 +993,7 @@ export default function Dashboard() {
             transparentBg: true,
             removeBgColorCells: true,
           });
-          const base64Palette = canvasPalette
-            .toDataURL("image/png")
-            .split(",")[1];
+          const base64Palette = canvasToDpiPngBase64(canvasPalette);
           paletteFolder.file(`${baseName}.png`, base64Palette, {
             base64: true,
           });
@@ -1050,7 +1013,7 @@ export default function Dashboard() {
           labels: collageLabels,
         });
         collagePages.forEach((pageCanvas, idx) => {
-          const base64Page = pageCanvas.toDataURL("image/png").split(",")[1];
+          const base64Page = canvasToDpiPngBase64(pageCanvas);
           collageFolder.file(`collage_page_${idx + 1}.png`, base64Page, {
             base64: true,
           });
@@ -1112,46 +1075,6 @@ export default function Dashboard() {
     setCurrentStep(2);
     setIsPreparingStep2(false);
   };
-
-  /**
-   * Pads a dataURL image with transparent pixels to ensure objects don't touch the edge.
-   * This protects white objects from being accidentally eaten by the background remover.
-   */
-  async function padImageDataUrl(
-    dataUrl: string,
-    padding: number,
-  ): Promise<string> {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width + padding * 2;
-        canvas.height = img.height + padding * 2;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(dataUrl);
-          return;
-        }
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, padding, padding);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    });
-  }
-
-  async function dataUrlToFile(
-    dataUrl: string,
-    filename: string,
-    mimeType: string,
-  ): Promise<File> {
-    const response = await fetch(dataUrl);
-    const blob = await response.blob();
-    return new File([blob], filename, {
-      type: mimeType || blob.type || "image/png",
-    });
-  }
 
   const GRID_TYPES: { value: ColorByNumberGridType; label: string }[] = [
     { value: "standard", label: "Square" },

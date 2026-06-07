@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Standalone helper scripts, not part of the app build.
+    "temp_fonts/**",
   ]),
 ]);
 

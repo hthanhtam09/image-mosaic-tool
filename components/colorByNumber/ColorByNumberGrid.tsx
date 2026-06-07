@@ -208,27 +208,35 @@ const HexagonMarkCellBase = ({
   const points = getHexagonPoints(cx, cy, r);
   const d = getRoundedPolygonPath(points, r * 0.04);
   const dotR = Math.max(1.1, r * 0.085);
-  const edgeWidth = Math.max(0.55, r * 0.025);
+  const smallR = Math.max(0.55, r * 0.04);
+  const steps = 4;
+
+  // Dotted edges (3 dots per edge) to match the square-mark cell style.
+  const edgeDots: { x: number; y: number }[] = [];
+  points.forEach((start, i) => {
+    const end = points[(i + 1) % points.length];
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      edgeDots.push({
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+      });
+    }
+  });
 
   return (
     <g>
       {showBackground && <path d={d} fill="#ffffff" />}
-      {points.map((start, i) => {
-        const end = points[(i + 1) % points.length];
-        return (
-        <line
+      {edgeDots.map((dot, i) => (
+        <circle
           key={`edge-${i}`}
-          x1={start.x}
-          y1={start.y}
-          x2={end.x}
-          y2={end.y}
-          stroke="#000000"
-          strokeWidth={edgeWidth}
-          strokeLinecap="round"
+          cx={dot.x}
+          cy={dot.y}
+          r={smallR}
+          fill="#000000"
           opacity={0.28}
         />
-        );
-      })}
+      ))}
       {points.map((point, i) => (
         <circle key={i} cx={point.x} cy={point.y} r={dotR} fill="#000000" />
       ))}
@@ -442,7 +450,7 @@ const DotCodeMagnifier = ({
                     y={midY}
                     textAnchor="middle"
                     dominantBaseline="central"
-                    fontSize={cell * 0.5}
+                    fontSize={cell * 0.7}
                     fontWeight={700}
                     fontFamily="'Noto Sans', sans-serif"
                     fill="rgba(0,0,0,0.34)"
