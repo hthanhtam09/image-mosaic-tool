@@ -2617,14 +2617,15 @@ export const exportCollagePagesToCanvas = (
 ): HTMLCanvasElement[] => {
   const pageW = EXPORT_PAGE_W; // 2550
   const pageH = EXPORT_PAGE_H; // 3300
-  const padX = PAGE_PADDING_X;
+  const padX = PAGE_PADDING_X + 35;
   const padY = PAGE_PADDING_Y;
 
   const contentW = pageW - padX * 2;
   const contentH = pageH - padY * 2;
 
   const itemsPerRow = 5;
-  const gap = Math.round(0.15 * EXPORT_DPI); // 45px
+  const gap = Math.round(0.11 * EXPORT_DPI); // 33px, keeps columns compact inside the KDP safe line.
+  const cellInnerPadX = 18;
 
   const cellW = (contentW - gap * (itemsPerRow - 1)) / itemsPerRow;
   const cellH = cellW; // Fit into a square box per item
@@ -2676,16 +2677,17 @@ export const exportCollagePagesToCanvas = (
 
       const imageNumber = i + idx + 1;
       const textHeight = 60; // Space for text at the bottom of the cell
+      const imageAreaW = cellW - cellInnerPadX * 2;
 
       // Scale to fit within the cell, reserving textHeight at the bottom
       const scale = Math.min(
-        cellW / imgCanvas.width,
+        imageAreaW / imgCanvas.width,
         (cellH - textHeight) / imgCanvas.height,
       );
       const drawW = imgCanvas.width * scale;
       const drawH = imgCanvas.height * scale;
 
-      const drawX = cx + (cellW - drawW) / 2;
+      const drawX = cx + cellInnerPadX + (imageAreaW - drawW) / 2;
       const drawY = cy + (cellH - textHeight - drawH) / 2;
 
       ctx.drawImage(imgCanvas, drawX, drawY, drawW, drawH);
@@ -2698,11 +2700,14 @@ export const exportCollagePagesToCanvas = (
       const textY = cy + cellH - textHeight + 10;
       const numberText = imageNumber.toString();
       if (label) {
-        const gap = 14;
-        const maxLabelW = cellW - 90;
+        const labelGap = 14;
         ctx.font = `bold 40px 'Noto Sans', sans-serif`;
         const numberW = ctx.measureText(numberText).width;
         ctx.font = `500 32px 'Noto Sans', sans-serif`;
+        const maxLabelW = Math.max(
+          0,
+          cellW - cellInnerPadX * 2 - numberW - labelGap,
+        );
         let displayLabel = label;
         while (
           displayLabel.length > 1 &&
@@ -2712,11 +2717,11 @@ export const exportCollagePagesToCanvas = (
         }
         if (displayLabel !== label) displayLabel = `${displayLabel.slice(0, -1)}...`;
         const labelW = ctx.measureText(displayLabel).width;
-        const startX = cx + (cellW - numberW - gap - labelW) / 2;
+        const startX = cx + cellInnerPadX + (cellW - cellInnerPadX * 2 - numberW - labelGap - labelW) / 2;
         ctx.font = `bold 40px 'Noto Sans', sans-serif`;
         ctx.fillText(numberText, startX, textY);
         ctx.font = `500 32px 'Noto Sans', sans-serif`;
-        ctx.fillText(displayLabel, startX + numberW + gap, textY + 6);
+        ctx.fillText(displayLabel, startX + numberW + labelGap, textY + 6);
       } else {
         ctx.font = `bold 40px 'Noto Sans', sans-serif`;
         ctx.textAlign = "center";
