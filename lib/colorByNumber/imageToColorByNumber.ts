@@ -210,40 +210,67 @@ export const imageToColorByNumber = async (
       : resizeCanvasToSize(croppedCanvas, targetW, targetH);
 
   // 5. Offload heavy computation to Worker
-  const result = await new Promise<ColorByNumberData>((resolve, reject) => {
-    const worker = new Worker(
-      new URL("./conversionWorker.ts", import.meta.url),
-    );
+  try {
+    return await new Promise<ColorByNumberData>((resolve, reject) => {
+      const worker = new Worker(
+        new URL("./conversionWorker.ts", import.meta.url),
+      );
 
-    worker.onmessage = (e) => {
-      resolve(e.data);
-      worker.terminate();
-    };
+      worker.onmessage = (e) => {
+        resolve(e.data);
+        worker.terminate();
+      };
 
-    worker.onerror = (err) => {
-      reject(err);
-      worker.terminate();
-    };
+      worker.onerror = (err) => {
+        reject(err);
+        worker.terminate();
+      };
 
-    // Transfer ownership of buffer to avoid memory copy
-    const buffer = imageData.data.buffer;
-    worker.postMessage(
-      {
-        imageData: {
-          data: imageData.data,
-          width: imageData.width,
-          height: imageData.height,
+      // Transfer ownership of buffer to avoid memory copy
+      const buffer = imageData.data.buffer;
+      worker.postMessage(
+        {
+          imageData: {
+            data: imageData.data,
+            width: imageData.width,
+            height: imageData.height,
+          },
+          gridType,
+          cellSize,
+          useDithering,
+          maxColors,
+          cols,
+          rows,
+          removeWhiteBackground,
         },
-        gridType,
-        cellSize,
-        useDithering,
-        maxColors,
-        cols,
-        rows,
-        removeWhiteBackground,
-      },
-      [buffer] as Transferable[],
-    );
-  });
-  return result;
+        [buffer] as Transferable[],
+      );
+    });
+  } finally {
+    // 6. Release intermediate buffers immediately so RAM frees up between batch
+    //    items instead of waiting on GC. Zeroing a canvas's dimensions drops its
+    //    backing pixel store right away, which matters when many large images are
+    //    converted in sequence (otherwise Chrome can OOM → "Aw, Snap!").
+    //    Runs on both success and failure so a failed convert never leaks.
+    // sourceCanvas is the rotated canvas when rotation happened, otherwise a copy
+    // of the source image — releasing it covers both. croppedCanvas is separate.
+    releaseCanvases(sourceCanvas, croppedCanvas);
+    rawImg.src = "";
+  }
+};
+
+/**
+ * Free canvas backing stores by collapsing them to 0×0. Skips duplicates so a
+ * canvas referenced by several variables (e.g. rotated source) isn't a problem.
+ */
+const releaseCanvases = (
+  ...canvases: Array<HTMLCanvasElement | undefined | null>
+): void => {
+  const seen = new Set<HTMLCanvasElement>();
+  for (const canvas of canvases) {
+    if (!canvas || seen.has(canvas)) continue;
+    seen.add(canvas);
+    canvas.width = 0;
+    canvas.height = 0;
+  }
 };
