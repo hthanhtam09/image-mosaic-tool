@@ -83,6 +83,7 @@ export default function Dashboard() {
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const solutionCollageInputRef = useRef<HTMLInputElement>(null);
   const solutionNamesInputRef = useRef<HTMLInputElement>(null);
+  const solutionNamesStep1InputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const transparentImageInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
@@ -1170,6 +1171,33 @@ export default function Dashboard() {
             idleCount === 0 &&
             !isConverting && (
               <div className="flex gap-3">
+                {projects.length > 0 &&
+                  (globalGridType === "square-mark" ||
+                    globalGridType === "hexagon-mark") && (
+                    <button
+                      onClick={() =>
+                        solutionNamesStep1InputRef.current?.click()
+                      }
+                      disabled={isZipping || isConverting}
+                      className="px-6 py-2 text-sm font-medium text-(--accent) border border-(--accent)/30 bg-(--accent)/5 hover:bg-(--accent)/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                      </svg>
+                      Import CSV Name (optional)
+                      {solutionNameList.length > 0
+                        ? ` (${solutionNameList.length})`
+                        : ""}
+                    </button>
+                  )}
                 {projects.length > 0 && (
                   <button
                     onClick={handleDownloadAllImages}
@@ -1252,6 +1280,13 @@ export default function Dashboard() {
             multiple
             disabled={isConverting}
             onChange={handleImageFileChange}
+          />
+          <input
+            ref={solutionNamesStep1InputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleSolutionNamesChange}
           />
         </div>
       </div>
