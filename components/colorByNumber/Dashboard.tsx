@@ -47,6 +47,11 @@ import ProjectGrid from "./dashboard/ProjectGrid";
 import PdfSetupStep from "./dashboard/PdfSetupStep";
 import PdfProgressStep from "./dashboard/PdfProgressStep";
 
+type BeforeAfterMarkGridType = Extract<
+  ColorByNumberGridType,
+  "square-mark" | "hexagon-mark"
+>;
+
 export default function Dashboard() {
   const {
     projects,
@@ -120,8 +125,13 @@ export default function Dashboard() {
     labelBackgroundColor: "#ffc24a",
     transparentBackground: true,
   });
+  const [beforeAfterGridType, setBeforeAfterGridType] =
+    useState<BeforeAfterMarkGridType>(
+      globalGridType === "hexagon-mark" ? "hexagon-mark" : "square-mark",
+    );
   const [beforeAfterJob, setBeforeAfterJob] = useState<{
     name: string;
+    sourceFile: File;
     beforeUrl: string;
     afterUrl: string;
     previewUrl: string;
@@ -413,6 +423,62 @@ export default function Dashboard() {
   const canvasToDataUrl = (canvas: HTMLCanvasElement): string =>
     canvas.toDataURL("image/png");
 
+  const generateBeforeAfterJob = async (
+    file: File,
+    gridType: BeforeAfterMarkGridType,
+  ) => {
+    const data = await imageToColorByNumber(file, {
+      gridType,
+      cellSize: globalCellSize,
+      useDithering: true,
+      removeWhiteBackground: true,
+      removeBottomWatermark: globalExportPalette,
+    });
+    const theme = getThemeById(globalTheme);
+    const uncolorCanvas = exportToCanvas(
+      data,
+      {},
+      {
+        showCodes: true,
+        colored: false,
+        showPalette: false,
+        bgColor: theme.backgroundColor,
+        showMagnifier: false,
+      },
+    );
+    const colorCanvas = exportToCanvas(
+      data,
+      {},
+      {
+        showCodes: true,
+        colored: true,
+        showPalette: false,
+        bgColor: theme.backgroundColor,
+        showMagnifier: false,
+      },
+    );
+    const beforeUrl = canvasToDataUrl(uncolorCanvas);
+    const afterUrl = canvasToDataUrl(colorCanvas);
+    const beforeAfterCanvas = await exportBeforeAfterToCanvas(
+      beforeUrl,
+      afterUrl,
+      beforeAfterTheme,
+    );
+    setBeforeAfterJob({
+      name: file.name,
+      sourceFile: file,
+      beforeUrl,
+      afterUrl,
+      previewUrl: beforeAfterCanvas.toDataURL("image/png"),
+    });
+    uncolorCanvas.width = 0;
+    uncolorCanvas.height = 0;
+    colorCanvas.width = 0;
+    colorCanvas.height = 0;
+    beforeAfterCanvas.width = 0;
+    beforeAfterCanvas.height = 0;
+  };
+
   const handleBeforeAfterImageChange = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -421,65 +487,26 @@ export default function Dashboard() {
 
     setIsProcessingFolder(true);
     try {
-      const gridType =
-        globalGridType === "auto" ? "square-mark" : globalGridType;
-      const isMarkGrid =
-        gridType === "square-mark" || gridType === "hexagon-mark";
-      const data = await imageToColorByNumber(file, {
-        gridType,
-        cellSize: globalCellSize,
-        useDithering: true,
-        removeWhiteBackground: isMarkGrid,
-        removeBottomWatermark: globalExportPalette,
-      });
-      const theme = getThemeById(globalTheme);
-      const uncolorCanvas = exportToCanvas(
-        data,
-        {},
-        {
-          showCodes: true,
-          colored: false,
-          showPalette: false,
-          bgColor: theme.backgroundColor,
-          showMagnifier: false,
-        },
-      );
-      const colorCanvas = exportToCanvas(
-        data,
-        {},
-        {
-          showCodes:
-            data.gridType === "square-mark" || data.gridType === "hexagon-mark",
-          colored: true,
-          showPalette: false,
-          bgColor: theme.backgroundColor,
-          showMagnifier: false,
-        },
-      );
-      const beforeUrl = canvasToDataUrl(uncolorCanvas);
-      const afterUrl = canvasToDataUrl(colorCanvas);
-      const beforeAfterCanvas = await exportBeforeAfterToCanvas(
-        beforeUrl,
-        afterUrl,
-        beforeAfterTheme,
-      );
-      setBeforeAfterJob({
-        name: file.name,
-        beforeUrl,
-        afterUrl,
-        previewUrl: beforeAfterCanvas.toDataURL("image/png"),
-      });
-      uncolorCanvas.width = 0;
-      uncolorCanvas.height = 0;
-      colorCanvas.width = 0;
-      colorCanvas.height = 0;
-      beforeAfterCanvas.width = 0;
-      beforeAfterCanvas.height = 0;
+      await generateBeforeAfterJob(file, beforeAfterGridType);
     } catch (error) {
       console.error("Failed to generate before/after image:", error);
     } finally {
       setIsProcessingFolder(false);
       e.target.value = "";
+    }
+  };
+
+  const updateBeforeAfterGridType = async (gridType: BeforeAfterMarkGridType) => {
+    setBeforeAfterGridType(gridType);
+    const currentJob = beforeAfterJob;
+    if (!currentJob) return;
+    setIsProcessingFolder(true);
+    try {
+      await generateBeforeAfterJob(currentJob.sourceFile, gridType);
+    } catch (error) {
+      console.error("Failed to regenerate before/after image:", error);
+    } finally {
+      setIsProcessingFolder(false);
     }
   };
 
@@ -1106,6 +1133,8 @@ export default function Dashboard() {
           handleDirUploadChange={handleDirUploadChange}
           beforeAfterInputRef={beforeAfterInputRef}
           handleBeforeAfterImageChange={handleBeforeAfterImageChange}
+          beforeAfterGridType={beforeAfterGridType}
+          setBeforeAfterGridType={setBeforeAfterGridType}
           isProcessingFolder={isProcessingFolder}
           uploadedFolders={uploadedFolders}
           imageInputRef={imageInputRef}
@@ -1334,6 +1363,22 @@ export default function Dashboard() {
                       />
                     </label>
                   ))}
+                  <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                    <span>Mark</span>
+                    <select
+                      value={beforeAfterGridType}
+                      disabled={isProcessingFolder}
+                      onChange={(e) =>
+                        void updateBeforeAfterGridType(
+                          e.target.value as BeforeAfterMarkGridType,
+                        )
+                      }
+                      className="h-8 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 text-[var(--text-primary)]"
+                    >
+                      <option value="square-mark">Square mark</option>
+                      <option value="hexagon-mark">Hexagon mark</option>
+                    </select>
+                  </label>
                   <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                     <input
                       type="checkbox"

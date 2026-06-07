@@ -1,4 +1,10 @@
 import React, { useState } from "react";
+import type { ColorByNumberGridType } from "@/lib/colorByNumber";
+
+type BeforeAfterMarkGridType = Extract<
+    ColorByNumberGridType,
+    "square-mark" | "hexagon-mark"
+>;
 
 interface EmptyStateProps {
     handleImportClick: () => void;
@@ -6,6 +12,8 @@ interface EmptyStateProps {
     handleDirUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     beforeAfterInputRef: React.RefObject<HTMLInputElement | null>;
     handleBeforeAfterImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    beforeAfterGridType: BeforeAfterMarkGridType;
+    setBeforeAfterGridType: (gridType: BeforeAfterMarkGridType) => void;
     isProcessingFolder: boolean;
     uploadedFolders: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean };
     imageInputRef: React.RefObject<HTMLInputElement | null>;
@@ -29,6 +37,8 @@ export default function EmptyState({
     handleDirUploadChange,
     beforeAfterInputRef,
     handleBeforeAfterImageChange,
+    beforeAfterGridType,
+    setBeforeAfterGridType,
     isProcessingFolder,
     uploadedFolders,
     imageInputRef,
@@ -240,6 +250,19 @@ export default function EmptyState({
                         <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
                             Import one image and generate a before/after PNG automatically: uncolored on the left, colored on the right.
                         </p>
+
+                        <div className="mb-8 flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+                            <span className="text-sm font-semibold text-amber-200">Mark</span>
+                            <select
+                                value={beforeAfterGridType}
+                                disabled={isProcessingFolder}
+                                onChange={(e) => setBeforeAfterGridType(e.target.value as BeforeAfterMarkGridType)}
+                                className="h-9 rounded-lg border border-amber-400/40 bg-[var(--bg-primary)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                            >
+                                <option value="square-mark">Square mark</option>
+                                <option value="hexagon-mark">Hexagon mark</option>
+                            </select>
+                        </div>
 
                         <button
                             onClick={() => beforeAfterInputRef.current?.click()}
