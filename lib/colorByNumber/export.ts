@@ -2191,7 +2191,7 @@ export const exportPaletteToCanvas = (
   const [bgR, bgG, bgB] = parseHex(bgHex);
   const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
   const isDarkBg = options?.transparentBg ? false : bgBrightness < 128;
-  const markLabelFill = options?.transparentBg || bgBrightness < 128 ? "#ffffff" : "#000000";
+  const markLabelFill = "#000000";
   const separatorColor = "rgba(255,255,255,0.15)";
 
   // ── Swatch shape ──

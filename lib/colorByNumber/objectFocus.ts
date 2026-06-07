@@ -52,7 +52,6 @@ export const shouldRenderDotCodeBaseCell = (
   y: number,
   transparentBg?: boolean,
 ): boolean =>
-  data.gridType === "hexagon-mark" ||
   !transparentBg ||
   !getBackgroundCellSet(data).has(`${x},${y}`);
 

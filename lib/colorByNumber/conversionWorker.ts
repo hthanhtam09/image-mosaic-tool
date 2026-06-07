@@ -580,11 +580,7 @@ self.onmessage = (e: MessageEvent) => {
   let finalRows = rows;
   let finalBackgroundCellKeys = backgroundCellKeys;
 
-  if (
-    removeWhiteBackground &&
-    rawCells.length > 0 &&
-    gridType !== "hexagon-mark"
-  ) {
+  if (removeWhiteBackground && rawCells.length > 0) {
     const boundCells = isMarkGrid(gridType)
       ? rawCells.filter((c) => Boolean(c.code))
       : rawCells;
