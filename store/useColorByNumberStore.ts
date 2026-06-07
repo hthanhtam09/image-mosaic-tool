@@ -239,12 +239,15 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     // Mark as processing
     idleProjects.forEach((p) => updateProject(p.id, { status: "processing" }));
 
-    // Parallel processing with concurrency limit
-    // Use available CPU cores (workers run off main thread so higher concurrency is safe)
+    // Parallel processing with concurrency limit.
+    // Each worker holds the source ImageData (~20MB) plus an enhanced copy and
+    // intermediate block/palette arrays, so peak RAM scales with concurrency.
+    // Cap at 3 to keep the tab well under Chrome's per-renderer memory limit and
+    // avoid "Aw, Snap! (Error code: 5)" OOM crashes during large batch converts.
     const cpuCores = typeof navigator !== "undefined" && navigator.hardwareConcurrency
       ? navigator.hardwareConcurrency
       : 4;
-    const limit = Math.min(Math.max(cpuCores, 2), 6);
+    const limit = Math.min(Math.max(cpuCores, 2), 3);
     const queue = [...idleProjects];
     
     const runProcessor = async () => {
