@@ -1924,7 +1924,7 @@ export const exportToCanvas = (
           ctx.fillStyle = "rgba(0,0,0,0.45)";
           if (data.gridType === "hexagon-mark" && cell.code === ".") {
             ctx.beginPath();
-            ctx.arc(cl.cx, cl.cy, Math.max(1.1, data.cellSize * 0.045), 0, Math.PI * 2);
+            ctx.arc(cl.cx, cl.cy, Math.max(1.1, data.cellSize * 0.09), 0, Math.PI * 2);
             ctx.fill();
           } else {
             ctx.font = `500 ${data.cellSize * 0.7}px 'Noto Sans', sans-serif`;
