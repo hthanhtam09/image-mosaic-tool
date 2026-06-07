@@ -1,3 +1,5 @@
+import { canvasToDpiPngBlob } from "./pngDpi";
+
 export type MarkPracticeGridType = "square-mark" | "hexagon-mark";
 
 export interface MarkPracticeImage {
@@ -207,11 +209,6 @@ const drawHexagonMarkSymbol = (
   ctx.restore();
 };
 
-const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
-  new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob ?? new Blob()), "image/png");
-  });
-
 export const generateMarkPracticeImages = (
   gridType: MarkPracticeGridType,
   emptyCellCount = 12,
@@ -266,4 +263,157 @@ export const generateMarkPracticeImages = (
   });
 };
 
-export const markPracticeCanvasToBlob = canvasToBlob;
+const exampleCodeAt = (
+  x: number,
+  y: number,
+  cx: number,
+  cy: number,
+  gridType: MarkPracticeGridType,
+): string => {
+  const dx = x - cx;
+  const dy = y - cy;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const hash = Math.abs(x * 17 + y * 31 + Math.round(distance * 7));
+  if (distance > 5.5) return "";
+  if (x < 3 && y < 4) return "";
+  if (x > 10 && y < 3) return "";
+  if (x > 11 && y > 9) return "";
+  if (gridType === "hexagon-mark" && hash % 7 === 0) return ".";
+  return String((hash % 5) + 1);
+};
+
+export const generateMarkPracticeExampleImages = (
+  gridType: MarkPracticeGridType,
+): MarkPracticeImage[] => {
+  const fullCols = 16;
+  const fullRows = 16;
+  const cellSize = 46;
+  const cellPadding = 1;
+  const margin = Math.round(cellSize * 0.42);
+  const hexR = cellSize / Math.sqrt(3);
+  const rowStep = 1.5 * hexR;
+  const activeCoords: Array<{ x: number; y: number; code: string }> = [];
+
+  for (let y = 0; y < fullRows; y++) {
+    for (let x = 0; x < fullCols; x++) {
+      const code = exampleCodeAt(
+        x,
+        y,
+        (fullCols - 1) / 2,
+        (fullRows - 1) / 2,
+        gridType,
+      );
+      if (code) activeCoords.push({ x, y, code });
+    }
+  }
+
+  const minX = Math.max(0, Math.min(...activeCoords.map((cell) => cell.x)) - cellPadding);
+  const minY = Math.max(0, Math.min(...activeCoords.map((cell) => cell.y)) - cellPadding);
+  const maxX = Math.min(fullCols - 1, Math.max(...activeCoords.map((cell) => cell.x)) + cellPadding);
+  const maxY = Math.min(fullRows - 1, Math.max(...activeCoords.map((cell) => cell.y)) + cellPadding);
+  const cols = maxX - minX + 1;
+  const rows = maxY - minY + 1;
+  const width =
+    gridType === "hexagon-mark"
+      ? Math.ceil(margin * 2 + cols * cellSize + cellSize / 2)
+      : margin * 2 + cols * cellSize;
+  const height =
+    gridType === "hexagon-mark"
+      ? Math.ceil(margin * 2 + (rows - 1) * rowStep + hexR * 2)
+      : margin * 2 + rows * cellSize;
+
+  const createCanvas = (drawn: boolean) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return canvas;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.font = `400 ${Math.round(cellSize * 0.44)}px Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const activeCells: Array<{
+      code: string;
+      cx: number;
+      cy: number;
+      size: number;
+      r?: number;
+    }> = [];
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const code = exampleCodeAt(
+          x,
+          y,
+          (fullCols - 1) / 2,
+          (fullRows - 1) / 2,
+          gridType,
+        );
+        const localX = x - minX;
+        const localY = y - minY;
+        if (gridType === "hexagon-mark") {
+          const cx = margin + hexR + localX * cellSize + (localY % 2 === 1 ? cellSize / 2 : 0);
+          const cy = margin + hexR + localY * rowStep;
+          drawHexagonMarkCellBase(ctx, cx, cy, hexR);
+          if (code) activeCells.push({ code, cx, cy, size: cellSize, r: hexR });
+        } else {
+          const cellX = margin + localX * cellSize;
+          const cellY = margin + localY * cellSize;
+          drawDotCodeCellBase(ctx, cellX, cellY, cellSize);
+          if (code) {
+            activeCells.push({
+              code,
+              cx: cellX + cellSize / 2,
+              cy: cellY + cellSize / 2,
+              size: cellSize,
+            });
+          }
+        }
+      }
+    }
+
+    ctx.fillStyle = drawn ? "rgba(0,0,0,0.24)" : "rgba(0,0,0,0.42)";
+    for (const cell of activeCells) {
+      if (gridType === "hexagon-mark" && cell.code === ".") {
+        ctx.beginPath();
+        ctx.arc(cell.cx, cell.cy, Math.max(1.4, cell.size * 0.15), 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillText(cell.code, cell.cx, cell.cy + 1);
+      }
+    }
+
+    if (drawn) {
+      for (const cell of activeCells) {
+        if (gridType === "hexagon-mark") {
+          drawHexagonMarkSymbol(ctx, cell.code, cell.cx, cell.cy, cell.size, cell.r ?? hexR);
+        } else {
+          drawDotCodeSymbol(ctx, cell.code, cell.cx, cell.cy, cell.size);
+        }
+      }
+    }
+
+    return canvas;
+  };
+
+  return [
+    {
+      code: "example-numbers",
+      fileName: "example-numbers.png",
+      canvas: createCanvas(false),
+    },
+    {
+      code: "example-drawn",
+      fileName: "example-drawn.png",
+      canvas: createCanvas(true),
+    },
+  ];
+};
+
+export const markPracticeCanvasToBlob = (canvas: HTMLCanvasElement): Blob =>
+  canvasToDpiPngBlob(canvas, 300);

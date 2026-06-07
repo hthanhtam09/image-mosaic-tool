@@ -1,8 +1,9 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import type { ColorByNumberGridType } from "@/lib/colorByNumber";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import {
+    generateMarkPracticeExampleImages,
     generateMarkPracticeImages,
     markPracticeCanvasToBlob,
     type MarkPracticeGridType,
@@ -60,16 +61,15 @@ export default function EmptyState({
     const [markPracticeGridType, setMarkPracticeGridType] = useState<MarkPracticeGridType>("hexagon-mark");
     const [isGeneratingMarkPractice, setIsGeneratingMarkPractice] = useState(false);
     const [markPracticeStatus, setMarkPracticeStatus] = useState("");
-    const markPracticeInputRef = useRef<HTMLInputElement>(null);
 
-    const handleMarkPracticeFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
+    const handleDownloadMarkPractice = async () => {
         setIsGeneratingMarkPractice(true);
         setMarkPracticeStatus("");
         try {
-            const images = generateMarkPracticeImages(markPracticeGridType);
+            const images = [
+                ...generateMarkPracticeImages(markPracticeGridType),
+                ...generateMarkPracticeExampleImages(markPracticeGridType),
+            ];
             const zip = new JSZip();
             const folder = zip.folder("mark_practice");
             for (const image of images) {
@@ -79,16 +79,14 @@ export default function EmptyState({
                 image.canvas.height = 0;
             }
 
-            const baseName = file.name.replace(/\.[^/.]+$/, "") || "palette";
             const zipBlob = await zip.generateAsync({ type: "blob" });
-            saveAs(zipBlob, `mark-practice-${baseName}.zip`);
+            saveAs(zipBlob, `mark-practice-${markPracticeGridType}.zip`);
             setMarkPracticeStatus(`Created ${images.length} mark files.`);
         } catch (error) {
             console.error("Failed to generate mark practice files:", error);
             setMarkPracticeStatus("Failed to generate mark files.");
         } finally {
             setIsGeneratingMarkPractice(false);
-            e.target.value = "";
         }
     };
 
@@ -349,7 +347,7 @@ export default function EmptyState({
                         </div>
                         <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Mark Practice</h2>
                         <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
-                            Upload a mark palette sample and export each mark into its own PNG strip with empty mark cells after it.
+                            Export each mark into its own PNG strip with empty mark cells after it, plus two example images.
                         </p>
 
                         <div className="mb-8 flex items-center gap-3 rounded-2xl border border-green-400/30 bg-green-400/10 px-4 py-3">
@@ -366,7 +364,7 @@ export default function EmptyState({
                         </div>
 
                         <button
-                            onClick={() => markPracticeInputRef.current?.click()}
+                            onClick={handleDownloadMarkPractice}
                             disabled={isGeneratingMarkPractice}
                             className="px-12 py-4 text-lg font-semibold text-green-300 border border-green-400/40 bg-green-400/10 hover:bg-green-400/15 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-[300px]"
                         >
@@ -376,7 +374,7 @@ export default function EmptyState({
                                     Generating...
                                 </>
                             ) : (
-                                "Select Palette File"
+                                "Download Mark Files"
                             )}
                         </button>
                         {markPracticeStatus && (
@@ -476,13 +474,6 @@ export default function EmptyState({
                 accept="image/png,image/jpeg,image/jpg"
                 className="hidden"
                 onChange={handleBeforeAfterImageChange}
-            />
-            <input
-                ref={markPracticeInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg"
-                className="hidden"
-                onChange={handleMarkPracticeFileChange}
             />
         </div>
     );
