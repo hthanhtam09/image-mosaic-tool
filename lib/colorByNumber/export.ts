@@ -2269,28 +2269,28 @@ export const exportPaletteToCanvas = (
       ? Math.round(0.55 * EXPORT_DPI)
       : Math.round(0.4 * EXPORT_DPI); // Increased horizontal gap for spacious layout
   // Items per row
+  const isMarkPalette = isMarkGridType(data.gridType);
   const maxItemsPerRow = 6;
   const itemsPerRow =
-    data.gridType === "hexagon-mark"
-      ? 4
+    isMarkPalette
+      ? 3
       : Math.max(
           1,
           Math.min(maxItemsPerRow, Math.floor((contentW + hGap) / (itemW + hGap))),
         );
 
-  const isHexagonMarkPalette = data.gridType === "hexagon-mark";
   // Item height: swatch + label area for mark pages; full swatch + droplets + input for color palettes.
-  const itemH = isHexagonMarkPalette
+  const itemH = isMarkPalette
     ? sSW + Math.round(0.3 * EXPORT_DPI)
     : sSW + sGap + sDropletTopPad + sDH + sInputGap + sInputH;
   const vGap =
-    isHexagonMarkPalette
-      ? Math.round(0.08 * EXPORT_DPI)
+    isMarkPalette
+      ? Math.round(0.24 * EXPORT_DPI) // more breathing room between mark rows
       : Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
 
   const numRows = Math.ceil(codes.length / itemsPerRow);
   const totalH = numRows * itemH + Math.max(0, numRows - 1) * vGap;
-  const bannerToMarksGap = isHexagonMarkPalette
+  const bannerToMarksGap = isMarkPalette
     ? Math.round(0.85 * EXPORT_DPI)
     : 120;
 
