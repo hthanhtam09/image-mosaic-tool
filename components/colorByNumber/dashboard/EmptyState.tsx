@@ -1,5 +1,12 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import type { ColorByNumberGridType } from "@/lib/colorByNumber";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
+import {
+    generateMarkPracticeImages,
+    markPracticeCanvasToBlob,
+    type MarkPracticeGridType,
+} from "@/lib/colorByNumber/markPractice";
 
 type BeforeAfterMarkGridType = Extract<
     ColorByNumberGridType,
@@ -29,7 +36,7 @@ interface EmptyStateProps {
     isPreparingStep2?: boolean;
 }
 
-type TabType = "standard" | "object" | "folder" | "before-after";
+type TabType = "standard" | "object" | "folder" | "before-after" | "mark-practice";
 
 export default function EmptyState({
     handleImportClick,
@@ -50,6 +57,40 @@ export default function EmptyState({
     isPreparingStep2,
 }: EmptyStateProps) {
     const [activeTab, setActiveTab] = useState<TabType>("standard");
+    const [markPracticeGridType, setMarkPracticeGridType] = useState<MarkPracticeGridType>("hexagon-mark");
+    const [isGeneratingMarkPractice, setIsGeneratingMarkPractice] = useState(false);
+    const [markPracticeStatus, setMarkPracticeStatus] = useState("");
+    const markPracticeInputRef = useRef<HTMLInputElement>(null);
+
+    const handleMarkPracticeFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsGeneratingMarkPractice(true);
+        setMarkPracticeStatus("");
+        try {
+            const images = generateMarkPracticeImages(markPracticeGridType);
+            const zip = new JSZip();
+            const folder = zip.folder("mark_practice");
+            for (const image of images) {
+                const blob = await markPracticeCanvasToBlob(image.canvas);
+                folder?.file(image.fileName, blob);
+                image.canvas.width = 0;
+                image.canvas.height = 0;
+            }
+
+            const baseName = file.name.replace(/\.[^/.]+$/, "") || "palette";
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            saveAs(zipBlob, `mark-practice-${baseName}.zip`);
+            setMarkPracticeStatus(`Created ${images.length} mark files.`);
+        } catch (error) {
+            console.error("Failed to generate mark practice files:", error);
+            setMarkPracticeStatus("Failed to generate mark files.");
+        } finally {
+            setIsGeneratingMarkPractice(false);
+            e.target.value = "";
+        }
+    };
 
     const tabs = [
         {
@@ -96,6 +137,20 @@ export default function EmptyState({
                 </svg>
             ),
             color: "#f59e0b",
+        },
+        {
+            id: "mark-practice" as TabType,
+            name: "Mark Practice",
+            icon: (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 7h16" />
+                    <path d="M4 12h16" />
+                    <path d="M4 17h16" />
+                    <path d="M7 4v16" />
+                    <path d="M12 4v16" />
+                </svg>
+            ),
+            color: "#22c55e",
         },
     ];
 
@@ -280,6 +335,57 @@ export default function EmptyState({
                         </button>
                     </div>
                 );
+            case "mark-practice":
+                return (
+                    <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="w-24 h-24 rounded-3xl bg-green-500/10 text-green-400 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(34,197,94,0.1)]">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M4 7h16" />
+                                <path d="M4 12h16" />
+                                <path d="M4 17h16" />
+                                <path d="M7 4v16" />
+                                <path d="M12 4v16" />
+                            </svg>
+                        </div>
+                        <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Mark Practice</h2>
+                        <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
+                            Upload a mark palette sample and export each mark into its own PNG strip with empty mark cells after it.
+                        </p>
+
+                        <div className="mb-8 flex items-center gap-3 rounded-2xl border border-green-400/30 bg-green-400/10 px-4 py-3">
+                            <span className="text-sm font-semibold text-green-200">Mark</span>
+                            <select
+                                value={markPracticeGridType}
+                                disabled={isGeneratingMarkPractice}
+                                onChange={(e) => setMarkPracticeGridType(e.target.value as MarkPracticeGridType)}
+                                className="h-9 rounded-lg border border-green-400/40 bg-[var(--bg-primary)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                            >
+                                <option value="hexagon-mark">Hexagon mark</option>
+                                <option value="square-mark">Square mark</option>
+                            </select>
+                        </div>
+
+                        <button
+                            onClick={() => markPracticeInputRef.current?.click()}
+                            disabled={isGeneratingMarkPractice}
+                            className="px-12 py-4 text-lg font-semibold text-green-300 border border-green-400/40 bg-green-400/10 hover:bg-green-400/15 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-[300px]"
+                        >
+                            {isGeneratingMarkPractice ? (
+                                <>
+                                    <div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                                    Generating...
+                                </>
+                            ) : (
+                                "Select Palette File"
+                            )}
+                        </button>
+                        {markPracticeStatus && (
+                            <p className="mt-4 text-sm text-[var(--text-secondary)]">
+                                {markPracticeStatus}
+                            </p>
+                        )}
+                    </div>
+                );
             default:
                 return null;
         }
@@ -370,6 +476,13 @@ export default function EmptyState({
                 accept="image/png,image/jpeg,image/jpg"
                 className="hidden"
                 onChange={handleBeforeAfterImageChange}
+            />
+            <input
+                ref={markPracticeInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                className="hidden"
+                onChange={handleMarkPracticeFileChange}
             />
         </div>
     );
