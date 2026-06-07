@@ -274,10 +274,10 @@ const exampleCodeAt = (
   const dy = y - cy;
   const distance = Math.sqrt(dx * dx + dy * dy);
   const hash = Math.abs(x * 17 + y * 31 + Math.round(distance * 7));
-  if (distance > 5.5) return "";
+  if (distance > 4.6) return "";
   if (x < 3 && y < 4) return "";
-  if (x > 10 && y < 3) return "";
-  if (x > 11 && y > 9) return "";
+  if (x > 9 && y < 3) return "";
+  if (x > 10 && y > 8) return "";
   if (gridType === "hexagon-mark" && hash % 7 === 0) return ".";
   return String((hash % 5) + 1);
 };
@@ -285,9 +285,9 @@ const exampleCodeAt = (
 export const generateMarkPracticeExampleImages = (
   gridType: MarkPracticeGridType,
 ): MarkPracticeImage[] => {
-  const fullCols = 16;
-  const fullRows = 16;
-  const cellSize = 46;
+  const fullCols = 14;
+  const fullRows = 14;
+  const cellSize = 64;
   const cellPadding = 1;
   const margin = Math.round(cellSize * 0.42);
   const hexR = cellSize / Math.sqrt(3);
