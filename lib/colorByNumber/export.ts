@@ -369,7 +369,7 @@ const drawHexagonMarkSymbol = (
   };
   if (code === ".") {
     ctx.beginPath();
-    ctx.arc(cx, cy, Math.max(1.4, size * 0.075), 0, Math.PI * 2);
+    ctx.arc(cx, cy, Math.max(1.4, size * 0.15), 0, Math.PI * 2);
     ctx.fill();
   } else if (code === "1") line(top.x, top.y, bottom.x, bottom.y);
   else if (code === "2") line(lowerLeft.x, lowerLeft.y, upperRight.x, upperRight.y);
@@ -1346,7 +1346,7 @@ const renderPaletteColumnCBN = (
       ctx.fillText(displayCode, cx, yPos + sSW + sGap + sDH / 2);
       ctx.restore();
 
-      if (shape === "square-mark") {
+      if (isMarkShape) {
         drawDropletShape(
           ctx,
           cx + (sSW * 1.15) / 2 + sArcGap * 3.4 + (sDW * 1.45) / 2,
@@ -2388,7 +2388,7 @@ export const exportPaletteToCanvas = (
       ctx.fillText(displayCode, cx, iy + sw + (sGap + sDropletTopPad) * scale + (sDH * scale) / 2);
       ctx.restore();
 
-      if (shape === "square-mark") {
+      if (isMarkShape) {
         drawDropletShape(
           ctx,
           cx + (sw * 1.15) / 2 + sArcGap * 3.4 * scale + (sDW * 1.45 * scale) / 2,

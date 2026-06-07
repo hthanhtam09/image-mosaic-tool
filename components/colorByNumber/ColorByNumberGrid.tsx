@@ -268,7 +268,7 @@ const HexagonMarkSymbol = ({
   };
 
   if (code === ".") {
-    return <circle cx={cx} cy={cy} r={Math.max(1.4, size * 0.075)} fill="#000000" />;
+    return <circle cx={cx} cy={cy} r={Math.max(1.4, size * 0.15)} fill="#000000" />;
   }
 
   if (false && code === "5") {
@@ -859,6 +859,13 @@ const PaletteColumnSVG = ({
                   cy={swCY}
                   size={s}
                   markRadius={s / 2}
+                />
+                <DotCodeDroplet
+                  cx={singleDropCx}
+                  topY={singleDropTop}
+                  width={singleDropW}
+                  height={singleDropH}
+                  fillRatio={dotCodeFillRatio}
                 />
                 <text
                   x={cx}
@@ -1926,7 +1933,7 @@ const CellSquare = ({
           <circle
             cx={layout.cx}
             cy={layout.cy}
-            r={Math.max(1.1, s * 0.045)}
+            r={Math.max(1.1, s * 0.09)}
             fill="#8a8a8a"
             opacity={0.55}
           />
