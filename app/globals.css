@@ -1,60 +1,150 @@
-/* Professional dark theme - Clean, refined aesthetic */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&display=swap');
-
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&display=swap");
 @import "tailwindcss";
 
 @theme {
-  --font-family-sans: 'Inter', system-ui, sans-serif;
-  --font-family-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Consolas', monospace;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Unified design tokens (periwinkle scheme) — drive Tailwind color utilities
+     such as bg-bg-primary, text-accent, border-border-primary, etc. */
+  --color-bg-primary: #121212;
+  --color-bg-secondary: #1a1a1a;
+  --color-bg-tertiary: #242424;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #9ba3b0;
+  --color-text-muted: #5a5f68;
+  --color-border-primary: #262626;
+  --color-accent: #c0cde3;
+  --color-accent-hover: #d4deee;
+  --color-accent-deep: #8fa3c8;
+  --color-success: #6ee7b7;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
 }
 
 :root {
-  --bg-primary: #09090b;
-  --bg-secondary: #0f0f12;
-  --bg-elevated: #18181b;
-  --bg-card: #141417;
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
+  /* Periwinkle palette — single source of truth for the whole app
+     (marketing site + tool + admin + account share these tokens). */
+  --bg-primary: #121212;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #242424;
+
+  --text-primary: #ffffff;
+  --text-secondary: #9ba3b0;
+
+  --border-primary: #262626;
+
+  --accent-primary: #c0cde3;
+  --accent-secondary: rgba(192, 205, 227, 0.15);
+
+  --bg-elevated: #1a1a1a;
+  --bg-card: #1a1a1a;
+  --text-muted: #5a5f68;
   --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.1);
-  --accent: #22d3ee;
-  --accent-muted: rgba(34, 211, 238, 0.15);
-  --accent-hover: #67e8f9;
-  --success: #34d399;
+  --border-default: var(--border-primary);
+  --accent: var(--accent-primary);
+  --accent-muted: rgba(192, 205, 227, 0.15);
+  --accent-hover: #d4deee;
+  --accent-deep: #8fa3c8;
+  --success: #6ee7b7;
+  --warning: #fbbf24;
   --error: #f87171;
+
+  --background: var(--bg-primary);
+  --surface: var(--bg-secondary);
+  --surface-hover: var(--bg-tertiary);
+  --primary: var(--accent-primary);
+  --primary-hover: var(--accent-hover);
+  --text: var(--text-primary);
+  --border: var(--border-primary);
+  --text-disabled: var(--text-muted);
+
+  --grad: linear-gradient(135deg, #c0cde3 0%, #8fa3c8 100%);
+  --shadow: 0 8px 30px #00000059;
+  --ring: 0 0 0 3px #c0cde326;
+  --glow: 0 0 0 4px #c0cde326;
 }
 
 @layer base {
   * {
-    margin: 0;
-    padding: 0;
     box-sizing: border-box;
   }
 
-  html,
-  body {
+  html {
     height: 100%;
-    overflow: hidden;
-    background-color: var(--bg-primary);
+    background: var(--bg-primary);
+    scroll-behavior: smooth;
   }
 
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    height: 100%;
+    margin: 0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    color: var(--text-primary);
+    text-rendering: optimizeLegibility;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="option"],
+  [role="menuitem"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  label[for],
+  summary,
+  a[href],
+  select {
+    cursor: pointer;
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  [role="tab"]:not([aria-disabled="true"]):active,
+  [role="option"]:not([aria-disabled="true"]):active,
+  [role="menuitem"]:not([aria-disabled="true"]):active,
+  a[href]:active {
+    transform: scale(0.96);
+    transition: transform 80ms ease;
+  }
+
+  button,
+  [role="button"],
+  a[href] {
+    transition: transform 80ms ease;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
   }
 
   canvas {
-    image-rendering: -moz-crisp-edges;
-    image-rendering: -webkit-crisp-edges;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
 
-  /* Refined scrollbar */
+  ::selection {
+    background: rgba(192, 205, 227, 0.3);
+    color: var(--text-primary);
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -75,27 +165,41 @@
 }
 
 @layer components {
-  /* Card styles */
   .card {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
-    border-radius: 12px;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 
   .card-elevated {
     background: var(--bg-elevated);
     border: 1px solid var(--border-default);
-    border-radius: 12px;
+    border-radius: 1rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
   }
 
-  /* Range input styling */
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .grid-pattern {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
   input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
     height: 6px;
     background: rgba(255, 255, 255, 0.08);
     border-radius: 3px;
-    @apply outline-none;
+    outline: none;
   }
 
   input[type="range"]::-webkit-slider-thumb {
@@ -105,7 +209,9 @@
     border-radius: 50%;
     background: var(--accent);
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease;
   }
 
   input[type="range"]::-webkit-slider-thumb:hover {
@@ -116,58 +222,187 @@
   input[type="range"]::-moz-range-thumb {
     width: 16px;
     height: 16px;
+    border: none;
     border-radius: 50%;
     background: var(--accent);
     cursor: pointer;
-    border: none;
   }
 
-  /* Checkbox styling */
   input[type="checkbox"] {
     accent-color: var(--accent);
   }
 
-  /* Shake animation for errors */
   @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    20%, 60% { transform: translateX(-4px); }
-    40%, 80% { transform: translateX(4px); }
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    20%,
+    60% {
+      transform: translateX(-4px);
+    }
+
+    40%,
+    80% {
+      transform: translateX(4px);
+    }
   }
 
   .animate-shake {
     animation: shake 0.4s ease;
   }
 
-  /* Subtle grid background */
-  .grid-pattern {
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 24px 24px;
-  }
-
-  /* Basic animations */
+  /* Preserve original dashboard glass panel sizing and empty-state motion. */
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
   }
 
   @keyframes slideInUp {
-    from { transform: translateY(16px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    from {
+      opacity: 0;
+      transform: translateY(1rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes zoomIn {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   .animate-in {
     animation-duration: 500ms;
     animation-fill-mode: both;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .fade-in {
     animation-name: fadeIn;
   }
 
+  .slide-in-from-bottom-2 {
+    animation-name: slideInUp;
+  }
+
   .slide-in-from-bottom-4 {
     animation-name: slideInUp;
+  }
+
+  .zoom-in {
+    animation-name: zoomIn;
+  }
+
+  /* ── Marketing residual animations (kept as CSS: keyframes can't be utilities) ── */
+  @keyframes rise {
+    from {
+      transform: translateY(16px);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  .animate-rise {
+    animation: rise 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  @keyframes drift {
+    0%,
+    100% {
+      transform: translateY(0) rotate(var(--rot));
+    }
+    50% {
+      transform: translateY(-26px) rotate(calc(var(--rot) + 6deg));
+    }
+  }
+
+  .animate-drift {
+    animation: drift 14s ease-in-out infinite;
+  }
+
+  @keyframes cdpulse {
+    0% {
+      box-shadow: 0 0 #c0cde399;
+    }
+    70% {
+      box-shadow: 0 0 0 7px #c0cde300;
+    }
+    100% {
+      box-shadow: 0 0 #c0cde300;
+    }
+  }
+
+  .animate-cdpulse {
+    animation: cdpulse 1.6s infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise,
+    .animate-drift {
+      animation: none;
+    }
+  }
+
+  /* ── Marketing button primitive (reused across header/footer/pages) ── */
+  .btn {
+    @apply inline-flex h-10 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-transparent px-[18px] text-[15px] font-medium transition-all duration-150;
+  }
+  .btn svg {
+    @apply h-[18px] w-[18px];
+  }
+  .btn-primary {
+    background: var(--primary);
+    color: #121212;
+  }
+  .btn-primary:hover {
+    background: var(--primary-hover);
+    box-shadow: var(--glow);
+  }
+  .btn-ghost {
+    @apply border-border-primary text-text-primary;
+    background: none;
+  }
+  .btn-ghost:hover {
+    background: var(--surface-hover);
+    border-color: #3a3a3a;
+  }
+  .btn-link {
+    color: var(--accent);
+    background: none;
+    padding: 0 4px;
+  }
+  .btn-link:hover {
+    text-decoration: underline;
+  }
+  .btn-sm {
+    @apply h-8 px-3 text-[13px];
+  }
+  .btn-lg {
+    @apply h-12 px-6 text-base;
+  }
+  .btn-block {
+    @apply w-full;
+  }
+  .btn:disabled,
+  .btn[disabled] {
+    @apply cursor-not-allowed opacity-40 shadow-none;
   }
 }

@@ -417,13 +417,14 @@ self.onmessage = (e: MessageEvent) => {
     removeWhiteBackground,
   } = e.data as ConversionWorkerMessage;
 
-  // 0. ENHANCE IMAGE: auto-contrast + saturation boost + sharpen
-  //    Runs directly on the transferred ImageData buffer before quantization.
+  // 0. ENHANCE IMAGE: very light sharpening only — keep colors faithful to source.
+  //    Heavy contrast/saturation boosts were causing cell colors to diverge from
+  //    the original image. Values are intentionally minimal.
   const rawImageData = imageData as unknown as ImageData;
   const markGrid = isMarkGrid(gridType);
   const enhancedImageData = enhanceImage(rawImageData, {
-    contrastStrength: markGrid ? 0.22 : 0.6,
-    saturation: markGrid ? 1.12 : 1.35,
+    contrastStrength: 0,
+    saturation: 1,
     sharpen: true,
   });
 

@@ -202,19 +202,19 @@ export const imageToColorByNumber = async (
   }
 
   // 4. Compute target pixel dimensions and resize image to fill
+  // All grid types must snap to exactly cols*cellSize × rows*cellSize so every
+  // cell maps to the same number of source pixels with no remainder.
   const targetW = cols * cellSize;
   const targetH = rows * cellSize;
-  const imageData =
-    gridType === "standard" || gridType === "square-mark"
-      ? baseData
-      : resizeCanvasToSize(croppedCanvas, targetW, targetH);
+  const imageData = resizeCanvasToSize(croppedCanvas, targetW, targetH);
 
-  // 5. Offload heavy computation to Worker
+  // 5. Offload heavy computation to Worker.
+  //    conversionWorker.ts dispatches internally to the correct pipeline based on gridType.
+  //    Turbopack requires a single literal new Worker(new URL(...)) expression — multiple
+  //    worker files cannot be selected at runtime without MIME-type errors in dev mode.
   try {
     return await new Promise<ColorByNumberData>((resolve, reject) => {
-      const worker = new Worker(
-        new URL("./conversionWorker.ts", import.meta.url),
-      );
+      const worker = new Worker(new URL("./conversionWorker.ts", import.meta.url));
 
       worker.onmessage = (e) => {
         resolve(e.data);
@@ -258,6 +258,7 @@ export const imageToColorByNumber = async (
     rawImg.src = "";
   }
 };
+
 
 /**
  * Free canvas backing stores by collapsing them to 0×0. Skips duplicates so a

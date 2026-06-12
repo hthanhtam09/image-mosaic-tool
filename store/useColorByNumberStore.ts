@@ -40,6 +40,45 @@ export interface Project {
   panY: number;
 }
 
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ToolProjectSummary extends ProjectFolder {
+  fileCount: number;
+  completedCount: number;
+}
+
+export interface ProjectFolderSettings {
+  globalCellSize: number;
+  globalShowNumbers: boolean;
+  globalTheme: string;
+  globalGridType: ColorByNumberGridType | "auto";
+}
+
+export type ConversionJobStatus = "idle" | "running" | "completed";
+
+export interface ConversionJob {
+  status: ConversionJobStatus;
+  total: number;
+  completed: number;
+  failed: number;
+  activeName: string | null;
+  message: string;
+}
+
+const emptyConversionJob: ConversionJob = {
+  status: "idle",
+  total: 0,
+  completed: 0,
+  failed: 0,
+  activeName: null,
+  message: "",
+};
+
 export interface ColorByNumberState {
   // Global / UI state
   isPaletteVisible: boolean;
@@ -47,17 +86,18 @@ export interface ColorByNumberState {
   // Global settings (shared across all projects)
   globalCellSize: number;
   globalShowNumbers: boolean;
-  globalShowPalette: boolean;
   globalTheme: string;
-  /** Export a separate palette PNG per image in the zip */
-  globalExportPalette: boolean;
   /** Force a specific grid type for all Standard imports. 'auto' = cycle through patterns */
   globalGridType: ColorByNumberGridType | 'auto';
 
 
   // Projects
+  projectFolder: ProjectFolder | null;
   projects: Project[];
   activeProjectId: string | null;
+  conversionJob: ConversionJob;
+  toolProjectSummaries: ToolProjectSummary[];
+  hasLoadedToolProjectSummaries: boolean;
 
   // Actions
   togglePaletteGlobal: () => void;
@@ -65,10 +105,9 @@ export interface ColorByNumberState {
   // Global settings actions
   setGlobalCellSize: (size: number) => void;
   toggleGlobalShowNumbers: () => void;
-  toggleGlobalShowPalette: () => void;
   setGlobalTheme: (theme: string) => void;
-  toggleGlobalExportPalette: () => void;
   setGlobalGridType: (gridType: ColorByNumberGridType | 'auto') => void;
+  removeAllProjects: () => void;
 
 
   // Project Management
@@ -77,6 +116,14 @@ export interface ColorByNumberState {
   removeProject: (id: string) => void;
   updateActiveProject: (updates: Partial<Project>) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
+  hydrateProjectFolder: (
+    folder: ProjectFolder,
+    projects: Project[],
+    settings?: Partial<ProjectFolderSettings>,
+  ) => void;
+  clearProjectFolder: () => void;
+  getProjectFolderSettings: () => ProjectFolderSettings;
+  setToolProjectSummaries: (summaries: ToolProjectSummary[]) => void;
 
   // Batch Actions
   convertAllIdleProjects: () => Promise<void>;
@@ -96,12 +143,14 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   isPaletteVisible: true,
   globalCellSize: 29,
   globalShowNumbers: true,
-  globalShowPalette: true,
   globalTheme: "light",
-  globalExportPalette: false,
   globalGridType: 'auto',
+  projectFolder: null,
   projects: [],
   activeProjectId: null,
+  conversionJob: emptyConversionJob,
+  toolProjectSummaries: [],
+  hasLoadedToolProjectSummaries: false,
 
   togglePaletteGlobal: () =>
     set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),
@@ -124,13 +173,6 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
         p.status === "completed" ? { ...p, status: "idle" as const } : p,
       ),
     })),
-  toggleGlobalShowPalette: () =>
-    set((state) => ({
-      globalShowPalette: !state.globalShowPalette,
-      projects: state.projects.map((p) =>
-        p.status === "completed" ? { ...p, status: "idle" as const } : p,
-      ),
-    })),
   setGlobalTheme: (theme) =>
     set((state) => ({
       globalTheme: theme,
@@ -139,27 +181,9 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       ),
     })),
 
-  toggleGlobalExportPalette: () =>
-    set((state) => {
-      const turningOn = !state.globalExportPalette;
-      return {
-        globalExportPalette: turningOn,
-        // When turning ON palette export, auto-disable show palette for cleaner image output
-        ...(turningOn ? { globalShowPalette: false } : {}),
-        // Reset completed projects so they re-export with the new setting
-        projects: state.projects.map((p) =>
-          p.status === "completed" ? { ...p, status: "idle" as const } : p,
-        ),
-      };
-    }),
-
   setGlobalGridType: (gridType) =>
     set((state) => ({
       globalGridType: gridType,
-      // Mark patterns (square-mark / hexagon-mark) auto-enable per-image palette export.
-      ...(gridType === "square-mark" || gridType === "hexagon-mark"
-        ? { globalExportPalette: true, globalShowPalette: false }
-        : {}),
       // When a specific pattern is selected (not 'auto'), update ALL existing standard projects
       // to use the new grid type and reset them so they re-convert
       projects: gridType === 'auto'
@@ -227,14 +251,60 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
       ),
     })),
 
+  hydrateProjectFolder: (folder, projects, settings) =>
+    set((state) => ({
+      projectFolder: folder,
+      projects,
+      activeProjectId: null,
+      conversionJob: emptyConversionJob,
+      globalCellSize: settings?.globalCellSize ?? state.globalCellSize,
+      globalShowNumbers: settings?.globalShowNumbers ?? state.globalShowNumbers,
+      globalTheme: settings?.globalTheme ?? state.globalTheme,
+      globalGridType: settings?.globalGridType ?? state.globalGridType,
+    })),
+
+  clearProjectFolder: () =>
+    set({
+      projectFolder: null,
+      projects: [],
+      activeProjectId: null,
+      conversionJob: emptyConversionJob,
+    }),
+
+  getProjectFolderSettings: () => {
+    const { globalCellSize, globalShowNumbers, globalTheme, globalGridType } = get();
+    return { globalCellSize, globalShowNumbers, globalTheme, globalGridType };
+  },
+
+  setToolProjectSummaries: (summaries) =>
+    set({ toolProjectSummaries: summaries, hasLoadedToolProjectSummaries: true }),
+
+  removeAllProjects: () =>
+    set({
+      projects: [],
+      activeProjectId: null,
+      conversionJob: emptyConversionJob,
+    }),
+
   convertAllIdleProjects: async () => {
-    const { projects, updateProject, globalCellSize, globalExportPalette } = get();
+    const { projects, updateProject, globalCellSize } = get();
 
     // Filter projects that need processing
     const idleProjects = projects.filter(
       (p) => p.status === "idle" || p.status === "error",
     );
     if (idleProjects.length === 0) return;
+
+    set({
+      conversionJob: {
+        status: "running",
+        total: idleProjects.length,
+        completed: 0,
+        failed: 0,
+        activeName: null,
+        message: "Preparing conversion...",
+      },
+    });
 
     // Mark as processing
     idleProjects.forEach((p) => updateProject(p.id, { status: "processing" }));
@@ -256,6 +326,14 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
         if (!p) break;
 
         try {
+          set((state) => ({
+            conversionJob: {
+              ...state.conversionJob,
+              status: "running",
+              activeName: p.name,
+              message: `Converting ${p.name}`,
+            },
+          }));
           const isMarkProject =
             p.gridType === "square-mark" || p.gridType === "hexagon-mark";
           const result = await imageToColorByNumber(p.originalFile, {
@@ -263,12 +341,24 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
             cellSize: globalCellSize,
             useDithering: p.useDithering,
             removeWhiteBackground: p.removeBackground || isMarkProject,
-            removeBottomWatermark: globalExportPalette,
+            removeBottomWatermark: false,
           });
           updateProject(p.id, { data: result, status: "completed" });
+          set((state) => ({
+            conversionJob: {
+              ...state.conversionJob,
+              completed: state.conversionJob.completed + 1,
+            },
+          }));
         } catch (e) {
           console.error(`Failed to convert project ${p.id}`, e);
           updateProject(p.id, { status: "error" });
+          set((state) => ({
+            conversionJob: {
+              ...state.conversionJob,
+              failed: state.conversionJob.failed + 1,
+            },
+          }));
         }
       }
     };
@@ -280,6 +370,20 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     }
 
     await Promise.all(processors);
+
+    set((state) => {
+      const finishedCount = state.conversionJob.completed + state.conversionJob.failed;
+      return {
+        conversionJob: {
+          ...state.conversionJob,
+          status: "completed",
+          activeName: null,
+          message: finishedCount === state.conversionJob.total
+            ? "Conversion complete."
+            : "Conversion finished.",
+        },
+      };
+    });
   },
 
   // --- Actions working on Active Project ---

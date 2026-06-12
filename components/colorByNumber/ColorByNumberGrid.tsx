@@ -33,7 +33,6 @@ import {
 } from "@/lib/colorByNumber/export";
 import { getThemeById } from "@/lib/colorByNumber/themes";
 import {
-  getDotCodeMagnifierLayout,
   shouldRenderDotCodeBaseCell,
   shouldShowCodes,
   shouldUseTightCrop,
@@ -383,102 +382,6 @@ const DotCodeDroplet = ({
         <path d={pathData} fill="#000000" clipPath={`url(#${clipId})`} />
       )}
       <path d={pathData} fill="none" stroke="#555555" strokeWidth={1.5} />
-    </g>
-  );
-};
-
-const DotCodeMagnifier = ({
-  cx,
-  cy,
-  r,
-  data,
-  transparentBg,
-}: {
-  cx: number;
-  cy: number;
-  r: number;
-  data: ColorByNumberData;
-  transparentBg?: boolean;
-}) => {
-  const clipId = `square-mark-magnifier-${Math.round(cx)}-${Math.round(cy)}`;
-  const cell = r * 0.25;
-  const cols = 7;
-  const rows = 7;
-  const startX = cx - (cols * cell) / 2;
-  const startY = cy - (rows * cell) / 2;
-  const codeAt = (row: number, col: number): string =>
-    String(((row * 2 + col * 3 + (row % 2 === 0 ? 1 : 4)) % 5) + 1);
-
-  return (
-    <g>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="#ffffff"
-        filter="drop-shadow(8px 10px 16px rgba(0,0,0,0.32))"
-      />
-      <clipPath id={clipId}>
-        <circle cx={cx} cy={cy} r={r * 0.91} />
-      </clipPath>
-      <g clipPath={`url(#${clipId})`}>
-        <rect
-          x={cx - r}
-          y={cy - r}
-          width={r * 2}
-          height={r * 2}
-          fill="#ffffff"
-        />
-        {Array.from({ length: rows }).flatMap((_, row) =>
-          Array.from({ length: cols }).map((__, col) => {
-            const x = startX + col * cell;
-            const y = startY + row * cell;
-            const midX = x + cell / 2;
-            const midY = y + cell / 2;
-            const rowCode = codeAt(row, col);
-            return (
-              <g key={`${row}-${col}`}>
-                <DotCodeCellBase
-                  x={x}
-                  y={y}
-                  size={cell}
-                  showBackground={false}
-                />
-                {col < 3 && (
-                  <text
-                    x={midX}
-                    y={midY}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={cell * 0.7}
-                    fontWeight={700}
-                    fontFamily="'Noto Sans', sans-serif"
-                    fill="rgba(0,0,0,0.34)"
-                  >
-                    {rowCode}
-                  </text>
-                )}
-                {col >= 3 && (
-                  <DotCodeSymbol
-                    code={rowCode}
-                    cx={midX}
-                    cy={midY}
-                    size={cell}
-                  />
-                )}
-              </g>
-            );
-          }),
-        )}
-      </g>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke="#000000"
-        strokeWidth={Math.max(10, r * 0.08)}
-      />
     </g>
   );
 };
@@ -2133,8 +2036,6 @@ const PageGrid = ({
     gridVisualTop +
     (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) +
     (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0);
-  const magnifier = null;
-
   // Checker pattern ID for transparent background preview
   const checkerId = `checker-${colored ? "c" : "u"}`;
 
@@ -2254,7 +2155,6 @@ export default function ColorByNumberGrid({
     projects,
     updateActiveProject, // To update zoom/pan/filled
     globalShowNumbers,
-    globalShowPalette,
     globalTheme,
   } = useColorByNumberStore();
 
@@ -2270,9 +2170,7 @@ export default function ColorByNumberGrid({
     activeProject?.removeBackground,
     globalShowNumbers,
   );
-  const showPalette = activeProject?.removeBackground
-    ? false
-    : globalShowPalette;
+  const showPalette = false;
   const partialColorMode = (activeProject?.partialColorMode ??
     "none") as PartialColorMode;
   const theme = getThemeById(globalTheme);
@@ -2573,7 +2471,7 @@ export default function ColorByNumberGrid({
 
   if (!data || !pageLayout) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-(--text-secondary)">
+      <div className="flex h-full w-full items-center justify-center text-[var(--text-secondary)]">
         {!activeProjectId ? "Select a project to view" : "Processing..."}
       </div>
     );

@@ -1,0 +1,44 @@
+/* Residual styles for the pricing page — toggle switch (::after knob) and the
+   FAQ accordion marker can't be expressed as Tailwind utilities. */
+
+.toggle {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-hover);
+  transition: background 0.2s;
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle.on {
+  border-color: var(--accent);
+  background: #c0cde34d;
+}
+
+.toggle.on::after {
+  left: 21px;
+  background: var(--accent);
+}
+
+.acc summary::-webkit-details-marker {
+  display: none;
+}
+
+.acc[open] summary .pm {
+  transform: rotate(45deg);
+}

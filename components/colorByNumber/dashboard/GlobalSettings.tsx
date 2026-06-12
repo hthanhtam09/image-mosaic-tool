@@ -4,11 +4,14 @@ import { THEMES } from "@/lib/colorByNumber/themes";
 import { useColorByNumberStore } from "@/store/useColorByNumberStore";
 import type { ColorByNumberGridType } from "@/lib/colorByNumber";
 import { useEffect, useRef, useState } from "react";
+import { useToolPatterns, useToolThemes } from "@/components/ToolFlagsProvider";
+import { PATTERNS } from "@/lib/colorByNumber/patterns";
 
 interface GlobalSettingsProps {
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
   disabled?: boolean;
+  onGridTypeChange?: (gridType: ColorByNumberGridType | "auto") => void;
 }
 
 type GridTypeOption = {
@@ -18,14 +21,7 @@ type GridTypeOption = {
 
 const PATTERN_OPTIONS: GridTypeOption[] = [
   { value: "auto", label: "Auto (Cycle)" },
-  { value: "standard", label: "Square" },
-  { value: "honeycomb", label: "Circle" },
-  { value: "diamond", label: "Diamond" },
-  { value: "pentagon", label: "Hexagon" },
-  { value: "puzzle", label: "Puzzle" },
-  { value: "islamic", label: "Islamic" },
-  { value: "fish-scale", label: "Fish Scale" },
-  { value: "trapezoid", label: "Trapezoid" },
+  ...PATTERNS.map((p) => ({ value: p.id, label: p.label })),
 ];
 
 const MARK_OPTIONS: GridTypeOption[] = [
@@ -58,23 +54,28 @@ export default function GlobalSettings({
   showSettings,
   setShowSettings,
   disabled = false,
+  onGridTypeChange,
 }: GlobalSettingsProps) {
   const {
     globalCellSize,
     globalShowNumbers,
-    globalShowPalette,
     globalTheme,
-    globalExportPalette,
     globalGridType,
     setGlobalCellSize,
     toggleGlobalShowNumbers,
-    toggleGlobalShowPalette,
     setGlobalTheme,
-    toggleGlobalExportPalette,
     setGlobalGridType,
   } = useColorByNumberStore();
 
   const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Admin-controlled visibility: which specific patterns / themes users see.
+  const enabledPatterns = useToolPatterns();
+  const enabledThemes = useToolThemes();
+  const visiblePatterns = PATTERN_OPTIONS.filter(
+    (o) => o.value === "auto" || enabledPatterns[o.value as string] !== false,
+  );
+  const visibleThemes = THEMES.filter((t) => enabledThemes[t.id] !== false);
 
   // Import Pattern has two tabs: regular patterns and mark patterns.
   const [patternTab, setPatternTab] = useState<"pattern" | "mark">(
@@ -113,7 +114,7 @@ export default function GlobalSettings({
         disabled={disabled}
         className={`p-2 rounded-lg border transition-colors ${
           showSettings
-            ? "bg-(--accent)/20 border-(--accent) text-(--accent)"
+            ? "bg-[var(--accent)]/20 border-[var(--accent)] text-[var(--accent)]"
             : "border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5"
         } disabled:opacity-50 disabled:cursor-not-allowed`}
         title="Global Settings"
@@ -191,33 +192,6 @@ export default function GlobalSettings({
               />
             </label>
 
-            <label className="flex items-center justify-between cursor-pointer group">
-              <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">
-                Show Palette
-              </span>
-              <ToggleSwitch
-                on={globalShowPalette}
-                onToggle={toggleGlobalShowPalette}
-              />
-            </label>
-
-            {/* Export Palette Toggle */}
-            <label className="flex items-center justify-between cursor-pointer group">
-              <div>
-                <span className="text-xs text-[var(--text-secondary)] font-medium group-hover:text-[var(--text-primary)] transition-colors">
-                  Export Palette (per image)
-                </span>
-                {globalExportPalette && (
-                  <p className="text-[10px] text-[var(--accent)] mt-0.5">
-                    Palette PNG added to zip
-                  </p>
-                )}
-              </div>
-              <ToggleSwitch
-                on={globalExportPalette}
-                onToggle={toggleGlobalExportPalette}
-              />
-            </label>
           </div>
 
           <div className="border-t border-[var(--border-subtle)]" />
@@ -230,7 +204,7 @@ export default function GlobalSettings({
               </span>
               {globalGridType !== "auto" && (
                 <button
-                  onClick={() => setGlobalGridType("auto")}
+                  onClick={() => (onGridTypeChange ?? setGlobalGridType)("auto")}
                   className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                 >
                   Reset to auto
@@ -261,11 +235,11 @@ export default function GlobalSettings({
             </div>
 
             <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
-              {(patternTab === "mark" ? MARK_OPTIONS : PATTERN_OPTIONS).map(
+              {(patternTab === "mark" ? MARK_OPTIONS : visiblePatterns).map(
                 (opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setGlobalGridType(opt.value)}
+                    onClick={() => (onGridTypeChange ?? setGlobalGridType)(opt.value)}
                     className={`px-3 py-2 text-[10px] font-medium rounded-lg transition-all border ${
                       globalGridType === opt.value
                         ? "bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] shadow-sm"
@@ -277,11 +251,6 @@ export default function GlobalSettings({
                 ),
               )}
             </div>
-            {patternTab === "mark" && (
-              <p className="text-[10px] text-[var(--text-muted)]">
-                Mark patterns auto-enable Export Palette (per image).
-              </p>
-            )}
           </div>
 
           <div className="border-t border-[var(--border-subtle)]" />
@@ -292,7 +261,7 @@ export default function GlobalSettings({
               Theme
             </span>
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-              {THEMES.map((theme) => (
+              {visibleThemes.map((theme) => (
                 <button
                   key={theme.id}
                   onClick={() => setGlobalTheme(theme.id)}

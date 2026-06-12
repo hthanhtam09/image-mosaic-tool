@@ -1,0 +1,183 @@
+/* Residual styles for the home page — kept as CSS because they rely on
+   pseudo-elements, JS-driven clip-paths and [data-mosaic] widgets that can't
+   be expressed as Tailwind utilities. Everything else is utilities in JSX. */
+
+.glow {
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(40px);
+  background: radial-gradient(circle, #c0cde31a 0%, #0000 70%);
+}
+
+.hero-glow-1 {
+  width: 620px;
+  height: 620px;
+  top: -180px;
+  left: -160px;
+}
+
+.hero-glow-2 {
+  width: 560px;
+  height: 560px;
+  bottom: -220px;
+  right: -140px;
+}
+
+.float-tile {
+  position: absolute;
+  z-index: 1;
+  border-radius: 10px;
+  border: 1px solid #c0cde31f;
+  background: #c0cde30f;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+/* ── Hero "convert" demo (8.5 × 11 in print page) ── */
+.convert-demo {
+  position: relative;
+  aspect-ratio: 8.5 / 11;
+  width: 100%;
+  max-width: 480px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.cd-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.cd-photo {
+  object-fit: cover;
+  filter: saturate(1.05) contrast(1.02);
+}
+
+.cd-mosaic {
+  object-fit: cover;
+  clip-path: inset(0 45% 0 0);
+}
+
+.cd-scan {
+  position: absolute;
+  top: -2%;
+  bottom: -2%;
+  left: 55%;
+  z-index: 3;
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 18px 3px #c0cde3b3;
+}
+
+.cd-scan::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 22px 4px #c0cde38c;
+}
+
+.cd-scan::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 60px;
+  background: linear-gradient(90deg, #0000, #c0cde329);
+}
+
+.cd-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 #c0cde399;
+  animation: cdpulse 1.6s infinite;
+}
+
+/* ── Before / after slider ── */
+.ba-slider {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow), 0 0 80px #c0cde30d;
+  user-select: none;
+  touch-action: none;
+}
+
+.ba-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.ba-top {
+  clip-path: inset(0 0 0 50%);
+}
+
+.ba-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 3;
+  width: 2px;
+  cursor: ew-resize;
+  background: var(--accent);
+  box-shadow: 0 0 16px 2px #c0cde38c;
+}
+
+.ba-handle::after {
+  content: "⇆";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--accent);
+  color: #121212;
+  font-size: 15px;
+  box-shadow: 0 0 20px 4px #c0cde359;
+}
+
+/* ── Mosaic sample tiles & placeholder logos ── */
+.sampler > div {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.ba-mini-half {
+  aspect-ratio: 1.25;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.ws-canvas .mzone {
+  width: 100%;
+  max-width: 360px;
+}
+
+.logo-ph {
+  width: 110px;
+  height: 26px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(90deg, #2a2a2a 0 8px, #0000 8px 14px);
+}

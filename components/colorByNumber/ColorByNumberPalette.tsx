@@ -12,7 +12,7 @@ export default function ColorByNumberPalette() {
   const activeProject = useActiveProject();
   
   const data = activeProject?.data;
-  const filled = activeProject?.filled || {};
+  const filled = useMemo(() => activeProject?.filled ?? {}, [activeProject?.filled]);
   const selectedCode = activeProject?.selectedCode;
   
   const togglePalette = togglePaletteGlobal;

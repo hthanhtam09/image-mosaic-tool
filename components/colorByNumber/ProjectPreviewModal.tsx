@@ -3,342 +3,308 @@
 import {
   useColorByNumberStore,
   useActiveProject,
+  type Project,
 } from "@/store/useColorByNumberStore";
-import { useEffect, useRef, useState } from "react";
-import ColorByNumberGrid from "./ColorByNumberGrid";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   canvasToDpiPngDataUrl,
   exportDotCodeMagnifierToCanvas,
   exportToCanvas,
 } from "@/lib/colorByNumber";
 import { getThemeById } from "@/lib/colorByNumber/themes";
-import {
-  shouldShowCodes,
-  shouldUseTightCrop,
-} from "@/lib/colorByNumber/objectFocus";
+import { shouldShowCodes, shouldUseTightCrop } from "@/lib/colorByNumber/objectFocus";
 
 interface ProjectPreviewModalProps {
   projectId: string;
+  projects: Project[];
   onClose: () => void;
+  onNavigate: (id: string) => void;
 }
 
-const downloadCanvas = (canvas: HTMLCanvasElement, filename: string): void => {
-  const link = document.createElement("a");
-  link.download = filename;
-  link.href = canvasToDpiPngDataUrl(canvas);
-  link.click();
+const downloadCanvas = (canvas: HTMLCanvasElement, filename: string) => {
+  const a = document.createElement("a");
+  a.download = filename;
+  a.href = canvasToDpiPngDataUrl(canvas);
+  a.click();
 };
+
+interface PreviewSet {
+  originUrl: string;
+  uncolorUrl: string;
+  colorUrl: string;
+}
 
 export default function ProjectPreviewModal({
   projectId,
+  projects,
   onClose,
+  onNavigate,
 }: ProjectPreviewModalProps) {
-  const {
-    setActiveProject,
-    setZoom,
-    setPan,
-    removeProject,
-    globalShowNumbers,
-    globalShowPalette,
-    globalCellSize,
-    globalTheme,
-    globalExportPalette,
-  } = useColorByNumberStore();
+  const { setActiveProject, setZoom, setPan, removeProject, globalShowNumbers, globalCellSize, globalTheme } =
+    useColorByNumberStore();
 
-  // Set active project on mount if not already
+  const navigable = projects
+    .filter((p) => p.status === "completed")
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  const idx = navigable.findIndex((p) => p.id === projectId);
+  const hasPrev = idx > 0;
+  const hasNext = idx < navigable.length - 1;
+
+  const goNext = useCallback(() => { if (hasNext) onNavigate(navigable[idx + 1].id); }, [hasNext, idx, navigable, onNavigate]);
+  const goPrev = useCallback(() => { if (hasPrev) onNavigate(navigable[idx - 1].id); }, [hasPrev, idx, navigable, onNavigate]);
+
   useEffect(() => {
     setActiveProject(projectId);
-    // Reset view
     setZoom(1);
     setPan(0, 0);
-    return () => setActiveProject(null); // Cleanup on close
+    return () => setActiveProject(null);
   }, [projectId, setActiveProject, setZoom, setPan]);
 
-  const activeProject = useActiveProject(); // Should be the project we just set
-  const modalContentRef = useRef<HTMLDivElement>(null);
-  const [viewportSize, setViewportSize] = useState({ width: 800, height: 600 });
-
-  // Handle Resize for Grid
-  useEffect(() => {
-    if (!modalContentRef.current) return;
-
-    const updateSize = () => {
-      if (modalContentRef.current) {
-        const { clientWidth, clientHeight } = modalContentRef.current;
-        setViewportSize({ width: clientWidth, height: clientHeight });
-      }
-    };
-
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
-  }, []);
+  const activeProject = useActiveProject();
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") goNext();
+      if (e.key === "ArrowLeft") goPrev();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, goNext, goPrev]);
 
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<PreviewSet | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  // zoom: fraction of natural size, null = fit
+  const [zoom, setZoomLocal] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!activeProject || !activeProject.data) return;
+    setZoomLocal(null);
+    setPreviews(null);
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!activeProject?.data) return;
     let cancelled = false;
-    // Defer state updates out of the effect body to avoid cascading renders.
     const raf = requestAnimationFrame(() => {
       if (cancelled) return;
       setIsGenerating(true);
-      // Timeout to allow the loading state to paint before the heavy render.
       setTimeout(() => {
         if (cancelled) return;
         const theme = getThemeById(globalTheme);
-      const shouldShowPalette = activeProject.removeBackground
-        ? false
-        : globalExportPalette
-          ? false
-          : globalShowPalette;
-      const showProjectCodes = shouldShowCodes(
-        activeProject.data,
-        activeProject.removeBackground,
-        globalShowNumbers,
-      );
-      const useObjectTightCrop = shouldUseTightCrop(
-        activeProject.data,
-        activeProject.removeBackground,
-      );
+        const showCodes = shouldShowCodes(activeProject.data, activeProject.removeBackground, globalShowNumbers);
+        const tightCrop = shouldUseTightCrop(activeProject.data, activeProject.removeBackground);
 
-      const canvas = exportToCanvas(activeProject.data!, activeProject.filled, {
-        showCodes: showProjectCodes,
-        colored: true,
-        showPalette: shouldShowPalette,
-        partialColorMode: activeProject.partialColorMode,
-        bgColor: theme.backgroundColor,
-        transparentBg: activeProject.removeBackground,
-        tightCrop: useObjectTightCrop,
-        removeBgColorCells: globalExportPalette,
-        showMagnifier: false,
-      });
-      setPreviewUrl(canvas.toDataURL("image/png"));
-      setIsGenerating(false);
+        const colorCanvas = exportToCanvas(activeProject.data!, activeProject.filled, {
+          showCodes,
+          colored: true,
+          showPalette: false,
+          partialColorMode: activeProject.partialColorMode,
+          bgColor: theme.backgroundColor,
+          transparentBg: activeProject.removeBackground,
+          tightCrop,
+          removeBgColorCells: true,
+          showMagnifier: false,
+        });
+
+        const uncolorCanvas = exportToCanvas(activeProject.data!, activeProject.filled, {
+          showCodes: globalShowNumbers,
+          colored: false,
+          showPalette: false,
+          bgColor: theme.backgroundColor,
+          tightCrop,
+          removeBgColorCells: true,
+        });
+
+        if (!cancelled) {
+          setPreviews({
+            originUrl: activeProject.thumbnailDataUrl,
+            uncolorUrl: uncolorCanvas.toDataURL("image/png"),
+            colorUrl: colorCanvas.toDataURL("image/png"),
+          });
+          setIsGenerating(false);
+        }
       }, 50);
     });
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-    };
+    return () => { cancelled = true; cancelAnimationFrame(raf); };
   }, [
     activeProject?.data,
     activeProject?.filled,
     activeProject?.partialColorMode,
     activeProject?.removeBackground,
+    activeProject?.thumbnailDataUrl,
     globalShowNumbers,
-    globalShowPalette,
     globalTheme,
     globalCellSize,
-    globalExportPalette,
   ]);
 
   if (!activeProject || !activeProject.data) return null;
 
-  /* ── Zoom Controls ── */
-  const handleZoomIn = () => setZoom(activeProject.zoom + 0.25);
-  const handleZoomOut = () =>
-    setZoom(Math.max(0.25, activeProject.zoom - 0.25));
-  const handleResetZoom = () => setZoom(1);
-
-  const handleDownloadBoth = () => {
+  const handleDownload = () => {
     if (!activeProject.data) return;
-
-    const getBaseName = (name: string) => name.replace(/\.[^/.]+$/, "");
-    const baseName = getBaseName(activeProject.name);
-
-    // Colored
+    const base = activeProject.name.replace(/\.[^/.]+$/, "");
     const theme = getThemeById(globalTheme);
-    const shouldShowPalette = activeProject.removeBackground
-      ? false
-      : globalExportPalette
-        ? false
-        : globalShowPalette;
-    const showProjectCodes = shouldShowCodes(
-      activeProject.data,
-      activeProject.removeBackground,
-      globalShowNumbers,
-    );
-    const useObjectTightCrop = shouldUseTightCrop(
-      activeProject.data,
-      activeProject.removeBackground,
-    );
+    const showCodes = shouldShowCodes(activeProject.data, activeProject.removeBackground, globalShowNumbers);
+    const tightCrop = shouldUseTightCrop(activeProject.data, activeProject.removeBackground);
 
-    const canvas1 = exportToCanvas(activeProject.data, activeProject.filled, {
-      showCodes: showProjectCodes,
-      colored: true,
-      showPalette: shouldShowPalette,
+    const c1 = exportToCanvas(activeProject.data, activeProject.filled, {
+      showCodes, colored: true, showPalette: false,
       partialColorMode: activeProject.partialColorMode,
-      bgColor: theme.backgroundColor,
-      transparentBg: activeProject.removeBackground,
-      tightCrop: useObjectTightCrop,
-      removeBgColorCells: globalExportPalette,
-      showMagnifier: false,
+      bgColor: theme.backgroundColor, transparentBg: activeProject.removeBackground,
+      tightCrop, removeBgColorCells: true, showMagnifier: false,
     });
-    downloadCanvas(canvas1, `colored-${baseName}.png`);
+    downloadCanvas(c1, `colored-${base}.png`);
 
-    if (
-      activeProject.removeBackground &&
-      (activeProject.data.gridType === "square-mark" ||
-        activeProject.data.gridType === "hexagon-mark")
-    ) {
+    if (activeProject.removeBackground && (activeProject.data.gridType === "square-mark" || activeProject.data.gridType === "hexagon-mark")) {
       setTimeout(() => {
-        const circleCanvas = exportDotCodeMagnifierToCanvas(
-          activeProject.data!,
-          {
-            transparentBg: true,
-          },
-        );
-        downloadCanvas(circleCanvas, `circle-${baseName}.png`);
+        const cc = exportDotCodeMagnifierToCanvas(activeProject.data!, { transparentBg: true });
+        downloadCanvas(cc, `circle-${base}.png`);
       }, 300);
     }
-
-    // Uncolored (only for full color projects)
-    if (
-      activeProject.partialColorMode === "none" &&
-      !activeProject.removeBackground
-    ) {
+    if (activeProject.partialColorMode === "none" && !activeProject.removeBackground) {
       setTimeout(() => {
-        const canvas2 = exportToCanvas(
-          activeProject.data!,
-          activeProject.filled,
-          {
-            showCodes: activeProject.removeBackground
-              ? false
-              : globalShowNumbers,
-            colored: false,
-            showPalette: shouldShowPalette,
-            bgColor: theme.backgroundColor,
-            removeBgColorCells: globalExportPalette,
-          },
-        );
-
-        downloadCanvas(canvas2, `uncolored-${baseName}.png`);
+        const c2 = exportToCanvas(activeProject.data!, activeProject.filled, {
+          showCodes: globalShowNumbers, colored: false, showPalette: false,
+          bgColor: theme.backgroundColor, removeBgColorCells: true,
+        });
+        downloadCanvas(c2, `uncolored-${base}.png`);
       }, 500);
     }
   };
 
+  const zoomSteps = [0.25, 0.5, 0.75, 1, 1.5, 2];
+  const currentZoomStep = zoom ?? 0;
+  const zoomIn = () => {
+    const next = zoomSteps.find((z) => z > (zoom ?? 0.75));
+    if (next) setZoomLocal(next);
+  };
+  const zoomOut = () => {
+    const prev = [...zoomSteps].reverse().find((z) => z < (zoom ?? 0.75));
+    if (prev) setZoomLocal(prev);
+    else setZoomLocal(null);
+  };
+  const resetZoom = () => setZoomLocal(null);
+
+  const panels: { label: string; url: string | undefined; key: string }[] = [
+    { key: "origin", label: "Original", url: previews?.originUrl },
+    { key: "uncolor", label: "Uncolored", url: previews?.uncolorUrl },
+    { key: "color", label: "Colored", url: previews?.colorUrl },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="relative flex flex-col w-full max-w-6xl h-[90vh] bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
-          <div className="flex items-center gap-4">
-            <div>
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-                {activeProject.name}
-              </h3>
-              <p className="text-sm text-[var(--text-secondary)]">
-                {activeProject.gridType} • {globalCellSize}px •{" "}
-                {Math.round(activeProject.zoom * 100)}%
-              </p>
-            </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={containerRef}
+        className="relative flex flex-col bg-[var(--bg-secondary)] rounded-2xl border border-[var(--border-subtle)] shadow-2xl overflow-hidden"
+        style={{ width: "min(96vw, 1400px)", height: "min(92vh, 900px)" }}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-subtle)] shrink-0 gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{activeProject.name}</p>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              {activeProject.gridType} · {globalCellSize}px
+              {navigable.length > 1 && <span className="ml-2">{idx + 1} / {navigable.length}</span>}
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-1 bg-[var(--bg-primary)] rounded-lg p-1 border border-[var(--border-default)]">
-              <button
-                onClick={handleZoomOut}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-black/5 text-lg"
-              >
-                −
-              </button>
-              <button
-                onClick={handleResetZoom}
-                className="px-2 text-xs font-mono"
-              >
-                {Math.round(activeProject.zoom * 100)}%
-              </button>
-              <button
-                onClick={handleZoomIn}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-black/5 text-lg"
-              >
-                +
-              </button>
-            </div>
-
-            <button
-              onClick={onClose}
-              className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-white/5 transition-colors"
-              title="Close"
-            >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+          {/* Zoom */}
+          <div className="flex items-center bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] overflow-hidden shrink-0">
+            <button onClick={zoomOut} disabled={zoom === null} className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 text-base">−</button>
+            <button onClick={resetZoom} className="px-2 text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors min-w-[52px] text-center">
+              {zoom ? `${Math.round(zoom * 100)}%` : "Fit"}
             </button>
+            <button onClick={zoomIn} disabled={currentZoomStep >= 2} className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 text-base">+</button>
+          </div>
+
+          {/* Close */}
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-white/5 transition-colors shrink-0" title="Close (Esc)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+
+        {/* ── 3-panel preview ── */}
+        <div className="flex-1 min-h-0 relative">
+          {/* Prev / Next overlays */}
+          {hasPrev && (
+            <button onClick={goPrev} className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg" title="Previous (←)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+          )}
+          {hasNext && (
+            <button onClick={goNext} className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg" title="Next (→)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+          )}
+
+          <div className="flex h-full divide-x divide-[var(--border-subtle)]">
+            {panels.map(({ key, label, url }) => (
+              <div key={key} className="flex-1 flex flex-col min-w-0">
+                {/* Panel label */}
+                <div className="px-3 py-1.5 text-[11px] font-medium text-[var(--text-muted)] text-center border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] shrink-0 tracking-wide uppercase">
+                  {label}
+                </div>
+                {/* Panel image */}
+                <div className="flex-1 overflow-auto bg-neutral-100 flex items-center justify-center p-3">
+                  {isGenerating || !url ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-[11px] text-neutral-400">Rendering…</span>
+                    </div>
+                  ) : (
+                    <img
+                      src={url}
+                      alt={label}
+                      className="object-contain shadow-lg bg-white rounded-sm border border-neutral-200"
+                      style={
+                        zoom
+                          ? { width: `${zoom * 100}%`, minWidth: `${zoom * 100}%` }
+                          : { maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto" }
+                      }
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Content: High-fidelity Canvas Preview */}
-        <div
-          ref={modalContentRef}
-          className="flex-1 overflow-auto bg-[var(--bg-primary)] relative flex items-center justify-center"
-        >
-          {isGenerating ? (
-            <div className="flex flex-col items-center justify-center gap-4">
-              <div className="w-8 h-8 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-sm text-[var(--text-secondary)]">
-                Rendering Preview...
-              </span>
-            </div>
-          ) : previewUrl ? (
-            <div className="w-full h-full overflow-auto flex items-center justify-center p-8 bg-neutral-100">
-              <img
-                src={previewUrl}
-                alt="High-fidelity Preview"
-                style={{
-                  width: `${100 * activeProject.zoom}%`,
-                  minWidth: `${100 * activeProject.zoom}%`,
-                  transition: "width 0.2s ease-out",
-                }}
-                className="object-contain shadow-2xl bg-white border border-neutral-200"
-              />
-            </div>
-          ) : null}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-subtle)] shrink-0">
           <button
-            onClick={() => {
-              if (confirm("Delete this project?")) {
-                removeProject(projectId);
-                onClose();
-              }
-            }}
-            className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-colors"
+            onClick={() => { if (confirm("Delete this project?")) { removeProject(projectId); onClose(); } }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
           >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+            </svg>
             Delete
           </button>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleDownloadBoth}
-              className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm"
-            >
-              {activeProject.removeBackground
-                ? "Download Image"
-                : "Download Both (Zip/Seq)"}
-            </button>
-          </div>
+          {navigable.length > 1 && (
+            <div className="flex items-center gap-1">
+              <button onClick={goPrev} disabled={!hasPrev} className="w-7 h-7 flex items-center justify-center rounded border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+              </button>
+              <span className="text-xs text-[var(--text-muted)] px-2 tabular-nums">{idx + 1} / {navigable.length}</span>
+              <button onClick={goNext} disabled={!hasNext} className="w-7 h-7 flex items-center justify-center rounded border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors shadow-sm"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download PNGs
+          </button>
         </div>
       </div>
     </div>

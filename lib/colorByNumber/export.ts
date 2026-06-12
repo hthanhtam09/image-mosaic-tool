@@ -22,6 +22,21 @@ import {
   isTransparentCell,
   shouldRenderDotCodeBaseCell,
 } from "./objectFocus";
+import {
+  drawDotCodeCellBase,
+  drawDotCodeSymbol,
+  drawHexagonMarkCellBase,
+  drawHexagonMarkSymbol,
+  drawDotCodeMagnifier,
+  getHexagonPoints,
+} from "./markDrawing";
+import {
+  getRoundedPolygonPath,
+  drawPuzzlePiecePath,
+  drawIslamicTilePath,
+  drawFishScalePath,
+  drawTrapezoidPath,
+} from "./patternDrawing";
 
 /** Partial color split mode type */
 export type PartialColorMode =
@@ -44,13 +59,13 @@ const EXPORT_PAGE_H = Math.round(11 * EXPORT_DPI); // 3300
 
 const STORAGE_KEY = "color-by-number-progress";
 
-/** Page padding in layout units (applied before fitting to letter) */
-export const PAGE_PADDING_X = 90; // 0.3 inch * 300 DPI = 90px
-export const PAGE_PADDING_Y = 120; // 0.4 inch * 300 DPI = 120px
-export const DOT_CODE_PAGE_PADDING_X = 75; // 0.25 inch * 300 DPI: tighter but still KDP-safe
-export const CONTENT_SAFE_INSET = 60; // Keep converted artwork comfortably inside the safe area.
-export const CONTENT_SAFE_INSET_LEFT_EXTRA = 30; // 0.1 inch extra left inset at 300 DPI.
-export const CONTENT_SAFE_INSET_LEFT = 70; // Extra left inset for KDP safe-area tolerance.
+/** Page padding in layout units — KDP safe area is 0.375" = 113px at 300 DPI on all sides. */
+export const PAGE_PADDING_X = 113; // 0.376 inch * 300 DPI — exactly at KDP safe edge
+export const PAGE_PADDING_Y = 113; // 0.376 inch * 300 DPI — exactly at KDP safe edge
+export const DOT_CODE_PAGE_PADDING_X = 113; // same for mark grids
+export const CONTENT_SAFE_INSET = 0; // no extra inset — padding already covers safe area
+export const CONTENT_SAFE_INSET_LEFT_EXTRA = 0; // removed
+export const CONTENT_SAFE_INSET_LEFT = 0; // removed — absorbed into PAGE_PADDING_X
 export const PALETTE_GAP = 30; // Gap between palette and grid.
 export const PALETTE_X_OFFSET = 0; // Do not pull palette/grid into the left safe margin.
 
@@ -204,330 +219,12 @@ const getBrightness = (hex: string): number => {
   );
 };
 
-const drawDotCodeCellBase = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  showBackground: boolean = true,
-) => {
-  const dotR = Math.max(1.1, size * 0.055);
-  const smallR = Math.max(0.55, size * 0.025);
-  const pad = 0;
-  const left = x + pad;
-  const right = x + size - pad;
-  const top = y + pad;
-  const bottom = y + size - pad;
-
-  if (showBackground) {
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(x, y, size, size);
-  }
-
-  ctx.fillStyle = "#000000";
-  const drawDot = (cx: number, cy: number, r: number, alpha: number) => {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  };
-
-  drawDot(left, top, dotR, 1);
-  drawDot(right, top, dotR, 1);
-  drawDot(left, bottom, dotR, 1);
-  drawDot(right, bottom, dotR, 1);
-
-  const steps = 4;
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps;
-    drawDot(left + (right - left) * t, top, smallR, 0.28);
-    drawDot(left + (right - left) * t, bottom, smallR, 0.28);
-    drawDot(left, top + (bottom - top) * t, smallR, 0.28);
-    drawDot(right, top + (bottom - top) * t, smallR, 0.28);
-  }
-};
-
-const drawDotCodeSymbol = (
-  ctx: CanvasRenderingContext2D,
-  code: string,
-  cx: number,
-  cy: number,
-  size: number,
-) => {
-  const half = size / 2;
-  const left = cx - half;
-  const right = cx + half;
-  const top = cy - half;
-  const bottom = cy + half;
-
-  ctx.save();
-  ctx.strokeStyle = "#000000";
-  ctx.fillStyle = "#000000";
-  ctx.lineWidth = Math.max(1.4, size * 0.13);
-  ctx.lineCap = "round";
-
-  if (code === "5") {
-    const bleed = Math.max(0.75, size * 0.035);
-    ctx.fillRect(left - bleed, top - bleed, size + bleed * 2, size + bleed * 2);
-    ctx.restore();
-    return;
-  }
-
-  const line = (x1: number, y1: number, x2: number, y2: number) => {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  };
-
-  if (code === "1" || code === "3" || code === "4") line(left, bottom, right, top);
-  if (code === "2" || code === "3" || code === "4") line(left, top, right, bottom);
-  if (code === "4") {
-    line(cx, top, cx, bottom);
-    line(left, cy, right, cy);
-  }
-
-  ctx.restore();
-};
-
-const getHexagonPoints = (cx: number, cy: number, r: number) =>
-  [-90, -30, 30, 90, 150, 210].map((deg) => {
-    const rad = (deg * Math.PI) / 180;
-    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-  });
-
-const drawHexagonMarkCellBase = (
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  showBackground: boolean = true,
-) => {
-  const points = getHexagonPoints(cx, cy, r);
-  if (showBackground) {
-    getRoundedPolygonPath(ctx, points, r * 0.04);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-  }
-
-  const dotR = Math.max(1.1, r * 0.085);
-  const smallR = Math.max(0.55, r * 0.04);
-  const steps = 4;
-  ctx.save();
-
-  // Dotted edges (3 dots per edge) to match the square-mark cell style.
-  ctx.fillStyle = "#000000";
-  ctx.globalAlpha = 0.28;
-  for (let i = 0; i < points.length; i++) {
-    const start = points[i];
-    const end = points[(i + 1) % points.length];
-    for (let s = 1; s < steps; s++) {
-      const t = s / steps;
-      const dx = start.x + (end.x - start.x) * t;
-      const dy = start.y + (end.y - start.y) * t;
-      ctx.beginPath();
-      ctx.arc(dx, dy, smallR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  ctx.globalAlpha = 1;
-  for (const point of points) {
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, dotR, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-};
-
-const drawHexagonMarkSymbol = (
-  ctx: CanvasRenderingContext2D,
-  code: string,
-  cx: number,
-  cy: number,
-  size: number,
-  markRadius?: number,
-) => {
-  const r = markRadius ?? size / Math.sqrt(3);
-  const points = getHexagonPoints(cx, cy, r);
-  const [top, upperRight, lowerRight, bottom, lowerLeft, upperLeft] = points;
-
-  ctx.save();
-  ctx.strokeStyle = "#000000";
-  ctx.fillStyle = "#000000";
-  ctx.lineWidth = Math.max(1.4, size * 0.11);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  const line = (x1: number, y1: number, x2: number, y2: number) => {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  };
-  if (code === ".") {
-    ctx.beginPath();
-    ctx.arc(cx, cy, Math.max(1.4, size * 0.15), 0, Math.PI * 2);
-    ctx.fill();
-  } else if (code === "1") line(top.x, top.y, bottom.x, bottom.y);
-  else if (code === "2") line(lowerLeft.x, lowerLeft.y, upperRight.x, upperRight.y);
-  else if (code === "3") line(upperLeft.x, upperLeft.y, lowerRight.x, lowerRight.y);
-  else if (code === "4") {
-    line(lowerLeft.x, lowerLeft.y, upperRight.x, upperRight.y);
-    line(upperLeft.x, upperLeft.y, lowerRight.x, lowerRight.y);
-  } else if (code === "5") {
-    line(top.x, top.y, bottom.x, bottom.y);
-    line(lowerLeft.x, lowerLeft.y, upperRight.x, upperRight.y);
-    line(upperLeft.x, upperLeft.y, lowerRight.x, lowerRight.y);
-    ctx.restore();
-    return;
-    ctx.font = `800 ${size * 0.82}px 'Noto Sans Symbols 2', 'Noto Sans', sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("✱", cx, cy + size * 0.02);
-  }
-
-  ctx.restore();
-};
-
-const drawDotCodeMagnifier = (
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  data: ColorByNumberData,
-  transparentBg: boolean,
-) => {
-  const cell = r * 0.25;
-  const isHex = data.gridType === "hexagon-mark";
-  // Hexagon mark has 6 density levels (including the dot); square dot-code has 5.
-  const markCodes = isHex
-    ? [".", "1", "2", "3", "4", "5"]
-    : ["1", "2", "3", "4", "5"];
-  const cols = 7;
-  const rows = isHex ? 9 : 7;
-  // Hexagons tile as a pointy-top honeycomb (matches the real grid layout).
-  const hexR = cell / Math.sqrt(3);
-  const rowStep = isHex ? 1.5 * hexR : cell;
-  // Cycle through every mark so the legend always shows all of them.
-  const codeAt = (row: number, col: number): string =>
-    markCodes[(row * 2 + col * 3 + (row % 2 === 0 ? 1 : 4)) % markCodes.length];
-
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.32)";
-  ctx.shadowBlur = r * 0.11;
-  ctx.shadowOffsetX = r * 0.035;
-  ctx.shadowOffsetY = r * 0.055;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-  ctx.restore();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.91, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const rowOffset = isHex && row % 2 === 1 ? cell / 2 : 0;
-      const midX =
-        cx + (col - (cols - 1) / 2) * cell + rowOffset - (isHex ? cell / 4 : 0);
-      const midY = cy + (row - (rows - 1) / 2) * rowStep;
-      const rowCode = codeAt(row, col);
-      if (isHex) {
-        drawHexagonMarkCellBase(ctx, midX, midY, hexR, false);
-      } else {
-        drawDotCodeCellBase(ctx, midX - cell / 2, midY - cell / 2, cell, false);
-      }
-      if (col < 3) {
-        if (isHex && rowCode === ".") {
-          // The dot level renders as a dot in the uncolored grid, not text.
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.34)";
-          ctx.beginPath();
-          ctx.arc(midX, midY, Math.max(1.4, cell * 0.09), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        } else {
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.34)";
-          ctx.font = `700 ${cell * 0.7}px 'Noto Sans', sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(rowCode, midX, midY);
-          ctx.restore();
-        }
-      } else if (isHex) {
-        drawHexagonMarkSymbol(ctx, rowCode, midX, midY, cell, hexR);
-      } else {
-        drawDotCodeSymbol(ctx, rowCode, midX, midY, cell);
-      }
-    }
-  }
-
-  ctx.restore();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = Math.max(10, r * 0.08);
-  ctx.stroke();
-  ctx.restore();
-};
-
-const getRoundedPolygonPath = (
-  ctx: CanvasRenderingContext2D,
-  points: { x: number; y: number }[],
-  radius: number,
-): void => {
-  if (points.length < 3) return;
-
-  ctx.beginPath();
-  for (let i = 0; i < points.length; i++) {
-    const curr = points[i];
-    const prev = points[(i - 1 + points.length) % points.length];
-    const next = points[(i + 1) % points.length];
-
-    const vcp_x = prev.x - curr.x;
-    const vcp_y = prev.y - curr.y;
-    const len_cp = Math.sqrt(vcp_x * vcp_x + vcp_y * vcp_y);
-    const ucp_x = vcp_x / len_cp;
-    const ucp_y = vcp_y / len_cp;
-
-    const vcn_x = next.x - curr.x;
-    const vcn_y = next.y - curr.y;
-    const len_cn = Math.sqrt(vcn_x * vcn_x + vcn_y * vcn_y);
-    const ucn_x = vcn_x / len_cn;
-    const ucn_y = vcn_y / len_cn;
-
-    const r = Math.min(radius, len_cp / 2, len_cn / 2);
-
-    const sx = curr.x + ucp_x * r;
-    const sy = curr.y + ucp_y * r;
-
-    const ex = curr.x + ucn_x * r;
-    const ey = curr.y + ucn_y * r;
-
-    if (i === 0) {
-      ctx.moveTo(sx, sy);
-    } else {
-      ctx.lineTo(sx, sy);
-    }
-
-    ctx.quadraticCurveTo(curr.x, curr.y, ex, ey);
-  }
-  ctx.closePath();
-};
+// Drawing helpers are imported from markDrawing.ts and patternDrawing.ts above.
 
 /**
- * Compute the transform needed to fit the grid into the given box (center aligned).
+ * Compute the transform needed to fill the grid into the given box (top-left aligned, no centering).
+ * The grid is stretched to fill the available area exactly, keeping the aspect ratio implicit
+ * in the cell dimensions. No letterboxing — the grid fills edge-to-edge within the KDP safe area.
  */
 export const getPageLayout = (
   data: ColorByNumberData,
@@ -536,13 +233,10 @@ export const getPageLayout = (
 ): PageLayout => {
   const dims = getGridDimensions(data);
   const scale = Math.min(boxW / dims.width, boxH / dims.height);
-  const scaledW = dims.width * scale;
-  const scaledH = dims.height * scale;
   return {
     scale,
-    // Offsets to center the grid in the box
-    offsetX: (boxW - scaledW) / 2,
-    offsetY: (boxH - scaledH) / 2,
+    offsetX: 0,
+    offsetY: 0,
     gridDims: dims,
     boxW,
     boxH,
@@ -900,214 +594,6 @@ const drawDropletShape = (
   ctx.strokeStyle = "#555555";
   ctx.lineWidth = 1.5;
   ctx.stroke();
-};
-
-/**
- * Draw a puzzle piece path on canvas context.
- * Every edge has a tab or blank. Adjacent cells interlock.
- * Boundary edges always have blanks (indentations).
- */
-const drawPuzzlePiecePath = (
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  size: number,
-  x: number,
-  y: number,
-  gridW: number,
-  gridH: number,
-) => {
-  const half = size / 2;
-  const tabSize = size * 0.18;
-  const tabWidth = size * 0.22;
-
-  const left = cx - half;
-  const right = cx + half;
-  const top = cy - half;
-  const bottom = cy + half;
-
-  const rightDir = x < gridW - 1 && x % 2 === 0 ? 1 : -1;
-  const bottomDir = y < gridH - 1 && y % 2 === 0 ? 1 : -1;
-  const leftDir = x > 0 && x % 2 === 0 ? -1 : 1;
-  const topDir = y > 0 && y % 2 === 0 ? -1 : 1;
-
-  ctx.beginPath();
-  ctx.moveTo(left, top);
-
-  // Top edge (left to right)
-  ctx.lineTo(cx - tabWidth, top);
-  ctx.bezierCurveTo(
-    cx - tabWidth,
-    top + topDir * tabSize * 0.2,
-    cx - tabSize * 0.9,
-    top + topDir * tabSize,
-    cx,
-    top + topDir * tabSize,
-  );
-  ctx.bezierCurveTo(
-    cx + tabSize * 0.9,
-    top + topDir * tabSize,
-    cx + tabWidth,
-    top + topDir * tabSize * 0.2,
-    cx + tabWidth,
-    top,
-  );
-  ctx.lineTo(right, top);
-
-  // Right edge (top to bottom)
-  ctx.lineTo(right, cy - tabWidth);
-  ctx.bezierCurveTo(
-    right + rightDir * tabSize * 0.2,
-    cy - tabWidth,
-    right + rightDir * tabSize,
-    cy - tabSize * 0.9,
-    right + rightDir * tabSize,
-    cy,
-  );
-  ctx.bezierCurveTo(
-    right + rightDir * tabSize,
-    cy + tabSize * 0.9,
-    right + rightDir * tabSize * 0.2,
-    cy + tabWidth,
-    right,
-    cy + tabWidth,
-  );
-  ctx.lineTo(right, bottom);
-
-  // Bottom edge (right to left)
-  ctx.lineTo(cx + tabWidth, bottom);
-  ctx.bezierCurveTo(
-    cx + tabWidth,
-    bottom + bottomDir * tabSize * 0.2,
-    cx + tabSize * 0.9,
-    bottom + bottomDir * tabSize,
-    cx,
-    bottom + bottomDir * tabSize,
-  );
-  ctx.bezierCurveTo(
-    cx - tabSize * 0.9,
-    bottom + bottomDir * tabSize,
-    cx - tabWidth,
-    bottom + bottomDir * tabSize * 0.2,
-    cx - tabWidth,
-    bottom,
-  );
-  ctx.lineTo(left, bottom);
-
-  // Left edge (bottom to top)
-  ctx.lineTo(left, cy + tabWidth);
-  ctx.bezierCurveTo(
-    left + leftDir * tabSize * 0.2,
-    cy + tabWidth,
-    left + leftDir * tabSize,
-    cy + tabSize * 0.9,
-    left + leftDir * tabSize,
-    cy,
-  );
-  ctx.bezierCurveTo(
-    left + leftDir * tabSize,
-    cy - tabSize * 0.9,
-    left + leftDir * tabSize * 0.2,
-    cy - tabWidth,
-    left,
-    cy - tabWidth,
-  );
-  ctx.lineTo(left, top);
-
-  ctx.closePath();
-};
-
-/**
- * Draw Islamic star-and-cross tile path on canvas.
- * Stars at (x+y) even, crosses at (x+y) odd.
- * The geometry is a mathematically perfect zero-gap tessellation.
- */
-const drawIslamicTilePath = (
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  size: number,
-  x: number,
-  y: number,
-) => {
-  const h = size / 2;
-  const SQRT2 = Math.SQRT2;
-  const R_star = h * SQRT2; // Distance to star tips
-  const v = h * (SQRT2 - 1); // Distance to star inner valleys
-  const R_cross = h * (2 - SQRT2); // Distance to cross inner pinches (2h - R_star)
-
-  const isStar = (x + y) % 2 === 0;
-
-  ctx.beginPath();
-  if (isStar) {
-    ctx.moveTo(cx, cy - R_star);
-    ctx.lineTo(cx + v, cy - h);
-    ctx.lineTo(cx + h, cy - h);
-    ctx.lineTo(cx + h, cy - v);
-    ctx.lineTo(cx + R_star, cy);
-    ctx.lineTo(cx + h, cy + v);
-    ctx.lineTo(cx + h, cy + h);
-    ctx.lineTo(cx + v, cy + h);
-    ctx.lineTo(cx, cy + R_star);
-    ctx.lineTo(cx - v, cy + h);
-    ctx.lineTo(cx - h, cy + h);
-    ctx.lineTo(cx - h, cy + v);
-    ctx.lineTo(cx - R_star, cy);
-    ctx.lineTo(cx - h, cy - v);
-    ctx.lineTo(cx - h, cy - h);
-    ctx.lineTo(cx - v, cy - h);
-  } else {
-    ctx.moveTo(cx - v, cy - h);
-    ctx.lineTo(cx, cy - R_cross);
-    ctx.lineTo(cx + v, cy - h);
-    ctx.lineTo(cx + h, cy - h);
-    ctx.lineTo(cx + h, cy - v);
-    ctx.lineTo(cx + R_cross, cy);
-    ctx.lineTo(cx + h, cy + v);
-    ctx.lineTo(cx + h, cy + h);
-    ctx.lineTo(cx + v, cy + h);
-    ctx.lineTo(cx, cy + R_cross);
-    ctx.lineTo(cx - v, cy + h);
-    ctx.lineTo(cx - h, cy + h);
-    ctx.lineTo(cx - h, cy + v);
-    ctx.lineTo(cx - R_cross, cy);
-    ctx.lineTo(cx - h, cy - v);
-    ctx.lineTo(cx - h, cy - h);
-  }
-  ctx.closePath();
-};
-
-const drawFishScalePath = (
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  size: number,
-) => {
-  const r = size / 2;
-  ctx.beginPath();
-  // Draw the full circle; overlap handles the visual "scallop" in grid mode
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.closePath();
-};
-
-const drawTrapezoidPath = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  slant: number,
-  xIndex: number,
-) => {
-  const deltaX = xIndex % 2 === 0 ? 0 : slant;
-  const deltaX1 = (xIndex + 1) % 2 === 0 ? 0 : slant;
-
-  ctx.beginPath();
-  ctx.moveTo(x, y + deltaX);
-  ctx.lineTo(x + w, y + deltaX1);
-  ctx.lineTo(x + w, y + h + deltaX1);
-  ctx.lineTo(x, y + h + deltaX);
-  ctx.closePath();
 };
 
 /** Draw shape-matched swatch */
@@ -2007,7 +1493,7 @@ export const exportToCanvas = (
       cellSize: data.cellSize,
       scale: gridLayout.scale,
     });
-    drawDotCodeMagnifier(ctx, magnifier.cx, magnifier.cy, magnifier.r, data, transparentBg);
+    drawDotCodeMagnifier(ctx, magnifier.cx, magnifier.cy, magnifier.r, data);
   }
 
   return canvas;
@@ -2039,7 +1525,7 @@ export const exportDotCodeMagnifierToCanvas = (
     ctx.clearRect(0, 0, size, size);
   }
 
-  drawDotCodeMagnifier(ctx, size / 2, size / 2, r, data, options?.transparentBg !== false);
+  drawDotCodeMagnifier(ctx, size / 2, size / 2, r, data);
   return canvas;
 };
 
