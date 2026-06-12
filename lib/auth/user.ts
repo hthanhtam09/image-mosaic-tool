@@ -1,10 +1,10 @@
-export type PlanName = "Free" | "Pro" | "Studio";
+export type PlanName = "Free" | "Plus" | "Pro";
 export type BillingInterval = "monthly" | "yearly";
 
 export const USERNAME_EMAIL_DOMAIN = "mailinator.com";
 
 export const normalizePlan = (plan?: string | null): PlanName => {
-  if (plan === "Pro" || plan === "Studio") return plan;
+  if (plan === "Plus" || plan === "Pro") return plan;
   return "Free";
 };
 

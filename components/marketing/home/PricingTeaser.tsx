@@ -3,8 +3,8 @@ import { Check, cardBase, sectionTitle } from "./ui";
 
 const PLANS = [
   { name: "Free", tag: "For trying things out", price: "$0", feats: ["5 exports / month", "3 mosaic styles", "Watermarked exports"], cta: "Start free", primary: false, pop: false },
-  { name: "Pro", tag: "For active creators", price: "$19", feats: ["Unlimited exports", "All 10 styles · no watermark", "PDF book export"], cta: "Get Pro", primary: true, pop: true },
-  { name: "Studio", tag: "For teams & volume", price: "$49", feats: ["Everything in Pro", "Bulk folder upload", "Commercial license"], cta: "Get Studio", primary: false, pop: false },
+  { name: "Plus", tag: "For active creators", price: "$19", feats: ["Unlimited exports", "All 10 styles · no watermark", "PDF book export"], cta: "Get Plus", primary: true, pop: true },
+  { name: "Pro", tag: "For teams & volume", price: "$49", feats: ["Everything in Plus", "Bulk folder upload", "Commercial license"], cta: "Get Pro", primary: false, pop: false },
 ];
 
 export default function PricingTeaser() {

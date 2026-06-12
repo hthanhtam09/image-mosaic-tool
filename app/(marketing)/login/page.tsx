@@ -192,9 +192,14 @@ export default function LoginPage() {
           {/* Guest */}
           <Link
             href={redirectTo}
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('mosaci_guest_mode', 'true')
+              }
+            }}
             className="mt-4 flex h-11 w-full items-center justify-center rounded-lg border border-border-primary bg-transparent text-sm font-medium text-text-secondary transition hover:bg-white/5 hover:text-text-primary"
           >
-            Continue as Guest
+             Continue as Guest
           </Link>
 
           <p className="mt-4 text-center text-xs text-text-secondary">

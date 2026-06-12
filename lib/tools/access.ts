@@ -1,6 +1,6 @@
 import type { PlanName } from "@/lib/auth/user";
 
-export type ToolRole = "guest" | "free" | "pro" | "studio";
+export type ToolRole = "guest" | "free" | "plus" | "pro";
 
 export type ToolAccess = {
   role: ToolRole;
@@ -55,7 +55,7 @@ export const buildToolAccess = (
   if (isLoading) return { ...guestToolAccess, isLoading: true };
   if (!plan) return guestToolAccess;
 
-  const isPro = plan === "Pro" || plan === "Studio";
+  const isPro = plan === "Plus" || plan === "Pro";
   if (!isPro) {
     return {
       ...guestToolAccess,
@@ -69,16 +69,16 @@ export const buildToolAccess = (
   }
 
   return {
-    role: plan === "Studio" ? "studio" : "pro",
+    role: plan === "Pro" ? "pro" : "plus",
     plan,
     isLoading: false,
     isGuest: false,
     isPro: true,
-    maxFilesPerImport: plan === "Studio" ? 200 : 50,
-    maxFilesPerProject: plan === "Studio" ? 500 : 100,
-    maxConvertAtOnce: plan === "Studio" ? 200 : 50,
+    maxFilesPerImport: plan === "Pro" ? 200 : 50,
+    maxFilesPerProject: plan === "Pro" ? 500 : 100,
+    maxConvertAtOnce: plan === "Pro" ? 200 : 50,
     maxSavedProjects: 50,
-    maxPdfItems: plan === "Studio" ? 500 : 100,
+    maxPdfItems: plan === "Pro" ? 500 : 100,
     canUseRecentProjects: true,
     canUseMultipleProjects: true,
     canUsePremiumPresets: true,
@@ -88,7 +88,7 @@ export const buildToolAccess = (
     canExportZip: true,
     canExportWithoutWatermark: true,
     canCommercialUse: true,
-    canCloudSync: plan === "Studio",
+    canCloudSync: plan === "Pro",
   };
 };
 

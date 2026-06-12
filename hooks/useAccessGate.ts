@@ -14,8 +14,18 @@ export function useAccessGate(access: ToolAccess) {
   const [gateNotice, setGateNotice] = useState<GateNotice | null>(null)
 
   const showLoginGate = useCallback(
-    (message: string) =>
-      setGateNotice({ title: 'Sign in required', message, href: '/login?redirectTo=/tools/projects', action: 'Sign in' }),
+    (message: string) => {
+      let redirectPath = '/studio/projects'
+      if (typeof window !== 'undefined') {
+        redirectPath = window.location.pathname + window.location.search
+      }
+      setGateNotice({
+        title: 'Sign in required',
+        message,
+        href: `/login?redirectTo=${encodeURIComponent(redirectPath)}`,
+        action: 'Sign in',
+      })
+    },
     []
   )
 

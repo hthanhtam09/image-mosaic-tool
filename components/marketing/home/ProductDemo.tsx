@@ -1,38 +1,48 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
+import { useState } from "react";
 
 interface Tab {
-  id: string
-  label: string
-  features: string[]
-  videoSrc?: string
+  id: string;
+  label: string;
+  features: string[];
+  videoSrc?: string;
 }
 
 const TABS: Tab[] = [
   {
-    id: 'upload',
-    label: 'Upload image',
-    features: ['Single photo or folder', 'Drag & drop', 'Any format', 'Instant preview'],
-    videoSrc: '/assets/record.mov',
+    id: "upload",
+    label: "Upload image",
+    features: [
+      "Single photo or folder",
+      "Drag & drop",
+      "Any format",
+      "Instant preview",
+    ],
+    videoSrc: "/assets/record.mov",
   },
   {
-    id: 'style',
-    label: 'Pick a style',
-    features: ['10 mosaic patterns', 'Live preview', 'Custom color count', 'Auto-palette'],
-    videoSrc: '/assets/record.mov',
+    id: "style",
+    label: "Pick a style",
+    features: [
+      "10 mosaic patterns",
+      "Live preview",
+      "Custom color count",
+      "Auto-palette",
+    ],
+    videoSrc: "/assets/record.mov",
   },
   {
-    id: 'export',
-    label: 'Export PDF',
-    features: ['8.5 × 11 in', 'Numbered page', 'Answer key', 'KDP-ready'],
-    videoSrc: '/assets/record.mov',
+    id: "export",
+    label: "Export PDF",
+    features: ["8.5 × 11 in", "Numbered page", "Answer key", "KDP-ready"],
+    videoSrc: "/assets/record.mov",
   },
-]
+];
 
 export default function ProductDemo() {
-  const [active, setActive] = useState(0)
-  const tab = TABS[active]
+  const [active, setActive] = useState(0);
+  const tab = TABS[active];
 
   return (
     <section className="py-28">
@@ -55,10 +65,10 @@ export default function ProductDemo() {
               type="button"
               onClick={() => setActive(i)}
               className={
-                'rounded-full border px-5 py-2 text-[14px] font-medium transition-all duration-150 ' +
+                "rounded-full border px-5 py-2 text-[14px] font-medium transition-all duration-150 " +
                 (i === active
-                  ? 'border-white bg-transparent text-white'
-                  : 'border-border-primary text-text-secondary hover:border-white/40 hover:text-white')
+                  ? "border-white bg-transparent text-white"
+                  : "border-border-primary text-text-secondary hover:border-white/40 hover:text-white")
               }
             >
               {t.label}
@@ -69,7 +79,10 @@ export default function ProductDemo() {
         {/* feature chips row */}
         <div className="mb-10 flex flex-wrap justify-center gap-x-7 gap-y-2">
           {tab.features.map((f) => (
-            <span key={f} className="flex items-center gap-2 text-[14px] text-text-secondary">
+            <span
+              key={f}
+              className="flex items-center gap-2 text-[14px] text-text-secondary"
+            >
               <svg
                 width="14"
                 height="14"
@@ -96,7 +109,7 @@ export default function ProductDemo() {
               <i className="block h-[11px] w-[11px] rounded-full bg-[#333]" />
             </span>
             <span className="flex h-[22px] flex-1 items-center rounded-md border border-border-primary bg-bg-primary px-2.5 font-mono text-[11px] text-text-secondary">
-              mosaci.app/tools
+              https://mosacistudio.com/studio
             </span>
           </div>
 
@@ -115,7 +128,13 @@ export default function ProductDemo() {
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-4 text-text-secondary">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border-primary bg-bg-secondary">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" className="text-accent">
+                  <svg
+                    width="26"
+                    height="26"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="text-accent"
+                  >
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 </div>
@@ -131,5 +150,5 @@ export default function ProductDemo() {
         </div>
       </div>
     </section>
-  )
+  );
 }

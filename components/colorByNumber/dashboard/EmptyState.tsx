@@ -14,11 +14,11 @@ import React, { type ReactNode, useEffect, useState } from 'react'
 
 type BeforeAfterMarkGridType = Extract<ColorByNumberGridType, 'square-mark' | 'hexagon-mark'>
 
-export type TabType = 'standard' | 'object' | 'folder' | 'before-after' | 'mark-practice'
+export type TabType = 'image-import' | 'object-focus' | 'batch-upload' | 'before-after' | 'mark-practice'
 
 export const tabs: Array<{ id: TabType; name: string; icon: ReactNode; color: string }> = [
   {
-    id: 'standard',
+    id: 'image-import',
     name: 'Image Import',
     icon: (
       <svg
@@ -39,7 +39,7 @@ export const tabs: Array<{ id: TabType; name: string; icon: ReactNode; color: st
     color: 'var(--accent)',
   },
   {
-    id: 'object',
+    id: 'object-focus',
     name: 'Object Focus',
     icon: (
       <svg
@@ -63,7 +63,7 @@ export const tabs: Array<{ id: TabType; name: string; icon: ReactNode; color: st
     color: '#a855f7',
   },
   {
-    id: 'folder',
+    id: 'batch-upload',
     name: 'Batch Upload',
     icon: (
       <svg
@@ -127,9 +127,9 @@ export const tabs: Array<{ id: TabType; name: string; icon: ReactNode; color: st
 
 // tabFeature lives at module scope so StandaloneImportSidebar can use it
 const tabFeatureMap: Record<TabType, keyof ToolFeatureFlags> = {
-  standard: 'standardImport',
-  object: 'objectFocus',
-  folder: 'folderUpload',
+  'image-import': 'standardImport',
+  'object-focus': 'objectFocus',
+  'batch-upload': 'folderUpload',
   'before-after': 'beforeAfter',
   'mark-practice': 'markPractice',
 }
@@ -146,14 +146,13 @@ export function StandaloneImportSidebar({
 }) {
   const features = useToolFeatures()
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [sidebarHovering, setSidebarHovering] = useState(false)
-  const isOpen = sidebarOpen || sidebarHovering
+  const isOpen = sidebarOpen
 
   const visibleTabs = tabs.filter((tab) => features[tabFeatureMap[tab.id]])
   const lockedReason = (tab: TabType): string | null => {
-    if (tab === 'standard') return null
-    if (tab === 'object' && !access.canUsePremiumPresets) return 'Pro'
-    if (tab === 'folder' && !access.canUseFolderUpload) return 'Pro'
+    if (tab === 'image-import') return null
+    if (tab === 'object-focus' && !access.canUsePremiumPresets) return 'Pro'
+    if (tab === 'batch-upload' && !access.canUseFolderUpload) return 'Pro'
     if (tab === 'before-after' && !access.canUseBeforeAfter) return 'Pro'
     if (tab === 'mark-practice' && !access.canUseMarkPractice) return 'Pro'
     return null
@@ -163,34 +162,26 @@ export function StandaloneImportSidebar({
     <div
       className="relative hidden shrink-0 lg:flex"
       style={{ width: isOpen ? 240 : 60, transition: 'width 200ms ease-out' }}
-      onMouseEnter={() => { if (!sidebarOpen) setSidebarHovering(true) }}
-      onMouseLeave={() => setSidebarHovering(false)}
     >
       <aside className="flex h-full w-full flex-col overflow-hidden border-r border-[var(--border-primary)] bg-[var(--bg-secondary)]">
         <nav className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden p-2" aria-label="Import modes">
-          <p
-            className="mb-1.5 px-2 text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)] transition-opacity duration-200"
-            style={{ opacity: isOpen ? 1 : 0 }}
-          >
-            Import modes
-          </p>
           <div className="space-y-0.5">
             {visibleTabs.map((tab) => {
               const locked = lockedReason(tab.id)
-              const isActive = activeTab === tab.id
+              const isActive = activeTab === tab.id || (tab.id === 'image-import' && !activeTab)
               return (
                 <button
                   key={tab.id}
                   title={!isOpen ? tab.name : undefined}
                   onClick={() => onTabClick?.(tab.id)}
-                  className={`flex items-center gap-2.5 rounded-lg py-1.5 text-left text-sm transition-colors ${isActive ? 'bg-white/[0.08] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-white/[0.06] hover:text-[var(--text-primary)]'}`}
+                  className={`flex items-center gap-2.5 rounded-lg py-1.5 text-left text-sm transition-colors focus:outline-none ${isActive ? 'bg-white/[0.08] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-white/[0.06] hover:text-[var(--text-primary)]'}`}
                   style={{ width: isOpen ? '100%' : 44, paddingLeft: 6, paddingRight: 6 }}
                 >
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-[var(--bg-tertiary)] ${isActive ? 'border-[var(--accent)]/40' : 'border-[var(--border-primary)]'}`} style={{ color: tab.color }}>
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-[var(--bg-tertiary)] ${isActive ? 'border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border-primary)] text-[var(--text-secondary)]'}`}>
                     {tab.icon}
                   </span>
                   <span
-                    className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden transition-opacity duration-200"
+                    className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden transition-opacity"
                     style={{ opacity: isOpen ? 1 : 0 }}
                   >
                     <span className="truncate font-medium">{tab.name}</span>
@@ -207,11 +198,11 @@ export function StandaloneImportSidebar({
         </nav>
       </aside>
       <button
-        onClick={() => { setSidebarOpen((v) => !v); setSidebarHovering(false) }}
+        onClick={() => setSidebarOpen((v) => !v)}
         title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         className="absolute right-0 top-1/2 z-20 flex h-14 w-5 -translate-y-1/2 translate-x-full items-center justify-center rounded-r-md border border-l-0 border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-muted)] transition-colors hover:bg-white/[0.06] hover:text-[var(--text-primary)]"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 transition-transform duration-200" style={{ transform: sidebarOpen ? 'rotate(0deg)' : 'rotate(180deg)' }} aria-hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 transition-transform" style={{ transform: sidebarOpen ? 'rotate(0deg)' : 'rotate(180deg)' }} aria-hidden>
           <path d="M15 18l-6-6 6-6" />
         </svg>
       </button>
@@ -246,14 +237,14 @@ export function ImportSidebar({
         <nav className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden p-2" aria-label="Import modes">
           <div className="space-y-0.5">
             {visibleTabs.map((tab) => {
-              const isActive = effectiveTab === tab.id
+              const isActive = effectiveTab === tab.id || (tab.id === 'image-import' && !effectiveTab)
               const locked = lockedReason(tab.id)
               return (
                 <button
                   key={tab.id}
                   onClick={() => onTabClick(tab.id)}
                   title={!sidebarOpen ? tab.name : undefined}
-                  className={`flex items-center gap-2.5 rounded-lg py-1.5 text-left text-sm transition-colors ${
+                  className={`flex items-center gap-2.5 rounded-lg py-1.5 text-left text-sm transition-colors focus:outline-none ${
                     isActive
                       ? 'bg-white/[0.08] text-[var(--text-primary)]'
                       : 'text-[var(--text-secondary)] hover:bg-white/[0.06] hover:text-[var(--text-primary)]'
@@ -261,13 +252,12 @@ export function ImportSidebar({
                   style={{ width: sidebarOpen ? '100%' : 44, paddingLeft: 6, paddingRight: sidebarOpen ? 6 : 6 }}
                 >
                   <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border-primary)] bg-[var(--bg-tertiary)]"
-                    style={{ color: isActive ? tab.color : 'currentColor' }}
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-[var(--bg-tertiary)] ${isActive ? 'border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border-primary)] text-[var(--text-secondary)]'}`}
                   >
                     {tab.icon}
                   </span>
                   <span
-                    className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden transition-opacity duration-200"
+                    className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden transition-opacity"
                     style={{ opacity: sidebarOpen ? 1 : 0 }}
                   >
                     <span className="truncate font-medium">{tab.name}</span>
@@ -296,7 +286,7 @@ export function ImportSidebar({
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="h-3 w-3 transition-transform duration-200"
+          className="h-3 w-3 transition-transform"
           style={{ transform: sidebarOpen ? 'rotate(0deg)' : 'rotate(180deg)' }}
           aria-hidden
         >
@@ -309,9 +299,9 @@ export function ImportSidebar({
 
 // Maps each import mode to the admin-controlled feature flag that gates it.
 const tabFeature: Record<TabType, keyof ToolFeatureFlags> = {
-  standard: 'standardImport',
-  object: 'objectFocus',
-  folder: 'folderUpload',
+  'image-import': 'standardImport',
+  'object-focus': 'objectFocus',
+  'batch-upload': 'folderUpload',
   'before-after': 'beforeAfter',
   'mark-practice': 'markPractice',
 }
@@ -347,6 +337,7 @@ interface EmptyStateProps {
   onTabSelect?: (tab: TabType) => void
   // Controlled active tab — when provided, overrides internal state
   activeTab?: TabType
+  importProgress?: { current: number; total: number } | null
 }
 
 export default function EmptyState({
@@ -371,9 +362,10 @@ export default function EmptyState({
   contentOnly = false,
   onTabSelect,
   activeTab: controlledTab,
+  importProgress,
 }: EmptyStateProps) {
   const features = useToolFeatures()
-  const [activeTab, setActiveTab] = useState<TabType>(controlledTab ?? 'standard')
+  const [activeTab, setActiveTab] = useState<TabType>(controlledTab ?? 'image-import')
 
   useEffect(() => {
     if (controlledTab) setActiveTab(controlledTab)
@@ -385,35 +377,41 @@ export default function EmptyState({
   const [markPracticeStatus, setMarkPracticeStatus] = useState('')
 
   const lockedReason = (tab: TabType): string | null => {
-    if (tab === 'standard') return null
-    if (tab === 'object' && !access.canUsePremiumPresets) return 'Pro'
-    if (tab === 'folder' && !access.canUseFolderUpload) return 'Pro'
+    if (tab === 'image-import') return null
+    if (tab === 'object-focus' && !access.canUsePremiumPresets) return 'Pro'
+    if (tab === 'batch-upload' && !access.canUseFolderUpload) return 'Pro'
     if (tab === 'before-after' && !access.canUseBeforeAfter) return 'Pro'
     if (tab === 'mark-practice' && !access.canUseMarkPractice) return 'Pro'
     return null
   }
 
-  const renderLocked = (label: string) => (
-    <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 p-8">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--accent)]/30 bg-[var(--bg-primary)] text-[var(--accent)]">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="11" width="18" height="10" rx="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
+  const renderLocked = (label: string) => {
+    let redirectPath = '/studio/projects'
+    if (typeof window !== 'undefined') {
+      redirectPath = window.location.pathname + window.location.search
+    }
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 p-8">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--accent)]/30 bg-[var(--bg-primary)] text-[var(--accent)]">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="10" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{label} is Pro</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+          Guest and Free workspaces can upload, preview, convert up to 3 images, adjust basic settings, and export limited
+          PNG/PDF.
+        </p>
+        <a
+          href={access.isGuest ? `/login?redirectTo=${encodeURIComponent(redirectPath)}` : '/pricing'}
+          className="mt-5 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] transition hover:bg-[var(--accent-hover)]"
+        >
+          {access.isGuest ? 'Sign in' : 'Upgrade'}
+        </a>
       </div>
-      <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{label} is Pro</h2>
-      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-        Guest and Free workspaces can upload, preview, convert up to 3 images, adjust basic settings, and export limited
-        PNG/PDF.
-      </p>
-      <a
-        href={access.isGuest ? '/login?redirectTo=/studio/projects' : '/pricing'}
-        className="mt-5 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] transition hover:bg-[var(--accent-hover)]"
-      >
-        {access.isGuest ? 'Sign in' : 'Upgrade'}
-      </a>
-    </div>
-  )
+    )
+  }
 
   const handleDownloadMarkPractice = async () => {
     if (!access.canUseMarkPractice) {
@@ -464,178 +462,150 @@ export default function EmptyState({
         </p>
       )
     }
+
+    if (importProgress && (effectiveTab === 'image-import' || effectiveTab === 'object-focus')) {
+      return (
+        <div className="mx-auto flex w-full max-w-md flex-col items-center gap-5 p-8 rounded-2xl border border-white/10 bg-[var(--bg-secondary)] shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          <div className="relative flex items-center justify-center w-14 h-14 mb-2">
+            <div className="absolute inset-0 rounded-full border-4 border-white/5 border-t-[var(--accent)] animate-spin" />
+            <svg className="w-5 h-5 text-[var(--accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-white">Importing Images...</p>
+            <p className="mt-1 text-xs text-white/50">Reading file {importProgress.current} of {importProgress.total}</p>
+          </div>
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-[var(--accent)] transition-all duration-300 rounded-full"
+              style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )
+    }
     const reason = lockedReason(effectiveTab)
     if (reason) {
       const label = tabs.find((tab) => tab.id === effectiveTab)?.name ?? 'This workflow'
       return renderLocked(label)
     }
     switch (effectiveTab) {
-      case 'standard':
+      case 'image-import':
         return (
-          <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-24 h-24 rounded-3xl bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(34,211,238,0.1)]">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-            </div>
-            <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Standard Import</h2>
-            <p className="text-lg text-[var(--text-secondary)] mb-12 max-w-md">
-              Convert multiple images into mosaic patterns. Focuses on the entire frame of each image.
-            </p>
+          <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
+            {/* Big drop zone */}
             <button
               onClick={handleImportClick}
-              className="px-12 py-5 text-xl font-semibold text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-2xl shadow-[0_8px_30px_rgb(34,211,238,0.3)] transition-all hover:scale-105 active:scale-95"
+              className="group relative w-full rounded-2xl border-2 border-dashed border-[var(--border-primary)] bg-[var(--bg-secondary)] p-14 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--accent)]/[0.03]"
+            >
+              {/* Upload arrow */}
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-primary)] text-[var(--text-muted)] ring-1 ring-[var(--border-primary)] transition-all group-hover:text-[var(--accent)] group-hover:ring-[var(--accent)]/40">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold text-[var(--text-primary)]">Drop images here</p>
+              <p className="mt-1.5 text-sm text-[var(--text-secondary)]">or click to browse your files</p>
+              <p className="mt-3 text-xs text-[var(--text-muted)]">PNG · JPG · Multiple files supported</p>
+            </button>
+            {/* Primary CTA */}
+            <button
+              onClick={handleImportClick}
+              className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-semibold text-[var(--bg-primary)] transition-colors hover:bg-[var(--accent-hover)]"
             >
               Select Images
             </button>
           </div>
         )
-      case 'object':
+      case 'object-focus':
         return (
-          <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-24 h-24 rounded-3xl bg-purple-500/10 text-purple-500 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(168,85,247,0.1)] relative">
-              <div className="absolute -top-2 -right-2 bg-purple-500 text-white p-1.5 rounded-full shadow-lg">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
+            {/* Context label */}
+            <div className="flex items-center gap-2 self-center rounded-full bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-300">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+                <circle cx="12" cy="12" r="4" />
               </svg>
+              White backgrounds removed automatically
             </div>
-            <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Object Focus</h2>
-            <p className="text-lg text-[var(--text-secondary)] mb-12 max-w-md">
-              Automatically strips white backgrounds to isolate the main object. Perfect for creating character
-              stickers.
-            </p>
+            {/* Big drop zone */}
             <button
               onClick={handleImportTransparentClick}
-              className="px-12 py-5 text-xl font-semibold text-white bg-purple-500 hover:bg-purple-600 rounded-2xl shadow-[0_8px_30px_rgba(168,85,247,0.3)] transition-all hover:scale-105 active:scale-95"
+              className="group relative w-full rounded-2xl border-2 border-dashed border-purple-500/25 bg-[var(--bg-secondary)] p-14 text-center transition-all hover:border-purple-400/60 hover:bg-purple-500/[0.04]"
             >
-              Transparent Import
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-primary)] text-purple-500/50 ring-1 ring-purple-500/20 transition-all group-hover:text-purple-400 group-hover:ring-purple-400/40">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold text-[var(--text-primary)]">Drop images here</p>
+              <p className="mt-1.5 text-sm text-[var(--text-secondary)]">Object will be isolated, background stripped</p>
+              <p className="mt-3 text-xs text-[var(--text-muted)]">PNG · JPG · Multiple files supported</p>
+            </button>
+            <button
+              onClick={handleImportTransparentClick}
+              className="w-full rounded-xl bg-purple-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-purple-600"
+            >
+              Select Images
             </button>
           </div>
         )
-      case 'folder':
+      case 'batch-upload':
         return (
-          <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-24 h-24 rounded-3xl bg-blue-500/10 text-blue-500 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(59,130,246,0.1)]">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-              </svg>
-            </div>
-            <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Folder Upload</h2>
-            <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
-              Bulk upload images with pre-separated <b>color/</b>, <b>uncolor/</b>, optional <b>palette/</b>, and{' '}
-              <b>solutions_collage/</b> subfolders.
-            </p>
-
-            <div className="flex flex-wrap justify-center gap-4 mb-12 max-w-3xl">
-              <div
-                className={`flex flex-col items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all duration-500 min-w-[120px] ${
-                  uploadedFolders.color
-                    ? 'bg-green-500/20 border-green-500 text-green-400 shadow-[0_0_20px_rgba(34,197,94,0.2)]'
-                    : 'bg-white/5 border-white/10 text-[var(--text-muted)]'
-                }`}
-              >
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${uploadedFolders.color ? 'bg-green-500 text-white' : 'bg-white/10'}`}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+          <div className="mx-auto flex w-full max-w-lg flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
+            {/* Folder structure diagram */}
+            <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-5">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Expected folder structure</p>
+              <div className="space-y-1 font-mono text-sm">
+                <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span className="text-[var(--text-primary)] font-semibold">my-project/</span>
+                  <span className="text-[10px] text-[var(--text-muted)]">← select this</span>
                 </div>
-                <span>Color</span>
-              </div>
-              <div
-                className={`flex flex-col items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all duration-500 min-w-[120px] ${
-                  uploadedFolders.uncolor
-                    ? 'bg-blue-500/20 border-blue-500 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.2)]'
-                    : 'bg-white/5 border-white/10 text-[var(--text-muted)]'
-                }`}
-              >
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${uploadedFolders.uncolor ? 'bg-blue-500 text-white' : 'bg-white/10'}`}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <span>Uncolor</span>
-              </div>
-              <div
-                className={`flex flex-col items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all duration-500 min-w-[120px] ${
-                  uploadedFolders.palette
-                    ? 'bg-pink-500/20 border-pink-500 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.2)]'
-                    : 'bg-white/5 border-white/10 text-[var(--text-muted)]'
-                }`}
-              >
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${uploadedFolders.palette ? 'bg-pink-500 text-white' : 'bg-white/10'}`}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span>Palette</span>
-                  <span className="text-[10px] font-normal opacity-70">(Optional)</span>
-                </div>
-              </div>
-              <div
-                className={`flex flex-col items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold border transition-all duration-500 min-w-[120px] ${
-                  uploadedFolders.solutionsCollage
-                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
-                    : 'bg-white/5 border-white/10 text-[var(--text-muted)]'
-                }`}
-              >
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${uploadedFolders.solutionsCollage ? 'bg-cyan-500 text-white' : 'bg-white/10'}`}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span>Solutions</span>
-                  <span className="text-[10px] font-normal opacity-70">(Optional)</span>
-                </div>
+                {[
+                  { label: 'color/', ready: uploadedFolders.color, required: true, dot: 'bg-green-500' },
+                  { label: 'uncolor/', ready: uploadedFolders.uncolor, required: true, dot: 'bg-blue-500' },
+                  { label: 'palette/', ready: uploadedFolders.palette, required: false, dot: 'bg-pink-500' },
+                  { label: 'solutions_collage/', ready: uploadedFolders.solutionsCollage, required: false, dot: 'bg-cyan-500' },
+                ].map(({ label, ready, required, dot }) => (
+                  <div key={label} className="flex items-center gap-2 pl-5">
+                    <span className="text-[var(--text-muted)]">└─</span>
+                    <span className={`${ready ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>{label}</span>
+                    {required && !ready && <span className="text-[10px] text-[var(--text-muted)]">required</span>}
+                    {!required && <span className="text-[10px] text-[var(--text-muted)]">optional</span>}
+                    {ready && <span className={`ml-auto h-2 w-2 rounded-full ${dot}`} />}
+                  </div>
+                ))}
               </div>
             </div>
-
-            <div className="flex flex-col gap-4 items-center">
+            {/* Actions */}
+            <div className="flex gap-3">
               <button
                 onClick={() => dirInputRef.current?.click()}
                 disabled={isProcessingFolder}
-                className="px-12 py-4 text-lg font-semibold text-blue-400 border border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-[260px]"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 py-3 text-sm font-semibold text-blue-300 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
               >
                 {isProcessingFolder ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    Scanning...
-                  </>
+                  <><div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />Scanning…</>
                 ) : (
-                  'Select Root Folder'
+                  <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Select Root Folder</>
                 )}
               </button>
-
               {uploadedFolders.color && uploadedFolders.uncolor && (
                 <button
                   onClick={handleNextToSetup}
                   disabled={isPreparingStep2 || isProcessingFolder}
-                  className="px-12 py-4 text-lg font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-[0_8px_30px_rgba(37,99,235,0.3)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-[260px] animate-in fade-in slide-in-from-bottom-2"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50 animate-in fade-in slide-in-from-right-2"
                 >
                   {isPreparingStep2 ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   ) : (
-                    <>
-                      Continue to Setup
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="9 18 15 12 9 6" />
-                      </svg>
-                    </>
+                    <>Continue <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg></>
                   )}
                 </button>
               )}
@@ -644,101 +614,116 @@ export default function EmptyState({
         )
       case 'before-after':
         return (
-          <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-24 h-24 rounded-3xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(245,158,11,0.1)]">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14" />
-                <path d="m13 6 6 6-6 6" />
-                <rect x="3" y="5" width="6" height="14" rx="1.5" />
-                <rect x="15" y="5" width="6" height="14" rx="1.5" />
-              </svg>
+          <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
+            {/* Visual preview of what this mode does */}
+            <div className="flex w-full items-stretch gap-2 rounded-2xl border border-amber-500/20 bg-[var(--bg-secondary)] p-4">
+              <div className="flex flex-1 flex-col items-center justify-center gap-1 rounded-xl bg-[var(--bg-primary)] py-5">
+                <div className="flex gap-0.5">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-4 w-4 rounded-sm bg-white/10" />
+                  ))}
+                </div>
+                <span className="text-[10px] font-medium text-[var(--text-muted)]">Uncolored</span>
+              </div>
+              <div className="flex shrink-0 items-center px-1 text-amber-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </div>
+              <div className="flex flex-1 flex-col items-center justify-center gap-1 rounded-xl bg-[var(--bg-primary)] py-5">
+                <div className="flex gap-0.5">
+                  {['bg-red-400','bg-blue-400','bg-green-400','bg-yellow-400'].map((c,i) => (
+                    <div key={i} className={`h-4 w-4 rounded-sm ${c} opacity-80`} />
+                  ))}
+                </div>
+                <span className="text-[10px] font-medium text-[var(--text-muted)]">Colored</span>
+              </div>
             </div>
-            <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Before/After</h2>
-            <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
-              Import one image and generate a before/after PNG automatically: uncolored on the left, colored on the
-              right.
-            </p>
-
-            <div className="mb-8 flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
-              <span className="text-sm font-semibold text-amber-200">Mark</span>
+            {/* Mark style selector */}
+            <div className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-4 py-3">
+              <span className="text-sm text-[var(--text-secondary)]">Mark style</span>
               <select
                 value={beforeAfterGridType}
                 disabled={isProcessingFolder}
                 onChange={(e) => setBeforeAfterGridType(e.target.value as BeforeAfterMarkGridType)}
-                className="h-9 rounded-lg border border-amber-400/40 bg-[var(--bg-primary)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                className="ml-auto h-8 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 text-sm text-[var(--text-primary)] outline-none"
               >
-                <option value="square-mark">Square mark</option>
-                <option value="hexagon-mark">Hexagon mark</option>
+                <option value="square-mark">Square</option>
+                <option value="hexagon-mark">Hexagon</option>
               </select>
             </div>
-
+            {/* CTA */}
             <button
               onClick={() => beforeAfterInputRef.current?.click()}
               disabled={isProcessingFolder}
-              className="px-12 py-4 text-lg font-semibold text-amber-300 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/15 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-[280px]"
+              className="w-full rounded-xl bg-amber-500 py-3 text-sm font-semibold text-[var(--bg-primary)] transition-colors hover:bg-amber-400 disabled:opacity-50"
             >
               {isProcessingFolder ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                  Scanning...
-                </>
-              ) : (
-                'Select Image'
-              )}
+                <span className="flex items-center justify-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />Scanning…
+                </span>
+              ) : 'Select 1 Image → Auto-generate Split'}
             </button>
           </div>
         )
       case 'mark-practice':
         return (
-          <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-24 h-24 rounded-3xl bg-green-500/10 text-green-400 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(34,197,94,0.1)]">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 7h16" />
-                <path d="M4 12h16" />
-                <path d="M4 17h16" />
-                <path d="M7 4v16" />
-                <path d="M12 4v16" />
-              </svg>
+          <div className="mx-auto flex w-full max-w-xl flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
+            {/* Description card */}
+            <div className="rounded-2xl border border-green-500/20 bg-[var(--bg-secondary)] p-5">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10 text-green-400">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">What you'll get</p>
+                  <p className="text-xs text-[var(--text-muted)]">A ZIP archive with printable practice sheets</p>
+                </div>
+              </div>
+              <ul className="space-y-2">
+                {['One PNG strip per mark type with empty practice cells', 'Two completed example sheets for reference', 'All bundled into a single ZIP file'].map((item) => (
+                  <li key={item} className="flex items-start gap-2 text-sm text-[var(--text-secondary)]">
+                    <svg className="mt-0.5 shrink-0 text-green-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Mark Practice</h2>
-            <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-md">
-              Export each mark into its own PNG strip with empty mark cells after it, plus two example images.
-            </p>
-
-            <div className="mb-8 flex items-center gap-3 rounded-2xl border border-green-400/30 bg-green-400/10 px-4 py-3">
-              <span className="text-sm font-semibold text-green-200">Mark</span>
+            {/* Mark style */}
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-4 py-3">
+              <span className="text-sm text-[var(--text-secondary)]">Mark style</span>
               <select
                 value={markPracticeGridType}
                 disabled={isGeneratingMarkPractice}
                 onChange={(e) => setMarkPracticeGridType(e.target.value as MarkPracticeGridType)}
-                className="h-9 rounded-lg border border-green-400/40 bg-[var(--bg-primary)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none"
+                className="ml-auto h-8 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 text-sm text-[var(--text-primary)] outline-none"
               >
-                <option value="hexagon-mark">Hexagon mark</option>
-                <option value="square-mark">Square mark</option>
+                <option value="hexagon-mark">Hexagon</option>
+                <option value="square-mark">Square</option>
               </select>
             </div>
-
+            {markPracticeStatus && (
+              <p className="text-center text-sm text-[var(--text-secondary)]">{markPracticeStatus}</p>
+            )}
+            {/* Generate button */}
             <button
               onClick={handleDownloadMarkPractice}
               disabled={isGeneratingMarkPractice}
-              className="px-12 py-4 text-lg font-semibold text-green-300 border border-green-400/40 bg-green-400/10 hover:bg-green-400/15 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-[300px]"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
             >
               {isGeneratingMarkPractice ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
-                  Generating...
-                </>
+                <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />Generating…</>
               ) : (
-                'Download Mark Files'
+                <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Generate &amp; Download ZIP</>
               )}
             </button>
-            {markPracticeStatus && <p className="mt-4 text-sm text-[var(--text-secondary)]">{markPracticeStatus}</p>}
           </div>
         )
       default:
         return null
     }
   }
+
 
   // sidebarOnly: render only the ImportSidebar (no content, no hidden inputs)
   if (sidebarOnly) {
@@ -783,7 +768,7 @@ export default function EmptyState({
               <button
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                className={`inline-flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none ${
                   isActive
                     ? 'border-[var(--accent)]/50 bg-[var(--accent)]/10 text-[var(--text-primary)]'
                     : 'border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]'
@@ -800,7 +785,7 @@ export default function EmptyState({
             )
           })}
         </div>
-        <div className="w-full max-w-4xl text-center">{renderContent()}</div>
+        <div className="w-full max-w-4xl text-center outline-none border-none">{renderContent()}</div>
       </>
     )
   }
@@ -830,7 +815,7 @@ export default function EmptyState({
                 <button
                   key={tab.id}
                   onClick={() => handleTabClick(tab.id)}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none ${
                     isActive
                       ? 'border-[var(--accent)]/50 bg-[var(--accent)]/10 text-[var(--text-primary)]'
                       : 'border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]'
@@ -848,7 +833,7 @@ export default function EmptyState({
             })}
           </div>
           <div className="flex min-h-0 flex-1 items-center justify-center">
-            <div className="w-full max-w-4xl text-center">{renderContent()}</div>
+            <div className="w-full max-w-4xl text-center outline-none border-none">{renderContent()}</div>
           </div>
         </div>
       </main>

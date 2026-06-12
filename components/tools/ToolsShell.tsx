@@ -4,6 +4,26 @@ import { MosaciLogoMark } from '@/components/MosaciLogo'
 import ToolUserHeader from '@/components/tools/ToolUserHeader'
 import Link from 'next/link'
 import { type CSSProperties, type ReactNode, useState } from 'react'
+import { useColorByNumberStore } from '@/store/useColorByNumberStore'
+
+const PROJECTS_ROUTE = '/studio/projects'
+const projectRoute = (slug: string) => `${PROJECTS_ROUTE}/${encodeURIComponent(slug)}`
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function getTabLabel(tab: string | null): string {
+  if (!tab) return ''
+  switch (tab) {
+    case 'image-import': return 'Image Import'
+    case 'object-focus': return 'Object Focus'
+    case 'batch-upload': return 'Batch Upload'
+    case 'before-after': return 'Before / After'
+    case 'mark-practice': return 'Mark Practice'
+    default: return tab.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+  }
+}
 
 type NavItem = {
   label: string
@@ -79,6 +99,37 @@ function SidebarLink({ item, expanded, hovering }: { item: NavItem; expanded: bo
 export default function ToolsShell({ children }: { children: ReactNode }) {
   const [hovering, setHovering] = useState(false)
 
+  const projectFolder = useColorByNumberStore((state) => state.projectFolder)
+  const showProjectList = useColorByNumberStore((state) => state.workspaceShowProjectList)
+  const activeTab = useColorByNumberStore((state) => state.workspaceActiveTab)
+
+  const handleStudioClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (typeof window !== 'undefined' && window.history.state?.fromWorkspaceList) {
+      window.history.back()
+    } else {
+      useColorByNumberStore.getState().setWorkspaceShowProjectList(true)
+      useColorByNumberStore.getState().setWorkspaceActiveTab(null)
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', PROJECTS_ROUTE)
+      }
+    }
+  }
+
+  const handleProjectClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (projectFolder) {
+      const slug = toSlug(projectFolder.name)
+      const nextUrl = projectRoute(slug)
+      useColorByNumberStore.getState().setWorkspaceActiveTab(null)
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(window.history.state, '', nextUrl)
+      }
+    }
+  }
+
+  const tabLabel = getTabLabel(activeTab)
+
   const sidebarWidth = hovering ? 220 : 56
 
   return (
@@ -116,7 +167,67 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
         style={{ paddingLeft: 56 }}
       >
         <header className="relative z-30 flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-primary)] bg-[var(--bg-secondary)] px-4">
-          <span className="text-lg font-medium">Studio</span>
+          <nav aria-label="Breadcrumb" className="flex items-center text-sm font-medium text-[var(--text-secondary)]">
+            <ol className="inline-flex items-center space-x-1 md:space-x-1.5">
+              <li className="inline-flex items-center">
+                {showProjectList ? (
+                  <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">Studio</span>
+                ) : (
+                  <a
+                    href={PROJECTS_ROUTE}
+                    onClick={handleStudioClick}
+                    className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
+                  >
+                    Studio
+                  </a>
+                )}
+              </li>
+              {!showProjectList && projectFolder && (
+                <>
+                  <li className="flex items-center">
+                    <svg
+                      className="mx-1 h-3.5 w-3.5 text-[var(--text-muted)] opacity-60 md:mx-1.5"
+                      aria-hidden="true"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    {activeTab ? (
+                      <a
+                        href={projectRoute(toSlug(projectFolder.name))}
+                        onClick={handleProjectClick}
+                        className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
+                      >
+                        {projectFolder.name}
+                      </a>
+                    ) : (
+                      <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">
+                        {projectFolder.name}
+                      </span>
+                    )}
+                  </li>
+                  {activeTab && (
+                    <li className="flex items-center">
+                      <svg
+                        className="mx-1 h-3.5 w-3.5 text-[var(--text-muted)] opacity-60 md:mx-1.5"
+                        aria-hidden="true"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">
+                        {tabLabel}
+                      </span>
+                    </li>
+                  )}
+                </>
+              )}
+            </ol>
+          </nav>
           <ToolUserHeader />
         </header>
 

@@ -99,6 +99,9 @@ export interface ColorByNumberState {
   toolProjectSummaries: ToolProjectSummary[];
   hasLoadedToolProjectSummaries: boolean;
 
+  workspaceShowProjectList: boolean;
+  workspaceActiveTab: string | null;
+
   // Actions
   togglePaletteGlobal: () => void;
 
@@ -110,8 +113,8 @@ export interface ColorByNumberState {
   removeAllProjects: () => void;
 
 
-  // Project Management
   addProject: (file: File, dataUrl: string, options?: Partial<Project>) => void;
+  addProjects: (projectsList: { file: File; dataUrl: string; options?: Partial<Project> }[]) => void;
   setActiveProject: (id: string | null) => void;
   removeProject: (id: string) => void;
   updateActiveProject: (updates: Partial<Project>) => void;
@@ -124,9 +127,12 @@ export interface ColorByNumberState {
   clearProjectFolder: () => void;
   getProjectFolderSettings: () => ProjectFolderSettings;
   setToolProjectSummaries: (summaries: ToolProjectSummary[]) => void;
+  setWorkspaceShowProjectList: (show: boolean) => void;
+  setWorkspaceActiveTab: (tab: string | null) => void;
 
   // Batch Actions
   convertAllIdleProjects: () => Promise<void>;
+  convertSingleProject: (projectId: string) => Promise<void>;
 
   // Actions that modify the ACTIVE project
   setZoom: (zoom: number) => void;
@@ -151,6 +157,17 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   conversionJob: emptyConversionJob,
   toolProjectSummaries: [],
   hasLoadedToolProjectSummaries: false,
+  workspaceShowProjectList: typeof window !== 'undefined' ? !window.location.pathname.startsWith('/studio/projects/') : true,
+  workspaceActiveTab: typeof window !== 'undefined' ? (() => {
+    const p = window.location.pathname
+    const PROJECTS_ROUTE = '/studio/projects'
+    if (!p.startsWith(PROJECTS_ROUTE + '/')) return null
+    const subPath = p.slice(PROJECTS_ROUTE.length + 1)
+    const parts = subPath.split('/').map(decodeURIComponent)
+    const tabCandidate = parts[1] || null
+    const VALID_TABS = ['image-import', 'object-focus', 'batch-upload', 'before-after', 'mark-practice']
+    return VALID_TABS.includes(tabCandidate || '') ? tabCandidate : null
+  })() : null,
 
   togglePaletteGlobal: () =>
     set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),
@@ -222,6 +239,34 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     }));
   },
 
+  addProjects: (projectsList) => {
+    const newProjects = projectsList.map(({ file, dataUrl, options = {} }) => {
+      const newProject: Project = {
+        id: options.id ?? crypto.randomUUID(),
+        name: file.name,
+        originalFile: file,
+        thumbnailDataUrl: dataUrl,
+        data: null,
+        status: "idle",
+        filled: {},
+        selectedCode: null,
+        removeBackground: false,
+        gridType: "standard",
+        useDithering: true,
+        partialColorMode: "none",
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        ...options,
+      };
+      return newProject;
+    });
+
+    set((state) => ({
+      projects: [...state.projects, ...newProjects],
+    }));
+  },
+
   setActiveProject: (id) => set({ activeProjectId: id }),
 
   removeProject: (id) =>
@@ -278,6 +323,9 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
 
   setToolProjectSummaries: (summaries) =>
     set({ toolProjectSummaries: summaries, hasLoadedToolProjectSummaries: true }),
+
+  setWorkspaceShowProjectList: (show) => set({ workspaceShowProjectList: show }),
+  setWorkspaceActiveTab: (tab) => set({ workspaceActiveTab: tab }),
 
   removeAllProjects: () =>
     set({
@@ -384,6 +432,29 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
         },
       };
     });
+  },
+
+  convertSingleProject: async (projectId: string) => {
+    const { projects, updateProject, globalCellSize } = get();
+    const p = projects.find((x) => x.id === projectId);
+    if (!p || p.status === "processing") return;
+
+    updateProject(projectId, { status: "processing" });
+    try {
+      const isMarkProject =
+        p.gridType === "square-mark" || p.gridType === "hexagon-mark";
+      const result = await imageToColorByNumber(p.originalFile, {
+        gridType: p.gridType,
+        cellSize: globalCellSize,
+        useDithering: p.useDithering,
+        removeWhiteBackground: p.removeBackground || isMarkProject,
+        removeBottomWatermark: false,
+      });
+      updateProject(projectId, { data: result, status: "completed" });
+    } catch (e) {
+      console.error(`Failed to convert project ${projectId}`, e);
+      updateProject(projectId, { status: "error" });
+    }
   },
 
   // --- Actions working on Active Project ---

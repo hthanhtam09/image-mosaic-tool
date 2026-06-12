@@ -219,8 +219,8 @@ export function BarChart() {
 
 export function DonutChart() {
   const segments = [
-    { label: "Pro", amount: "$24.1k", value: 24.1, color: "var(--accent-primary)" },
-    { label: "Studio", amount: "$13.8k", value: 13.8, color: "#2A636B" },
+    { label: "Plus", amount: "$24.1k", value: 24.1, color: "var(--accent-primary)" },
+    { label: "Pro", amount: "$13.8k", value: 13.8, color: "#2A636B" },
     { label: "Free", amount: "$3.6k", value: 3.6, color: "#64748B" },
   ];
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);

@@ -1,7 +1,7 @@
 'use client'
 
 import MosaicWorkspace from '@/components/colorByNumber/MosaicWorkspace'
-import { StandaloneImportSidebar } from '@/components/colorByNumber/dashboard/EmptyState'
+import { StandaloneImportSidebar, type TabType } from '@/components/colorByNumber/dashboard/EmptyState'
 import { useToolAccess } from '@/components/tools/useToolAccess'
 import {
   cleanupToolProjectStorage,
@@ -37,7 +37,6 @@ type StorageToast = {
   actionHref?: string
 }
 
-const GUEST_PROJECT_ID = 'guest-temp-project'
 const PROJECT_QUERY_KEY = 'project'
 const PROJECTS_ROUTE = '/studio/projects'
 const projectRoute = (slug: string) => `${PROJECTS_ROUTE}/${encodeURIComponent(slug)}`
@@ -79,22 +78,38 @@ const conversionPercent = (job: Pick<ConversionJob, 'total' | 'completed' | 'fai
 }
 
 // Update URL without going through Next.js router (no re-render, instant)
-function navReplace(url: string) {
-  window.history.replaceState(null, '', url)
+function navReplace(url: string, state: unknown = null) {
+  if (typeof window !== 'undefined') {
+    window.history.replaceState(state, '', url)
+  }
 }
 
-function getSlugFromUrl(): string | null {
-  if (typeof window === 'undefined') return null
+function navPush(url: string, state: unknown = null) {
+  if (typeof window !== 'undefined') {
+    window.history.pushState(state, '', url)
+  }
+}
+
+const VALID_TABS = ['image-import', 'object-focus', 'batch-upload', 'before-after', 'mark-practice'] as const
+
+function getProjectAndTabFromUrl(): { projectSlug: string | null; tab: TabType | null } {
+  if (typeof window === 'undefined') return { projectSlug: null, tab: null }
   const p = window.location.pathname
-  return p.startsWith(PROJECTS_ROUTE + '/')
-    ? decodeURIComponent(p.slice(PROJECTS_ROUTE.length + 1))
-    : null
+  if (!p.startsWith(PROJECTS_ROUTE + '/')) {
+    return { projectSlug: null, tab: null }
+  }
+  const subPath = p.slice(PROJECTS_ROUTE.length + 1)
+  const parts = subPath.split('/').map(decodeURIComponent)
+  const projectSlug = parts[0] || null
+  const tabCandidate = parts[1] || null
+  const tab = (VALID_TABS as readonly string[]).includes(tabCandidate || '') ? (tabCandidate as TabType) : null
+  return { projectSlug, tab }
 }
 
 export default function ToolProjectWorkspace() {
   const searchParams = useSearchParams()
-  // Read actual browser URL (not Next.js router) — history.replaceState keeps this accurate
-  const initialRouteProjectSlug = useRef(getSlugFromUrl())
+  const [initialUrlInfo] = useState(() => getProjectAndTabFromUrl())
+  const [initialRouteProjectSlug] = useState(() => initialUrlInfo.projectSlug)
   const access = useToolAccess()
   const projectFolder = useColorByNumberStore((state) => state.projectFolder)
   const projects = useColorByNumberStore((state) => state.projects)
@@ -103,6 +118,7 @@ export default function ToolProjectWorkspace() {
   const hasLoadedSummaries = useColorByNumberStore((state) => state.hasLoadedToolProjectSummaries)
   const setSummaries = useColorByNumberStore((state) => state.setToolProjectSummaries)
   const hydrateProjectFolder = useColorByNumberStore((state) => state.hydrateProjectFolder)
+  const updateProject = useColorByNumberStore((state) => state.updateProject)
   const clearProjectFolder = useColorByNumberStore((state) => state.clearProjectFolder)
   const globalCellSize = useColorByNumberStore((state) => state.globalCellSize)
   const globalShowNumbers = useColorByNumberStore((state) => state.globalShowNumbers)
@@ -114,14 +130,17 @@ export default function ToolProjectWorkspace() {
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [storageError, setStorageError] = useState<string | null>(null)
   const [storageToast, setStorageToast] = useState<StorageToast | null>(null)
-  const [showProjectList, setShowProjectList] = useState(!initialRouteProjectSlug.current)
-  const [requestedTab, setRequestedTab] = useState<import('@/components/colorByNumber/dashboard/EmptyState').TabType | null>(null)
+  const showProjectList = useColorByNumberStore((state) => state.workspaceShowProjectList)
+  const setShowProjectList = useColorByNumberStore((state) => state.setWorkspaceShowProjectList)
+  const activeTab = useColorByNumberStore((state) => state.workspaceActiveTab) as TabType | null
+  const setActiveTab = useColorByNumberStore((state) => state.setWorkspaceActiveTab)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [isTrackerDismissed, setIsTrackerDismissed] = useState(false)
   const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(
     null
   )
   const previousConversionStatusRef = useRef(conversionJob.status)
+  const prevProjectsStateRef = useRef<{ id: string; status: string }[]>([])
 
   const folderSettings = useMemo(
     () => ({ globalCellSize, globalShowNumbers, globalTheme, globalGridType }),
@@ -142,7 +161,10 @@ export default function ToolProjectWorkspace() {
   const showToast = useCallback((toast: Omit<StorageToast, 'id'>) => setStorageToast({ id: Date.now(), ...toast }), [])
 
   useEffect(() => {
-    if (hasLoadedSummaries) setIsLoadingProjects(false)
+    if (hasLoadedSummaries) {
+      const handle = requestAnimationFrame(() => setIsLoadingProjects(false))
+      return () => cancelAnimationFrame(handle)
+    }
   }, [hasLoadedSummaries])
 
   useEffect(() => {
@@ -171,7 +193,6 @@ export default function ToolProjectWorkspace() {
   const refreshProjects = useCallback(async () => {
     if (!hasLoadedSummaries) setIsLoadingProjects(true)
     try {
-      await deleteToolProject(GUEST_PROJECT_ID)
       const nextSummaries = await listToolProjects()
       setSummaries(nextSummaries)
       setStorageError(null)
@@ -184,51 +205,13 @@ export default function ToolProjectWorkspace() {
     }
   }, [checkStorageQuota, hasLoadedSummaries, setSummaries])
 
-  const openGuestProject = useCallback(async () => {
-    try {
-      await deleteToolProject(GUEST_PROJECT_ID)
-      const project = {
-        ...createEmptyToolProject('Guest Project', folderSettings),
-        id: GUEST_PROJECT_ID,
-        name: 'Guest Project',
-      }
-      hydrateProjectFolder(
-        { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
-        [],
-        project.settings
-      )
-      setStorageError(null)
-    } catch (error) {
-      console.error('Failed to open guest project:', error)
-      setStorageError('Could not create a temporary guest project in this browser.')
-    } finally {
-      setIsLoadingProjects(false)
-    }
-  }, [access.maxFilesPerProject, folderSettings, hydrateProjectFolder])
-
   useEffect(() => {
     if (access.isLoading) return
 
-    if (!access.canUseRecentProjects) {
-      const frame = requestAnimationFrame(() => {
-        setSummaries([])
-        const legacyId = searchParams.get(PROJECT_QUERY_KEY) ?? searchParams.get('p')
-        if (legacyId) {
-          navReplace(projectRoute(legacyId))
-          return
-        }
-        const shouldShowList = !initialRouteProjectSlug.current
-        setShowProjectList(shouldShowList)
-        if (!projectFolder && !shouldShowList) void openGuestProject()
-        else setIsLoadingProjects(false)
-      })
-      return () => cancelAnimationFrame(frame)
-    }
-
     // Already loaded — skip fetch, just clear the spinner
     if (hasLoadedSummaries) {
-      setIsLoadingProjects(false)
-      return
+      const handle = requestAnimationFrame(() => setIsLoadingProjects(false))
+      return () => cancelAnimationFrame(handle)
     }
 
     let alive = true
@@ -251,13 +234,25 @@ export default function ToolProjectWorkspace() {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [access.canUseRecentProjects, access.isLoading])
+  }, [access.isLoading])
 
-  // Auto-save whenever project state changes
+  // Auto-save whenever project state changes (immediate save for structural/status changes)
   useEffect(() => {
     if (!projectFolder) return
-    if (projectFolder.id === GUEST_PROJECT_ID) return
-    const timeout = window.setTimeout(async () => {
+
+    const currentProjectStates = projects.map(p => ({ id: p.id, status: p.status }))
+    const prevStates = prevProjectsStateRef.current
+
+    // Detect structural changes (add/delete/status changes)
+    const isStateChanged = projects.length !== prevStates.length ||
+                           projects.some((p, idx) => {
+                             const prev = prevStates[idx]
+                             return !prev || prev.id !== p.id || prev.status !== p.status
+                           })
+
+    prevProjectsStateRef.current = currentProjectStates
+
+    const save = async () => {
       const updatedAt = new Date().toISOString()
       try {
         await saveToolProject({ ...projectFolder, updatedAt, settings: folderSettings, files: projects })
@@ -267,17 +262,59 @@ export default function ToolProjectWorkspace() {
       } catch (error) {
         console.error('Failed to save local project:', error)
       }
-    }, 800)
-    return () => window.clearTimeout(timeout)
+    }
+
+    if (isStateChanged) {
+      // Save when browser is idle to let React rendering and image decoding complete smoothly.
+      // Timeout at 1000ms to ensure it saves eventually. Fallback to 500ms setTimeout if requestIdleCallback is unavailable.
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        const handle = (window as unknown as { requestIdleCallback: (cb: () => void, options?: { timeout: number }) => number }).requestIdleCallback(save, { timeout: 1000 })
+        return () => (window as unknown as { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(handle)
+      } else {
+        const t = setTimeout(save, 500)
+        return () => clearTimeout(t)
+      }
+    }
+
+    // Debounce for cell coloring or viewport updates
+    const timeout = setTimeout(save, 800)
+    return () => clearTimeout(timeout)
   }, [checkStorageQuota, folderSettings, projectFolder, projects])
 
   const openProject = useCallback(
-    (id: string, slug?: string) => {
+    (id: string, slug?: string, tab?: TabType | null, navAction: 'push' | 'replace' | 'skip' = 'replace') => {
       // Update URL + switch view immediately — no Next.js router overhead
       setShowProjectList(false)
-      navReplace(projectRoute(slug ?? id))
 
-      if (projectFolder?.id === id) return
+      let targetSlug = slug
+      const summary = summaries.find((s) => s.id === id)
+      if (!targetSlug && summary) {
+        targetSlug = toSlug(summary.name)
+      }
+      if (!targetSlug) {
+        targetSlug = id
+      }
+      const activeProjects = useColorByNumberStore.getState().projects
+      const isProjectEmpty = projectFolder?.id === id
+        ? activeProjects.length === 0
+        : (summary ? summary.fileCount === 0 : true)
+      const targetTab = tab || (isProjectEmpty ? 'image-import' : null)
+      const search = typeof window !== 'undefined' ? window.location.search : ''
+      const nextUrl = targetTab 
+        ? `${projectRoute(targetSlug)}/${targetTab}${search}` 
+        : `${projectRoute(targetSlug)}${search}`
+      
+      const currentHistoryState = typeof window !== 'undefined' ? window.history.state : null
+      if (navAction === 'push') {
+        navPush(nextUrl, { fromWorkspaceList: true })
+      } else if (navAction === 'replace') {
+        navReplace(nextUrl, currentHistoryState)
+      }
+
+      if (projectFolder?.id === id) {
+        setActiveTab(targetTab)
+        return
+      }
 
       // Load project data after navigation
       setOpeningId(id)
@@ -294,16 +331,33 @@ export default function ToolProjectWorkspace() {
             project.files ?? [],
             project.settings
           )
+          
+          const projectFiles = project.files ?? []
+          let finalTab = targetTab
+          if (!finalTab && projectFiles.length === 0) {
+            finalTab = 'image-import'
+          }
+          setActiveTab(finalTab)
+
           // Rewrite URL to use slug (in case we opened by UUID)
-          navReplace(projectRoute(toSlug(project.name)))
+          const finalSlug = toSlug(project.name)
+          const finalSearch = typeof window !== 'undefined' ? window.location.search : ''
+          const finalUrl = finalTab 
+            ? `${projectRoute(finalSlug)}/${finalTab}${finalSearch}` 
+            : `${projectRoute(finalSlug)}${finalSearch}`
+          const latestHistoryState = typeof window !== 'undefined' ? window.history.state : null
+          navReplace(finalUrl, latestHistoryState)
+
           setStorageError(null)
-          // Hydrate thumbnails in background — workspace doesn't need them
-          void hydrateStoredProjectFiles(project.files ?? []).then((hydrated) => {
-            hydrateProjectFolder(
-              { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
-              hydrated,
-              project.settings
-            )
+          // Hydrate thumbnails in background — only patch thumbnailDataUrl on existing store
+          // projects; do NOT call hydrateProjectFolder here to avoid overriding any images the
+          // user may have already imported since the project was opened.
+          void hydrateStoredProjectFiles(projectFiles).then((hydrated) => {
+            for (const hydratedFile of hydrated) {
+              if (hydratedFile.thumbnailDataUrl) {
+                updateProject(hydratedFile.id, { thumbnailDataUrl: hydratedFile.thumbnailDataUrl })
+              }
+            }
           })
           void checkStorageQuota()
         })
@@ -314,18 +368,52 @@ export default function ToolProjectWorkspace() {
         })
         .finally(() => setOpeningId(null))
     },
-    [checkStorageQuota, hydrateProjectFolder, projectFolder?.id, refreshProjects]
+    [checkStorageQuota, hydrateProjectFolder, updateProject, projectFolder?.id, refreshProjects, summaries, setActiveTab, setShowProjectList]
   )
 
   const handleBackToProjects = useCallback(() => {
-    setShowProjectList(true)
-    navReplace(PROJECTS_ROUTE)
-  }, [])
+    if (typeof window !== 'undefined' && window.history.state?.fromWorkspaceList) {
+      window.history.back()
+    } else {
+      setShowProjectList(true)
+      setActiveTab(null)
+      navReplace(PROJECTS_ROUTE)
+    }
+  }, [setActiveTab, setShowProjectList])
 
-  // Restore project from URL slug — runs once after access + summaries are ready
+  useEffect(() => {
+    if (access.isLoading || !hasLoadedSummaries) return
+
+    const handlePopState = () => {
+      const { projectSlug, tab } = getProjectAndTabFromUrl()
+      if (!projectSlug) {
+        setShowProjectList(true)
+        setActiveTab(null)
+      } else {
+        const found = summaries.find((s) => toSlug(s.name) === projectSlug || s.id === projectSlug)
+        if (found) {
+          openProject(found.id, toSlug(found.name), tab, 'skip')
+        } else {
+          setShowProjectList(true)
+          setActiveTab(null)
+          navReplace(PROJECTS_ROUTE)
+        }
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [access.isLoading, hasLoadedSummaries, summaries, openProject, setActiveTab, setShowProjectList])
+
+  useEffect(() => {
+    setShowProjectList(!initialRouteProjectSlug)
+    setActiveTab(initialUrlInfo.tab)
+  }, [setShowProjectList, setActiveTab, initialRouteProjectSlug, initialUrlInfo.tab])
+
+  // Restore project from URL slug or redirect guest to their single project — runs once after access + summaries are ready
   const didRestoreRef = useRef(false)
   useEffect(() => {
-    if (access.isLoading || !access.canUseRecentProjects || !hasLoadedSummaries || didRestoreRef.current) return
+    if (access.isLoading || !hasLoadedSummaries || didRestoreRef.current) return
     didRestoreRef.current = true
     const legacyId = searchParams.get(PROJECT_QUERY_KEY) ?? searchParams.get('p')
     if (legacyId) {
@@ -334,24 +422,32 @@ export default function ToolProjectWorkspace() {
       if (found) navReplace(projectRoute(toSlug(found.name)))
       return
     }
-    const slug = initialRouteProjectSlug.current
-    setShowProjectList(!slug)
-    if (!slug) return
-    // Find project by matching slug of its name, then open by UUID
-    const found = summaries.find((s) => toSlug(s.name) === slug)
-    if (!found) {
-      // Slug not found — go back to list
+    const slug = initialRouteProjectSlug
+    if (slug) {
+      // Find project by matching slug of its name or its ID, then open by UUID
+      let found = summaries.find((s) => toSlug(s.name) === slug || s.id === slug)
+      if (!found && access.isGuest && summaries.length > 0) {
+        found = summaries[0]
+      }
+      if (!found) {
+        // Slug not found — go back to list
+        setShowProjectList(true)
+        navReplace(PROJECTS_ROUTE)
+        return
+      }
+      const t = setTimeout(() => openProject(found.id, toSlug(found.name), initialUrlInfo.tab), 0)
+      return () => clearTimeout(t)
+    } else {
       setShowProjectList(true)
-      navReplace(PROJECTS_ROUTE)
-      return
     }
-    const t = setTimeout(() => openProject(found.id, toSlug(found.name)), 0)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [access.isLoading, access.canUseRecentProjects, hasLoadedSummaries])
+  }, [access.isLoading, access.canUseRecentProjects, access.isGuest, hasLoadedSummaries, summaries, openProject, setShowProjectList, initialRouteProjectSlug, initialUrlInfo.tab, searchParams])
 
   const createProject = async () => {
     if (displayedSummaries.length >= access.maxSavedProjects) {
+      let redirectPath = '/studio/projects'
+      if (typeof window !== 'undefined') {
+        redirectPath = window.location.pathname + window.location.search
+      }
       showToast({
         kind: 'info',
         title: access.isGuest ? 'Sign in to save projects' : 'Upgrade to save more projects',
@@ -359,7 +455,7 @@ export default function ToolProjectWorkspace() {
           ? 'Guest work is saved as one temporary local project. Sign in to keep recent projects.'
           : `Your ${access.plan} plan can keep ${access.maxSavedProjects} local projects.`,
         actionLabel: access.isGuest ? 'Sign in' : 'Upgrade',
-        actionHref: access.isGuest ? '/login?redirectTo=/studio/projects' : '/pricing',
+        actionHref: access.isGuest ? `/login?redirectTo=${encodeURIComponent(redirectPath)}` : '/pricing',
       })
       return
     }
@@ -369,32 +465,25 @@ export default function ToolProjectWorkspace() {
       return
     }
     try {
-      const project = access.isGuest
-        ? { ...createEmptyToolProject(name, folderSettings), id: GUEST_PROJECT_ID, name }
-        : createEmptyToolProject(name, folderSettings)
-      if (!access.isGuest) await saveToolProject(project)
-      if (access.isGuest) {
-        hydrateProjectFolder(
-          { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
-          [],
-          project.settings
-        )
-      } else {
-        const nextSummaries: StoredToolProjectSummary[] = [
-          {
-            id: project.id,
-            name: project.name,
-            createdAt: project.createdAt,
-            updatedAt: project.updatedAt,
-            fileCount: 0,
-            completedCount: 0,
-          },
-          ...summaries.filter((summary) => summary.id !== project.id),
-        ]
-        setSummaries(nextSummaries)
-      }
+      const project = createEmptyToolProject(name, folderSettings)
+      await saveToolProject(project)
+      const nextSummaries: StoredToolProjectSummary[] = [
+        {
+          id: project.id,
+          name: project.name,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+          fileCount: 0,
+          completedCount: 0,
+        },
+        ...summaries.filter((summary) => summary.id !== project.id),
+      ]
+      setSummaries(nextSummaries)
       toast.success(`Project "${name}" created`)
-      setShowProjectList(true)
+      
+      // Open the new project immediately
+      openProject(project.id, toSlug(project.name), null, 'push')
+      
       setProjectName('')
       setShowCreateProject(false)
       setStorageError(null)
@@ -533,33 +622,7 @@ export default function ToolProjectWorkspace() {
     )
   }
 
-  // Skeleton shown while project data is loading after click
-  if (openingId !== null) {
-    return (
-      <div id="workspace" className="h-full flex flex-col p-8 overflow-hidden">
-        {/* Toolbar skeleton */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-(--bg-tertiary) animate-pulse" />
-            <div className="h-3 w-28 rounded bg-(--bg-tertiary) animate-pulse" />
-          </div>
-          <div className="flex gap-3">
-            <div className="h-8 w-8 rounded-lg bg-(--bg-tertiary) animate-pulse" />
-            <div className="h-8 w-24 rounded-lg bg-(--bg-tertiary) animate-pulse" />
-          </div>
-        </div>
-        {/* Image grid skeleton */}
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 overflow-y-auto">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="flex flex-col gap-2">
-              <div className="aspect-square rounded-lg bg-(--bg-tertiary) animate-pulse" style={{ animationDelay: `${i * 40}ms` }} />
-              <div className="h-3 w-3/4 rounded bg-(--bg-tertiary) animate-pulse" style={{ animationDelay: `${i * 40}ms` }} />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  // Skeleton shown inline below
 
   const tracker =
     projectFolder && conversionJob.status !== 'idle' && !isTrackerDismissed ? (
@@ -567,8 +630,7 @@ export default function ToolProjectWorkspace() {
         conversionJob={conversionJob}
         projectName={access.isGuest ? undefined : projectFolder.name}
         onOpenProject={() => {
-          setShowProjectList(false)
-          navReplace(projectRoute(toSlug(projectFolder.name)))
+          openProject(projectFolder.id, toSlug(projectFolder.name), null, 'push')
         }}
         onDismiss={() => setIsTrackerDismissed(true)}
       />
@@ -583,8 +645,8 @@ export default function ToolProjectWorkspace() {
           access={access}
           onBack={handleBackToProjects}
           projectName={access.isGuest ? undefined : projectFolder.name}
-          requestedTab={requestedTab ?? undefined}
-          onTabHandled={() => setRequestedTab(null)}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
         />
       </section>
     </div>
@@ -738,7 +800,7 @@ export default function ToolProjectWorkspace() {
                     >
                       <button
                         type="button"
-                        onClick={() => void openProject(project.id)}
+                        onClick={() => void openProject(project.id, toSlug(project.name), null, 'push')}
                         disabled={openingId === project.id}
                         className="block w-full text-left disabled:cursor-wait"
                       >
@@ -792,7 +854,7 @@ export default function ToolProjectWorkspace() {
                         {isActiveConversionProject && (
                           <button
                             type="button"
-                            onClick={() => void openProject(project.id)}
+                            onClick={() => void openProject(project.id, toSlug(project.name), null, 'push')}
                             className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-[var(--bg-primary)] transition hover:bg-[var(--accent-hover)]"
                           >
                             {conversionJob.status === 'completed' ? 'View results' : 'Open project'}
@@ -822,17 +884,47 @@ export default function ToolProjectWorkspace() {
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:32px_32px]" />
       {projectFolder && !showProjectList && <StandaloneImportSidebar
         access={access}
-        activeTab={requestedTab ?? undefined}
+        activeTab={activeTab ?? undefined}
         onTabClick={(tab) => {
-          setRequestedTab(tab)
-          // If on project list, navigate into the current (or first) project
-          if (showProjectList && projectFolder) {
-            setShowProjectList(false)
-            navReplace(projectRoute(toSlug(projectFolder.name)))
+          if (tab === 'image-import' && projects.length > 0) {
+            setActiveTab(null)
+            if (projectFolder) {
+              const currentHistoryState = typeof window !== 'undefined' ? window.history.state : null
+              navReplace(`${projectRoute(toSlug(projectFolder.name))}`, currentHistoryState)
+            }
+          } else {
+            setActiveTab(tab)
+            if (projectFolder) {
+              const currentHistoryState = typeof window !== 'undefined' ? window.history.state : null
+              navReplace(`${projectRoute(toSlug(projectFolder.name))}/${tab}`, currentHistoryState)
+            }
           }
         }}
       />}
-      {mainContent}
+      {openingId !== null ? (
+        <div id="workspace" className="flex-1 h-full flex flex-col p-8 overflow-hidden bg-[var(--bg-primary)]">
+          {/* Toolbar skeleton */}
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-(--bg-tertiary) animate-pulse" />
+              <div className="h-3 w-28 rounded bg-(--bg-tertiary) animate-pulse" />
+            </div>
+            <div className="flex gap-3">
+              <div className="h-8 w-8 rounded-lg bg-(--bg-tertiary) animate-pulse" />
+              <div className="h-8 w-24 rounded-lg bg-(--bg-tertiary) animate-pulse" />
+            </div>
+          </div>
+          {/* Image grid skeleton */}
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 overflow-y-auto">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-2">
+                <div className="aspect-square rounded-lg bg-(--bg-tertiary) animate-pulse" style={{ animationDelay: `${i * 40}ms` }} />
+                <div className="h-3 w-3/4 rounded bg-(--bg-tertiary) animate-pulse" style={{ animationDelay: `${i * 40}ms` }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : mainContent}
       <ConfirmModal
         open={confirmModal !== null}
         title={confirmModal?.title ?? ''}

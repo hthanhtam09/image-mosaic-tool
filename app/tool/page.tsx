@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function ToolPage() {
-  redirect("/tools/projects");
+  redirect("/studio/projects");
 }

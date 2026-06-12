@@ -10,7 +10,6 @@ import type {
 const DB_NAME = "mosaci-tools";
 const DB_VERSION = 1;
 const PROJECT_STORE = "project-folders";
-const GUEST_PROJECT_ID = "guest-temp-project";
 const MAX_PROJECTS_TO_KEEP = 50;
 const STORAGE_WARNING_RATIO = 0.8;
 const STORAGE_TARGET_RATIO = 0.75;
@@ -174,6 +173,47 @@ async function putManyAndDeleteMany(
   });
 }
 
+export function createThumbnail(file: File, maxDim = 320): Promise<string> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      resolve("");
+      return;
+    }
+    const img = document.createElement("img");
+    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      const canvas = document.createElement("canvas");
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (w > h) {
+        if (w > maxDim) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        }
+      } else {
+        if (h > maxDim) {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      } else {
+        resolve("");
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      resolve("");
+    };
+  });
+}
+
 export async function hydrateStoredProjectFiles(
   files: Project[],
 ): Promise<Project[]> {
@@ -181,12 +221,7 @@ export async function hydrateStoredProjectFiles(
     files.map(async (file) => {
       if (file.thumbnailDataUrl || !file.originalFile) return file;
 
-      const thumbnailDataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => resolve("");
-        reader.readAsDataURL(file.originalFile);
-      });
+      const thumbnailDataUrl = await createThumbnail(file.originalFile);
 
       return { ...file, thumbnailDataUrl };
     }),
@@ -291,7 +326,6 @@ export async function listToolProjects(): Promise<StoredToolProjectSummary[]> {
   );
 
   return (projects ?? [])
-    .filter((project) => project.id !== GUEST_PROJECT_ID)
     .map((project) => {
       const files = project.files ?? [];
       return {

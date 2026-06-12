@@ -155,13 +155,9 @@ export default function MosaicInit() {
     // hero convert demo — real photo sweeps into the color-by-number page
     let raf = 0
     let cancelled = false
-    // Render the canvases well above their on-screen size (~340px) so the
-    // mosaic stays crisp on any display.
-    const W = 1200
-    const H = Math.round((W * 11) / 8.5) // 8.5 : 11
-    const photo = document.getElementById('cdPhoto') as HTMLCanvasElement | null
-    const uncoloredEl = document.getElementById('cdUncolored') as HTMLCanvasElement | null
-    const mosaic = document.getElementById('cdMosaic') as HTMLCanvasElement | null
+    const photo = document.getElementById('cdPhoto')
+    const uncoloredEl = document.getElementById('cdUncolored')
+    const mosaic = document.getElementById('cdMosaic')
     const scan = document.getElementById('cdScan')
     const pctEl = document.getElementById('cdPct')
     const stageEl = document.getElementById('cdStage')
@@ -170,16 +166,9 @@ export default function MosaicInit() {
     const tagR = document.getElementById('cdTagR')
 
     if (photo && uncoloredEl && mosaic && scan && pctEl) {
-      Promise.all([
-        loadImage(optimized(origin.src, 1200)),
-        loadImage(optimized(uncolored.src, 1200)),
-        loadImage(optimized(colored.src, 1200)),
-      ])
-        .then(([originImg, uncoloredImg, coloredImg]) => {
+      loadImage(optimized(origin.src, 1920))
+        .then((originImg) => {
           if (cancelled) return
-          drawCover(photo, originImg, W, H)
-          drawCover(uncoloredEl, uncoloredImg, W, H)
-          drawCover(mosaic, coloredImg, W, H)
           if (paletteEl) renderPalette(paletteEl, extractPalette(originImg, 16))
 
           // p = 1 → fully visible (revealed from the left); p = 0 → hidden.
@@ -210,34 +199,34 @@ export default function MosaicInit() {
             let stage = 'Source image'
             let pct = 0
             if (e < A) {
-              reveal(uncoloredEl, 0)
-              reveal(mosaic, 0)
+              reveal(uncoloredEl as HTMLElement, 0)
+              reveal(mosaic as HTMLElement, 0)
               setTags('SOURCE PHOTO', '', false)
             } else if (e < B) {
               const p = (e - A) / SWEEP1
-              reveal(uncoloredEl, p)
-              reveal(mosaic, 0)
+              reveal(uncoloredEl as HTMLElement, p)
+              reveal(mosaic as HTMLElement, 0)
               scanP = p
               stage = 'Converting'
               pct = Math.round(p * 50)
               setTags('COLOR BY NUMBER', 'SOURCE PHOTO')
             } else if (e < C) {
-              reveal(uncoloredEl, 1)
-              reveal(mosaic, 0)
+              reveal(uncoloredEl as HTMLElement, 1)
+              reveal(mosaic as HTMLElement, 0)
               stage = 'Numbered page'
               pct = 50
               setTags('COLOR BY NUMBER', 'SOURCE PHOTO')
             } else if (e < D) {
               const p = (e - C) / SWEEP2
-              reveal(uncoloredEl, 1)
-              reveal(mosaic, p)
+              reveal(uncoloredEl as HTMLElement, 1)
+              reveal(mosaic as HTMLElement, p)
               scanP = p
               stage = 'Coloring'
               pct = Math.round(50 + p * 50)
               setTags('COLORED PAGE', 'NUMBERED PAGE')
             } else {
-              reveal(uncoloredEl, 1)
-              reveal(mosaic, 1)
+              reveal(uncoloredEl as HTMLElement, 1)
+              reveal(mosaic as HTMLElement, 1)
               stage = 'Color by number'
               pct = 100
               setTags('COLORED PAGE', 'NUMBERED PAGE')
@@ -252,19 +241,15 @@ export default function MosaicInit() {
             if (stageEl) stageEl.textContent = stage
           }
 
-          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            frame(C + SWEEP2 * 0.5) // representative still: coloring half-done (tags set inside frame)
-          } else {
-            let t0: number | null = null
-            const loop = (ts: number) => {
-              if (t0 === null) t0 = ts
-              frame((ts - t0) % CYCLE)
-              raf = requestAnimationFrame(loop)
-            }
+          let t0: number | null = null
+          const loop = (ts: number) => {
+            if (t0 === null) t0 = ts
+            frame((ts - t0) % CYCLE)
             raf = requestAnimationFrame(loop)
           }
+          raf = requestAnimationFrame(loop)
         })
-        .catch(() => {})
+        .catch((err) => console.error("Error loading originImg for palette extraction:", err))
     }
 
     // before/after sliders (2 independent instances)

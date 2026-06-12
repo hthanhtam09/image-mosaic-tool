@@ -215,8 +215,8 @@ export default function PricingClient() {
                 <tr className="[&_th]:border-b [&_th]:border-border-primary [&_th]:px-4 [&_th]:py-3.5 [&_th]:text-left [&_th]:text-[13px] [&_th]:font-semibold [&_th]:text-text-primary">
                   <th>Feature</th>
                   <th>Free</th>
-                  <th className="!text-accent">Pro</th>
-                  <th>Studio</th>
+                  <th className="!text-accent">Plus</th>
+                  <th>Pro</th>
                 </tr>
               </thead>
               <tbody className="[&_tr:nth-child(2n)]:bg-[#ffffff03]">
@@ -274,10 +274,10 @@ export default function PricingClient() {
           <div className="mb-5 rounded-xl border border-border-primary bg-bg-primary p-[22px]">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-semibold">{checkout?.name ?? "Pro"} plan</div>
+                <div className="font-semibold">{checkout?.name ?? "Plus"} plan</div>
                 <div className={`text-[13px] ${muted}`}>Billed {yearly ? "yearly" : "monthly"}</div>
               </div>
-              {checkout?.name === "Pro" && <span className={chip}>Most popular</span>}
+              {checkout?.name === "Plus" && <span className={chip}>Most popular</span>}
             </div>
           </div>
           <div className="flex justify-between py-[11px] text-sm">

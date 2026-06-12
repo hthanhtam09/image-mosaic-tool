@@ -1,6 +1,6 @@
 // Shared mock data, types and class-name constants for the admin dashboard.
 
-export type Plan = "Free" | "Pro" | "Studio";
+export type Plan = "Free" | "Plus" | "Pro";
 export type UserStatus = "Active" | "Trialing" | "Suspended";
 export type PaymentStatus = "Paid" | "Refunded" | "Failed";
 
@@ -13,30 +13,36 @@ export interface AdminUser {
   joined: string;
   exports: string;
   tool: boolean;
+  config?: {
+    toolEnabled: "inherit" | "enabled" | "disabled";
+    features: Record<string, boolean>;
+    patterns: Record<string, boolean>;
+    themes: Record<string, boolean>;
+  };
 }
 
 export type PaymentRow = [string, string, Plan, string, PaymentStatus, string];
 
-export const PLAN_PRICE: Record<Plan, number> = { Free: 0, Pro: 19, Studio: 49 };
+export const PLAN_PRICE: Record<Plan, number> = { Free: 0, Plus: 19, Pro: 49 };
 
 export const initialUsers: AdminUser[] = [
-  { id: "u1", name: "Jordan Reyes", email: "jordan@reyesbooks.com", plan: "Pro", status: "Active", joined: "Aug 2025", exports: "32 / 50", tool: true },
-  { id: "u2", name: "Mara Lin", email: "mara@studiolin.co", plan: "Studio", status: "Active", joined: "Jun 2025", exports: "120 / ∞", tool: true },
-  { id: "u3", name: "Devon Park", email: "devon@kdpfast.com", plan: "Pro", status: "Suspended", joined: "Sep 2025", exports: "8 / 50", tool: false },
-  { id: "u4", name: "Aisha Noor", email: "aisha@coloringco.io", plan: "Studio", status: "Active", joined: "May 2025", exports: "210 / ∞", tool: true },
+  { id: "u1", name: "Jordan Reyes", email: "jordan@reyesbooks.com", plan: "Plus", status: "Active", joined: "Aug 2025", exports: "32 / 50", tool: true },
+  { id: "u2", name: "Mara Lin", email: "mara@studiolin.co", plan: "Pro", status: "Active", joined: "Jun 2025", exports: "120 / ∞", tool: true },
+  { id: "u3", name: "Devon Park", email: "devon@kdpfast.com", plan: "Plus", status: "Suspended", joined: "Sep 2025", exports: "8 / 50", tool: false },
+  { id: "u4", name: "Aisha Noor", email: "aisha@coloringco.io", plan: "Pro", status: "Active", joined: "May 2025", exports: "210 / ∞", tool: true },
   { id: "u5", name: "Tom Wexler", email: "tom@wexlerpress.com", plan: "Free", status: "Trialing", joined: "Feb 2026", exports: "3 / 5", tool: true },
-  { id: "u6", name: "Lena Ortiz", email: "lena@brightpages.net", plan: "Pro", status: "Active", joined: "Nov 2025", exports: "44 / 50", tool: true },
+  { id: "u6", name: "Lena Ortiz", email: "lena@brightpages.net", plan: "Plus", status: "Active", joined: "Nov 2025", exports: "44 / 50", tool: true },
   { id: "u7", name: "Priya Shah", email: "priya@inkwell.studio", plan: "Free", status: "Active", joined: "Jan 2026", exports: "1 / 5", tool: true },
-  { id: "u8", name: "Cole Mercer", email: "cole@mercerprints.com", plan: "Studio", status: "Suspended", joined: "Jul 2025", exports: "0 / ∞", tool: false },
+  { id: "u8", name: "Cole Mercer", email: "cole@mercerprints.com", plan: "Pro", status: "Suspended", joined: "Jul 2025", exports: "0 / ∞", tool: false },
 ];
 
 export const payments: PaymentRow[] = [
-  ["Jordan Reyes", "jordan@reyesbooks.com", "Pro", "$19.00", "Paid", "Feb 14"],
-  ["Mara Lin", "mara@studiolin.co", "Studio", "$49.00", "Paid", "Feb 14"],
-  ["Devon Park", "devon@kdpfast.com", "Pro", "$19.00", "Refunded", "Feb 13"],
-  ["Aisha Noor", "aisha@coloringco.io", "Studio", "$49.00", "Paid", "Feb 13"],
-  ["Tom Wexler", "tom@wexlerpress.com", "Pro", "$19.00", "Failed", "Feb 12"],
-  ["Lena Ortiz", "lena@brightpages.net", "Pro", "$15.00", "Paid", "Feb 12"],
+  ["Jordan Reyes", "jordan@reyesbooks.com", "Plus", "$19.00", "Paid", "Feb 14"],
+  ["Mara Lin", "mara@studiolin.co", "Pro", "$49.00", "Paid", "Feb 14"],
+  ["Devon Park", "devon@kdpfast.com", "Plus", "$19.00", "Refunded", "Feb 13"],
+  ["Aisha Noor", "aisha@coloringco.io", "Pro", "$49.00", "Paid", "Feb 13"],
+  ["Tom Wexler", "tom@wexlerpress.com", "Plus", "$19.00", "Failed", "Feb 12"],
+  ["Lena Ortiz", "lena@brightpages.net", "Plus", "$15.00", "Paid", "Feb 12"],
 ];
 
 export const kpis = [

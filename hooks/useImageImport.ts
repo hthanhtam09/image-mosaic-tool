@@ -4,7 +4,8 @@ import type { ColorByNumberGridType } from '@/lib/colorByNumber'
 import type { ToolAccess } from '@/lib/tools/access'
 import type { VisibilityMap } from '@/lib/featureFlags'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
-import { useCallback, useRef, useState } from 'react'
+import { createThumbnail } from '@/lib/tools/localProjects'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from '@/store/useToastStore'
 
 type DirectImage = { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }
@@ -15,7 +16,13 @@ interface UseImageImportOptions {
   enabledPatterns: VisibilityMap
   globalGridType: ColorByNumberGridType | 'auto'
   autoCycleIndexRef: React.MutableRefObject<number>
+  onImportSuccess?: () => void
 }
+
+const allPatterns: ColorByNumberGridType[] = [
+  'standard', 'honeycomb', 'diamond', 'pentagon', 'puzzle',
+  'islamic', 'fish-scale', 'trapezoid',
+]
 
 export function useImageImport({
   access,
@@ -23,10 +30,12 @@ export function useImageImport({
   enabledPatterns,
   globalGridType,
   autoCycleIndexRef,
+  onImportSuccess,
 }: UseImageImportOptions) {
-  const { addProject } = useColorByNumberStore()
+  const { addProjects } = useColorByNumberStore()
 
   const [isConverting, setIsConverting] = useState(false)
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null)
   const [isProcessingFolder, setIsProcessingFolder] = useState(false)
   const [keepImportScreen, setKeepImportScreen] = useState(false)
   const [directImages, setDirectImages] = useState<DirectImage[]>([])
@@ -37,6 +46,11 @@ export function useImageImport({
   const imageInputRef = useRef<HTMLInputElement>(null)
   const transparentImageInputRef = useRef<HTMLInputElement>(null)
   const dirInputRef = useRef<HTMLInputElement>(null)
+  // Keep a stable ref so memoized handlers always call the latest callback
+  const onImportSuccessRef = useRef(onImportSuccess)
+  useEffect(() => {
+    onImportSuccessRef.current = onImportSuccess
+  }, [onImportSuccess])
 
   const remainingImportSlots = useCallback(
     (projectsLength: number) => Math.max(0, access.maxFilesPerProject - projectsLength),
@@ -70,47 +84,47 @@ export function useImageImport({
     [access.maxFilesPerProject, access.plan, isConverting, remainingImportSlots, requestPaidAccess]
   )
 
-  const allPatterns: ColorByNumberGridType[] = [
-    'standard', 'honeycomb', 'diamond', 'pentagon', 'puzzle',
-    'islamic', 'fish-scale', 'trapezoid', 'square-mark', 'hexagon-mark',
-  ]
-
   const handleImageFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>, projectsLength: number) => {
       const files = e.target.files
       if (!files || files.length === 0) return
+      setIsConverting(true)
       try {
         const fileList = filterAllowedFiles(Array.from(files), projectsLength).sort((a, b) =>
           a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
         )
-        if (fileList.length === 0) return
+        if (fileList.length === 0) {
+          setIsConverting(false)
+          return
+        }
 
+        setImportProgress({ current: 0, total: fileList.length })
         const patternCycle = allPatterns.filter((p) => enabledPatterns[p] !== false)
+        const importedList: { file: File; dataUrl: string; options: { gridType: ColorByNumberGridType } }[] = []
 
         for (let index = 0; index < fileList.length; index++) {
           const file = fileList[index]
-          const reader = new FileReader()
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(file)
-          })
+          const dataUrl = await createThumbnail(file)
           const pattern: ColorByNumberGridType =
             globalGridType === 'auto'
               ? patternCycle[autoCycleIndexRef.current++ % patternCycle.length]
               : globalGridType
-          addProject(file, dataUrl, { gridType: pattern })
+          importedList.push({ file, dataUrl, options: { gridType: pattern } })
+          setImportProgress({ current: index + 1, total: fileList.length })
         }
+        addProjects(importedList)
         toast.success(`${fileList.length} image${fileList.length > 1 ? 's' : ''} imported`)
+        onImportSuccessRef.current?.()
       } catch (err) {
         console.error('Failed to import images:', err)
         toast.error('Import failed', { description: 'Could not read image files.' })
       } finally {
+        setIsConverting(false)
+        setImportProgress(null)
         e.target.value = ''
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [enabledPatterns, addProject, filterAllowedFiles, globalGridType]
+    [enabledPatterns, addProjects, filterAllowedFiles, globalGridType, autoCycleIndexRef]
   )
 
   const handleImportTransparentClick = useCallback(() => {
@@ -126,32 +140,44 @@ export function useImageImport({
     async (e: React.ChangeEvent<HTMLInputElement>, projectsLength: number, setCurrentStep: (s: 1 | 2 | 3) => void) => {
       const files = e.target.files
       if (!files || files.length === 0) return
+      setIsConverting(true)
       try {
         const fileList = filterAllowedFiles(Array.from(files), projectsLength).sort((a, b) =>
           a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
         )
-        if (fileList.length === 0) return
-        const pattern: ColorByNumberGridType = globalGridType === 'hexagon-mark' ? 'hexagon-mark' : 'square-mark'
-        for (const file of fileList) {
-          const reader = new FileReader()
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(file)
-          })
-          addProject(file, dataUrl, { id: crypto.randomUUID(), gridType: pattern, removeBackground: true })
+        if (fileList.length === 0) {
+          setIsConverting(false)
+          return
         }
+        setImportProgress({ current: 0, total: fileList.length })
+        const pattern: ColorByNumberGridType = globalGridType === 'hexagon-mark' ? 'hexagon-mark' : 'square-mark'
+        const importedList: { file: File; dataUrl: string; options: { id: string; gridType: ColorByNumberGridType; removeBackground: boolean } }[] = []
+
+        for (let index = 0; index < fileList.length; index++) {
+          const file = fileList[index]
+          const dataUrl = await createThumbnail(file)
+          importedList.push({
+            file,
+            dataUrl,
+            options: { id: crypto.randomUUID(), gridType: pattern, removeBackground: true }
+          })
+          setImportProgress({ current: index + 1, total: fileList.length })
+        }
+        addProjects(importedList)
         setKeepImportScreen(false)
         setCurrentStep(1)
         toast.success(`${fileList.length} image${fileList.length > 1 ? 's' : ''} imported`)
+        onImportSuccessRef.current?.()
       } catch (err) {
         console.error('Failed to import transparent images:', err)
         toast.error('Import failed', { description: 'Could not read image files.' })
       } finally {
+        setIsConverting(false)
+        setImportProgress(null)
         e.target.value = ''
       }
     },
-    [addProject, filterAllowedFiles, globalGridType]
+    [addProjects, filterAllowedFiles, globalGridType]
   )
 
   const handleDirUploadChange = useCallback(
@@ -254,6 +280,7 @@ export function useImageImport({
   return {
     isConverting,
     setIsConverting,
+    importProgress,
     isProcessingFolder,
     keepImportScreen,
     setKeepImportScreen,

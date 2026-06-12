@@ -4,6 +4,7 @@ import { ColorByNumberGridType, PartialColorMode, DirectImage } from "@/lib/colo
 import { Project } from "@/store/useColorByNumberStore";
 import ProjectCard from "./ProjectCard";
 import FolderProjectCard from "./FolderProjectCard";
+import { memo } from "react";
 
 interface ProjectGridProps {
   readonly projects: Project[];
@@ -14,9 +15,11 @@ interface ProjectGridProps {
   readonly SPLIT_COLOR_MODES: { value: PartialColorMode; label: string; icon: string }[];
   readonly GRID_TYPES: { value: ColorByNumberGridType; label: string }[];
   readonly isConverting: boolean;
+  readonly selectedIds: Set<string>;
+  readonly onToggleSelect: (id: string) => void;
 }
 
-export default function ProjectGrid({
+function ProjectGrid({
   projects,
   directImages,
   removeDirectImage,
@@ -25,6 +28,8 @@ export default function ProjectGrid({
   SPLIT_COLOR_MODES,
   GRID_TYPES,
   isConverting,
+  selectedIds,
+  onToggleSelect,
 }: ProjectGridProps) {
   return (
     <div id="projects" className="flex-1 overflow-y-auto pr-2 no-scrollbar">
@@ -49,9 +54,13 @@ export default function ProjectGrid({
               SPLIT_COLOR_MODES={SPLIT_COLOR_MODES}
               GRID_TYPES={GRID_TYPES}
               isConverting={isConverting}
+              isSelected={selectedIds.has(project.id)}
+              onToggleSelect={onToggleSelect}
             />
           ))}
       </div>
     </div>
   );
 }
+
+export default memo(ProjectGrid);

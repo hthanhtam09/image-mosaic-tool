@@ -3,7 +3,7 @@
 import type { ColorByNumberGridType, PartialColorMode } from '@/lib/colorByNumber'
 import type { ToolAccess } from '@/lib/tools/access'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmModal from '@/components/ConfirmModal'
 import { useToolPatterns } from '@/components/ToolFlagsProvider'
 
@@ -48,14 +48,14 @@ export default function MosaicWorkspace({
   access,
   onBack,
   projectName,
-  requestedTab,
-  onTabHandled,
+  activeTab,
+  setActiveTab,
 }: {
   access: ToolAccess
   onBack?: () => void
   projectName?: string
-  requestedTab?: TabType
-  onTabHandled?: () => void
+  activeTab?: TabType | null
+  setActiveTab?: (tab: TabType | null) => void
 }) {
   const {
     projects,
@@ -69,6 +69,7 @@ export default function MosaicWorkspace({
     setGlobalGridType,
     updateProject,
     removeAllProjects,
+    removeProject,
   } = useColorByNumberStore()
 
   const enabledPatterns = useToolPatterns()
@@ -78,14 +79,53 @@ export default function MosaicWorkspace({
 
   const [showSettings, setShowSettings] = useState(false)
   const [previewProjectId, setPreviewProjectId] = useState<string | null>(null)
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1)
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const stepParam = params.get('step')
+      if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') {
+        return 2
+      }
+      if (stepParam === 'pdf-progress' || stepParam === '3') {
+        return 3
+      }
+    }
+    return 1
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (currentStep === 2) {
+      url.searchParams.set('step', 'pdf')
+    } else if (currentStep === 3) {
+      url.searchParams.set('step', 'pdf-progress')
+    } else {
+      url.searchParams.delete('step')
+    }
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+  }, [currentStep])
+
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false)
   const splitColorRef = useRef<HTMLDivElement>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const onToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
 
   const handleGridTypeChange = useCallback(
     (gridType: ColorByNumberGridType | 'auto') => {
       if (gridType === 'auto') {
-        const cycle = ALL_PATTERNS.filter((p) => enabledPatterns[p] !== false)
+        const cycle = ALL_PATTERNS.filter((p) => p !== 'square-mark' && p !== 'hexagon-mark' && enabledPatterns[p] !== false)
         autoCycleIndexRef.current = 0
         projects
           .filter((p) => !p.removeBackground)
@@ -103,11 +143,22 @@ export default function MosaicWorkspace({
   )
 
   const importHook = useImageImport({
-    access, requestPaidAccess, enabledPatterns, globalGridType, autoCycleIndexRef,
+    access,
+    requestPaidAccess,
+    enabledPatterns,
+    globalGridType,
+    autoCycleIndexRef,
+    onImportSuccess: useCallback(() => {
+      setActiveTab?.(null)
+      if (projectName) {
+        window.history.replaceState(null, '', `/studio/projects/${toSlug(projectName)}`)
+      }
+    }, [projectName, setActiveTab])
   })
 
   const {
     isConverting: importIsConverting, setIsConverting,
+    importProgress,
     isProcessingFolder, keepImportScreen, setKeepImportScreen,
     directImages, setDirectImages,
     paletteImages, setPaletteImages,
@@ -119,11 +170,7 @@ export default function MosaicWorkspace({
     handleDirUploadChange, removeDirectImage,
   } = importHook
 
-  useEffect(() => {
-    if (!requestedTab) return
-    setKeepImportScreen(true)
-    onTabHandled?.()
-  }, [requestedTab]) // eslint-disable-line react-hooks/exhaustive-deps
+  // removed requestedTab effect
 
   const isConverting = importIsConverting || conversionJob.status === 'running'
 
@@ -172,6 +219,8 @@ export default function MosaicWorkspace({
     handleGeneratePdf, handleNextToSetup,
   } = pdfHook
 
+  const isAnyActionRunning = isConverting || isPreparingStep2 || isGeneratingPdf
+
   const zipHook = useZipExport({
     access, requestPaidAccess,
     projects, globalTheme, globalShowNumbers,
@@ -194,14 +243,55 @@ export default function MosaicWorkspace({
     }
   }, [access, convertAllIdleProjects, isConverting, requestPaidAccess, setIsConverting, projects])
 
-  const visibleGridTypes = GRID_TYPES.filter((type) => enabledPatterns[type.value] !== false)
+  const handleConvertSelected = useCallback(async () => {
+    if (isConverting) return
+    const toConvert = projects.filter((p) => selectedIds.has(p.id) && (p.status === 'idle' || p.status === 'error'))
+    if (toConvert.length === 0) return
+    if (toConvert.length > access.maxConvertAtOnce) {
+      requestPaidAccess(`Your ${access.plan} workspace can convert ${access.maxConvertAtOnce} image(s) at once.`)
+      return
+    }
+    setIsConverting(true)
+    try {
+      const convertSingleProject = useColorByNumberStore.getState().convertSingleProject
+      const cpuCores = typeof navigator !== "undefined" && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4
+      const limit = Math.min(Math.max(cpuCores, 2), 3)
+      const queue = [...toConvert]
+
+      const runProcessor = async () => {
+        while (queue.length > 0) {
+          const p = queue.shift()
+          if (!p) break
+          try {
+            await convertSingleProject(p.id)
+          } catch (err) {
+            console.error(err)
+          }
+        }
+      }
+
+      const processors = []
+      for (let i = 0; i < Math.min(limit, toConvert.length); i++) {
+        processors.push(runProcessor())
+      }
+      await Promise.all(processors)
+    } finally {
+      setIsConverting(false)
+    }
+  }, [access, isConverting, projects, selectedIds, requestPaidAccess, setIsConverting])
+
+  const visibleGridTypes = useMemo(() => {
+    return GRID_TYPES.filter((type) => enabledPatterns[type.value] !== false)
+  }, [enabledPatterns])
   const isFolderModeActive = directImages.length > 0
   const shouldShowImportScreen =
-    keepImportScreen ||
+    (activeTab !== null && activeTab !== 'image-import') ||
+    (activeTab === 'image-import' && projects.length === 0) ||
     (projects.length === 0 && !isFolderModeActive && !beforeAfterJob) ||
     (isFolderModeActive && currentStep === 1)
 
   const idleCount = projects.filter((p) => p.status === 'idle').length
+  const selectedIdleCount = projects.filter((p) => selectedIds.has(p.id) && (p.status === 'idle' || p.status === 'error')).length
 
   return (
     <div id="workspace" className="h-full flex overflow-hidden">
@@ -212,8 +302,14 @@ export default function MosaicWorkspace({
           <div className="relative z-10 flex h-full w-full items-center justify-center">
             <EmptyState
               contentOnly
-              activeTab={requestedTab}
-              onTabSelect={onTabHandled}
+              activeTab={activeTab ?? undefined}
+              importProgress={importProgress}
+              onTabSelect={(tab) => {
+                setActiveTab?.(tab)
+                if (projectName) {
+                  window.history.replaceState(null, '', `/studio/projects/${toSlug(projectName)}/${tab}`)
+                }
+              }}
               handleImportClick={() => handleImportClick(projects.length)}
               handleImportTransparentClick={handleImportTransparentClick}
               dirInputRef={dirInputRef}
@@ -262,79 +358,236 @@ export default function MosaicWorkspace({
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3 min-w-0">
-          {onBack && (
-            <button type="button" onClick={onBack} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-(--border-primary) text-(--text-secondary) transition hover:bg-white/5 hover:text-(--text-primary)" title="Back to projects">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <div className="flex items-center justify-between mb-8 pb-4 border-b border-[var(--border-default)]">
+        {/* Left Side: Navigation & Project Context */}
+        <div className="flex items-center gap-3.5 min-w-0">
+          {currentStep > 1 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentStep(1);
+                if (directImages.length > 0) {
+                  setDirectImages([]);
+                  setUploadedFolders({ color: false, uncolor: false, palette: false, solutionsCollage: false });
+                  setSolutionCollagePages([]);
+                }
+              }}
+              disabled={isAnyActionRunning}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border-default)] bg-white/5 text-[var(--text-secondary)] transition-all duration-200 hover:bg-white/10 hover:text-[var(--text-primary)] hover:border-[var(--text-secondary)]/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Back to grid"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-          )}
-          <div className="min-w-0">
-            {projectName && <p className="text-xs font-medium text-(--accent) mb-0.5 truncate">{projectName}</p>}
-          </div>
-        </div>
-
-        <div className="flex gap-4 items-center">
-          <GlobalSettings showSettings={showSettings} setShowSettings={setShowSettings} disabled={isConverting} onGridTypeChange={handleGridTypeChange} />
-
-          <button onClick={() => handleImportClick(projects.length)} disabled={isConverting} className="px-4 py-2 text-sm font-medium text-(--text-primary) border border-[var(--border-default)] rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            + Add More
-          </button>
-
-          {projects.length > 0 && !isConverting && (
+          ) : onBack ? (
             <button
-              onClick={() => setShowDeleteAllConfirm(true)}
-              className="p-2 rounded-lg border border-[var(--border-default)] text-(--text-muted) hover:text-red-400 hover:border-red-400/40 transition-colors"
-              title="Delete all"
+              type="button"
+              onClick={onBack}
+              disabled={isAnyActionRunning}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border-default)] bg-white/5 text-[var(--text-secondary)] transition-all duration-200 hover:bg-white/10 hover:text-[var(--text-primary)] hover:border-[var(--text-secondary)]/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Back to projects"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-          )}
+          ) : null}
+          <div className="min-w-0">
+            {projectName && currentStep === 1 && <h1 className="text-lg font-bold text-[var(--text-primary)] truncate">{projectName}</h1>}
+            {currentStep === 1 && (
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5 font-medium">
+                {projects.length} {projects.length === 1 ? 'image' : 'images'} • {globalGridType === 'auto' ? 'Auto (Cycle)' : GRID_TYPES.find(g => g.value === globalGridType)?.label || globalGridType}
+              </p>
+            )}
+          </div>
 
-          {(idleCount > 0 || isConverting) && (
-            <button onClick={handleConvertAll} disabled={isConverting} className="px-6 py-2 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-[150px]">
-              {isConverting ? (
-                <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />Converting...</>
-              ) : `Convert All (${idleCount})`}
-            </button>
-          )}
-
-          {currentStep === 1 && (projects.length > 0 || directImages.length > 0) && idleCount === 0 && !isConverting && (
-            <div className="flex gap-3">
-              {projects.length > 0 && (globalGridType === 'square-mark' || globalGridType === 'hexagon-mark') && (
-                <button onClick={() => solutionNamesStep1InputRef.current?.click()} disabled={isZipping || isConverting} className="px-6 py-2 text-sm font-medium text-(--accent) border border-[var(--accent)]/30 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-                  Import CSV Name (optional){solutionNameList.length > 0 ? ` (${solutionNameList.length})` : ''}
-                </button>
-              )}
-              {projects.length > 0 && (
-                <button onClick={handleDownloadAllImages} disabled={isZipping || isConverting} className="px-6 py-2 text-sm font-medium text-(--accent) border border-[var(--accent)]/30 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isZipping ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>}
-                  Download All (.zip)
-                </button>
-              )}
-              {directImages.some((img) => img.colorUrl && img.uncolorUrl) && (
-                <button onClick={handleDownloadBeforeAfter} disabled={baIsZipping || isConverting} className="px-6 py-2 text-sm font-medium text-yellow-300 border border-yellow-400/40 bg-yellow-400/10 hover:bg-yellow-400/15 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {baIsZipping ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>}
-                  Before/After
-                </button>
-              )}
-              <button onClick={handleNextToSetup} disabled={isConverting || isPreparingStep2} className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 min-w-[160px] disabled:opacity-50 disabled:cursor-not-allowed">
-                {isPreparingStep2 ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><span>Next: Setup PDF</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg></>}
-              </button>
+          {currentStep === 1 && projects.length > 0 && (
+            <div className="flex items-center gap-2 pl-4 ml-1.5 border-l border-white/10" onClick={(e) => e.stopPropagation()}>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === projects.length && projects.length > 0}
+                  onChange={() => {
+                    if (selectedIds.size === projects.length) {
+                      setSelectedIds(new Set());
+                    } else {
+                      setSelectedIds(new Set(projects.map((p) => p.id)));
+                    }
+                  }}
+                  disabled={isAnyActionRunning}
+                  className="h-5 w-5 rounded-full border-2 border-white/60 bg-black/40 checked:bg-[var(--accent)] checked:border-[var(--accent)] appearance-none cursor-pointer transition-all duration-200 flex items-center justify-center after:content-['✓'] after:text-[var(--bg-primary)] after:text-[10px] after:font-bold after:hidden checked:after:block shadow-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <span className="text-[13px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">
+                  {selectedIds.size === projects.length ? 'Deselect All' : 'Select All'}
+                </span>
+              </label>
             </div>
           )}
-
-          <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" multiple disabled={isConverting} onChange={(e) => handleImageFileChange(e, projects.length)} />
-          <input ref={solutionNamesStep1InputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleSolutionNamesChange} />
         </div>
+
+        {/* Right Side: Re-grouped Actions */}
+        {currentStep === 1 && (
+          <div className="flex gap-5 items-center">
+            {/* Group A: Project Management (Settings, Add, Delete) */}
+            <div className="flex items-center gap-2.5">
+              <GlobalSettings showSettings={showSettings} setShowSettings={setShowSettings} disabled={isAnyActionRunning} onGridTypeChange={handleGridTypeChange} />
+
+              <button
+                onClick={() => handleImportClick(projects.length)}
+                disabled={isAnyActionRunning}
+                className="flex h-10 items-center justify-center px-4 text-sm font-semibold text-[var(--text-primary)] border border-[var(--border-default)] bg-white/5 rounded-xl shadow-sm hover:bg-white/10 hover:border-[var(--text-secondary)]/30 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed gap-1.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Add More
+              </button>
+
+              {projects.length > 0 && (
+                <button
+                  onClick={() => setShowDeleteAllConfirm(true)}
+                  disabled={isAnyActionRunning}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border-default)] text-[var(--text-muted)] hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 active:scale-95 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={selectedIds.size > 0 ? `Delete selected (${selectedIds.size})` : "Delete all"}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Group Splitter: Vertical Divider */}
+            {((selectedIds.size > 0 ? selectedIdleCount > 0 : idleCount > 0) || isAnyActionRunning || (currentStep === 1 && (projects.length > 0 || directImages.length > 0) && (selectedIds.size > 0 ? selectedIdleCount === 0 : idleCount === 0) && !isAnyActionRunning)) && (
+              <div className="h-6 w-px bg-[var(--border-default)] mx-3 self-center" />
+            )}
+
+            {/* Group B: Action Execution (Convert / Export / Next Step) */}
+            <div className="flex items-center gap-3">
+              {selectedIds.size > 0 ? (
+                (selectedIdleCount > 0 || isAnyActionRunning) && (
+                  <button
+                    onClick={handleConvertSelected}
+                    disabled={isAnyActionRunning}
+                    className="flex h-10 items-center justify-center px-6 text-sm font-semibold text-[var(--bg-primary)] bg-gradient-to-r from-[var(--accent-deep)] to-[var(--accent)] hover:from-[var(--accent)] hover:to-[var(--accent-hover)] rounded-xl shadow-lg shadow-[var(--accent)]/15 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed gap-2 min-w-[160px]"
+                  >
+                    {isConverting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Converting...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                        </svg>
+                        Convert Selected ({selectedIdleCount})
+                      </>
+                    )}
+                  </button>
+                )
+              ) : (
+                (idleCount > 0 || isAnyActionRunning) && (
+                  <button
+                    onClick={handleConvertAll}
+                    disabled={isAnyActionRunning}
+                    className="flex h-10 items-center justify-center px-6 text-sm font-semibold text-[var(--bg-primary)] bg-gradient-to-r from-[var(--accent-deep)] to-[var(--accent)] hover:from-[var(--accent)] hover:to-[var(--accent-hover)] rounded-xl shadow-lg shadow-[var(--accent)]/15 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed gap-2 min-w-[160px]"
+                  >
+                    {isConverting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Converting...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                        </svg>
+                        Convert All ({idleCount})
+                      </>
+                    )}
+                  </button>
+                )
+              )}
+
+              {currentStep === 1 && (projects.length > 0 || directImages.length > 0) && idleCount === 0 && !isConverting && (
+                <div className="flex gap-3 items-center">
+                  {projects.length > 0 && (globalGridType === 'square-mark' || globalGridType === 'hexagon-mark') && (
+                    <button
+                      onClick={() => solutionNamesStep1InputRef.current?.click()}
+                      disabled={isZipping || isAnyActionRunning}
+                      className="flex h-10 items-center justify-center px-5 text-sm font-semibold text-[var(--accent)] border border-[var(--accent)]/20 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 hover:border-[var(--accent)]/40 rounded-xl shadow-sm active:scale-[0.98] transition-all duration-200 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                      Import CSV Name (optional){solutionNameList.length > 0 ? ` (${solutionNameList.length})` : ''}
+                    </button>
+                  )}
+                  {projects.length > 0 && (
+                    <button
+                      onClick={handleDownloadAllImages}
+                      disabled={isZipping || isAnyActionRunning}
+                      className="flex h-10 items-center justify-center px-5 text-sm font-semibold text-[var(--accent)] border border-[var(--accent)]/20 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 hover:border-[var(--accent)]/40 rounded-xl shadow-sm active:scale-[0.98] transition-all duration-200 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isZipping ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>}
+                      Download All (.zip)
+                    </button>
+                  )}
+                  {directImages.some((img) => img.colorUrl && img.uncolorUrl) && (
+                    <button
+                      onClick={handleDownloadBeforeAfter}
+                      disabled={baIsZipping || isAnyActionRunning}
+                      className="flex h-10 items-center justify-center px-5 text-sm font-semibold text-amber-300 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/40 rounded-xl shadow-sm active:scale-[0.98] transition-all duration-200 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {baIsZipping ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>}
+                      Before/After
+                    </button>
+                  )}
+                  <button
+                    onClick={handleNextToSetup}
+                    disabled={isAnyActionRunning}
+                    className="flex h-10 items-center justify-center px-6 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl shadow-lg shadow-blue-500/15 active:scale-[0.98] transition-all duration-200 gap-2 min-w-[180px] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isPreparingStep2 ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span>Next: Setup PDF</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {currentStep === 2 && (
+          <button
+            onClick={handleGeneratePdf}
+            disabled={isAnyActionRunning}
+            className="px-6 py-2.5 text-xs font-bold text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl active:scale-95 transition-all duration-200 shadow-md shadow-[var(--accent)]/15 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGeneratingPdf ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span>Generating PDF...</span>
+              </>
+            ) : (
+              <>
+                <span>Generate & Download PDF</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Step 1: Grid */}
@@ -361,7 +614,9 @@ export default function MosaicWorkspace({
               setPreviewProjectId={setPreviewProjectId}
               SPLIT_COLOR_MODES={SPLIT_COLOR_MODES}
               GRID_TYPES={visibleGridTypes}
-              isConverting={isConverting}
+              isConverting={isAnyActionRunning}
+              selectedIds={selectedIds}
+              onToggleSelect={onToggleSelect}
             />
           )}
         </div>
@@ -410,6 +665,7 @@ export default function MosaicWorkspace({
           solutionNameList={solutionNameList}
           solutionNamesInputRef={solutionNamesInputRef}
           handleSolutionNamesChange={handleSolutionNamesChange}
+          disabled={isAnyActionRunning}
         />
       )}
 
@@ -435,13 +691,32 @@ export default function MosaicWorkspace({
 
       <ConfirmModal
         open={showDeleteAllConfirm}
-        title="Delete all images"
-        message={`Delete all ${projects.length} image(s)? This cannot be undone.`}
-        onConfirm={() => { setShowDeleteAllConfirm(false); removeAllProjects(); autoCycleIndexRef.current = 0 }}
+        title={selectedIds.size > 0 ? "Delete selected images" : "Delete all images"}
+        message={selectedIds.size > 0
+          ? `Delete the ${selectedIds.size} selected image(s)? This cannot be undone.`
+          : `Delete all ${projects.length} image(s)? This cannot be undone.`}
+        onConfirm={() => {
+          setShowDeleteAllConfirm(false)
+          if (selectedIds.size > 0) {
+            selectedIds.forEach((id) => removeProject(id))
+            setSelectedIds(new Set())
+          } else {
+            removeAllProjects()
+            autoCycleIndexRef.current = 0
+          }
+          setActiveTab?.('image-import')
+          if (projectName) {
+            window.history.replaceState(null, '', `/studio/projects/${toSlug(projectName)}/image-import`)
+          }
+        }}
         onCancel={() => setShowDeleteAllConfirm(false)}
       />
         </div>
       )}
     </div>
   )
+}
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]+/g, '-').replace(/^-|-$/g, '')
 }

@@ -35,7 +35,9 @@ function Slider({ id, leftLabel, rightLabel, leftSrc, rightSrc, active, onSweepD
   const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const doneTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onDoneRef   = useRef(onSweepDone)
-  onDoneRef.current = onSweepDone
+  useEffect(() => {
+    onDoneRef.current = onSweepDone
+  }, [onSweepDone])
 
   const applyPos = useCallback((p: number) => {
     posRef.current = p

@@ -62,6 +62,24 @@ export default function ProjectPreviewModal({
 
   const activeProject = useActiveProject();
 
+  const [originUrl, setOriginUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (!activeProject) {
+      setOriginUrl("");
+      return;
+    }
+    if (activeProject.originalFile) {
+      const url = URL.createObjectURL(activeProject.originalFile);
+      setOriginUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setOriginUrl(activeProject.thumbnailDataUrl || "");
+    }
+  }, [activeProject?.id, activeProject?.originalFile, activeProject?.thumbnailDataUrl]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -186,7 +204,7 @@ export default function ProjectPreviewModal({
   const resetZoom = () => setZoomLocal(null);
 
   const panels: { label: string; url: string | undefined; key: string }[] = [
-    { key: "origin", label: "Original", url: previews?.originUrl },
+    { key: "origin", label: "Original", url: originUrl || previews?.originUrl },
     { key: "uncolor", label: "Uncolored", url: previews?.uncolorUrl },
     { key: "color", label: "Colored", url: previews?.colorUrl },
   ];

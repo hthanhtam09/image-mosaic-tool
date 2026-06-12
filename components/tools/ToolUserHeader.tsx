@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { initialsOf, userDisplayName, userPlan } from "@/lib/auth/user";
 import { createClient } from "@/utils/supabase/client";
@@ -11,6 +12,15 @@ type ToolUser = {
 };
 
 export default function ToolUserHeader() {
+  const pathname = usePathname();
+  const [redirectTo, setRedirectTo] = useState("/studio/projects");
+  useEffect(() => {
+    const handle = requestAnimationFrame(() => {
+      setRedirectTo(window.location.pathname + window.location.search);
+    });
+    return () => cancelAnimationFrame(handle);
+  }, [pathname]);
+
   const [user, setUser] = useState<ToolUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -128,7 +138,7 @@ export default function ToolUserHeader() {
               </p>
             </div>
             <Link
-              href="/login?redirectTo=/studio/projects"
+              href={`/login?redirectTo=${encodeURIComponent(redirectTo)}`}
               className="mb-1 block rounded-lg bg-[var(--accent)] px-3 py-2 text-center text-sm font-semibold text-[var(--bg-primary)] transition hover:bg-[var(--accent-hover)]"
             >
               Sign in
@@ -193,7 +203,7 @@ export default function ToolUserHeader() {
               href="/pricing"
               className="mb-1 block rounded-lg bg-[var(--accent)] px-3 py-2 text-center text-sm font-semibold text-[var(--bg-primary)] transition hover:bg-[var(--accent-hover)]"
             >
-              Upgrade to Pro
+              Upgrade to Plus
             </Link>
           )}
 

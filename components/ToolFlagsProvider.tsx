@@ -1,23 +1,46 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { DEFAULT_FLAGS, type FeatureFlags, type ToolFeatureFlags, type VisibilityMap } from "@/lib/featureFlags";
+import { DEFAULT_FLAGS, type FeatureFlags, type ToolFeatureFlags, type VisibilityMap, resolveVisibility } from "@/lib/featureFlags";
+import { useToolAccess } from "@/components/tools/useToolAccess";
 
 const FlagsContext = createContext<FeatureFlags>(DEFAULT_FLAGS);
 
 /** Feature flags for individual tool features (e.g. which import modes show). */
-export function useToolFeatures(): ToolFeatureFlags {
-  return useContext(FlagsContext).features;
+export function useToolFeatures(): Record<keyof ToolFeatureFlags, boolean> {
+  const flags = useContext(FlagsContext);
+  const { role } = useToolAccess();
+  return {
+    standardImport: resolveVisibility(flags.features.standardImport, role),
+    objectFocus: resolveVisibility(flags.features.objectFocus, role),
+    folderUpload: resolveVisibility(flags.features.folderUpload, role),
+    beforeAfter: resolveVisibility(flags.features.beforeAfter, role),
+    markPractice: resolveVisibility(flags.features.markPractice, role),
+  };
 }
 
 /** Which mosaic patterns are enabled (by grid-type id). */
-export function useToolPatterns(): VisibilityMap {
-  return useContext(FlagsContext).patterns;
+export function useToolPatterns(): Record<string, boolean> {
+  const flags = useContext(FlagsContext);
+  const { role } = useToolAccess();
+  return Object.fromEntries(
+    Object.entries(flags.patterns).map(([id, val]) => [
+      id,
+      resolveVisibility(val, role),
+    ])
+  );
 }
 
 /** Which color themes are enabled (by theme id). */
-export function useToolThemes(): VisibilityMap {
-  return useContext(FlagsContext).themes;
+export function useToolThemes(): Record<string, boolean> {
+  const flags = useContext(FlagsContext);
+  const { role } = useToolAccess();
+  return Object.fromEntries(
+    Object.entries(flags.themes).map(([id, val]) => [
+      id,
+      resolveVisibility(val, role),
+    ])
+  );
 }
 
 function GateScreen({ title, message }: { title: string; message: string }) {

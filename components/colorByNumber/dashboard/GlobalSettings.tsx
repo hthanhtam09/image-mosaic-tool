@@ -75,6 +75,9 @@ export default function GlobalSettings({
   const visiblePatterns = PATTERN_OPTIONS.filter(
     (o) => o.value === "auto" || enabledPatterns[o.value as string] !== false,
   );
+  const visibleMarks = MARK_OPTIONS.filter(
+    (o) => enabledPatterns[o.value as string] !== false,
+  );
   const visibleThemes = THEMES.filter((t) => enabledThemes[t.id] !== false);
 
   // Import Pattern has two tabs: regular patterns and mark patterns.
@@ -112,11 +115,11 @@ export default function GlobalSettings({
       <button
         onClick={() => setShowSettings(!showSettings)}
         disabled={disabled}
-        className={`p-2 rounded-lg border transition-colors ${
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
           showSettings
-            ? "bg-[var(--accent)]/20 border-[var(--accent)] text-[var(--accent)]"
-            : "border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5"
-        } disabled:opacity-50 disabled:cursor-not-allowed`}
+            ? "bg-[var(--accent)]/15 border-[var(--accent)] text-[var(--accent)] shadow-[0_0_12px_rgba(192,205,227,0.15)]"
+            : "border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 hover:border-[var(--text-secondary)]/30"
+        }`}
         title="Global Settings"
       >
         <svg
@@ -202,7 +205,7 @@ export default function GlobalSettings({
               <span className="text-xs text-[var(--text-secondary)] font-medium">
                 Import Pattern
               </span>
-              {globalGridType !== "auto" && (
+              {patternTab === "pattern" && globalGridType !== "auto" && (
                 <button
                   onClick={() => (onGridTypeChange ?? setGlobalGridType)("auto")}
                   className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
@@ -235,7 +238,7 @@ export default function GlobalSettings({
             </div>
 
             <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
-              {(patternTab === "mark" ? MARK_OPTIONS : visiblePatterns).map(
+              {(patternTab === "mark" ? visibleMarks : visiblePatterns).map(
                 (opt) => (
                   <button
                     key={opt.value}

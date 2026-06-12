@@ -13,15 +13,15 @@ const chipClass = 'inline-flex rounded-full px-3 py-1 text-xs font-medium'
 type AccountUser = {
   name: string
   email: string
-  plan: 'Free' | 'Pro' | 'Studio'
+  plan: 'Free' | 'Plus' | 'Pro'
   subscriptionStatus: string
   billingInterval: string
 }
 
 const planPrice = {
   Free: '$0',
-  Pro: '$19',
-  Studio: '$49',
+  Plus: '$19',
+  Pro: '$49',
 } as const
 
 export default function AccountPage() {
