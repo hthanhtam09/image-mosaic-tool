@@ -12,6 +12,7 @@ import type { ToolAccess } from '@/lib/tools/access'
 import type { Project } from '@/store/useColorByNumberStore'
 import { useCallback, useRef, useState } from 'react'
 import { toast } from '@/store/useToastStore'
+import { useBookDesignStore } from '@/store/useBookDesignStore'
 
 type DirectImage = { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }
 
@@ -28,7 +29,7 @@ interface UsePdfExportOptions {
   setSolutionCollagePages: (pages: string[]) => void
   uploadedFolders: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean }
   setUploadedFolders: React.Dispatch<React.SetStateAction<{ color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean }>>
-  setCurrentStep: (step: 1 | 2 | 3) => void
+  setCurrentStep: (step: 1 | 'design-config' | 2 | 3) => void
   setDirectImages: React.Dispatch<React.SetStateAction<DirectImage[]>>
   setUploadedFoldersReset: () => void
 }
@@ -143,14 +144,19 @@ export function usePdfExport({
 
   const handleGeneratePdf = useCallback(async () => {
     const readyProjects = getReadyProjects(projects)
-    if (readyProjects.length === 0 && directImages.length === 0) return
+    if (readyProjects.length === 0 && directImages.length === 0) {
+      toast.error('No ready images found', {
+        description: 'Please convert at least one image in grid view before exporting to PDF.',
+      })
+      return
+    }
     const pdfItems = directImages.length > 0 ? directImages.length : readyProjects.length
     if (pdfItems > access.maxPdfItems) {
       requestPaidAccess(`Your ${access.plan} workspace can export PDF with up to ${access.maxPdfItems} image(s).`)
       return
     }
 
-    setCurrentStep(3)
+    // setCurrentStep(3)
     setIsGeneratingPdf(true)
     setPdfProgress({ current: 0, total: 100 })
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -168,7 +174,9 @@ export function usePdfExport({
           backgroundImages: bgImages, csvData, prefixPages, suffixPages,
           solutionPages: solutionCollagePages,
           globalOptions: {
-            showCodes: globalShowNumbers, showPalette: false, theme: globalTheme,
+            showCodes: globalShowNumbers,
+            showPalette: useBookDesignStore.getState().coloringDisplayMode === 'side-by-side',
+            theme: globalTheme,
             showStoryInput,
             globalExportPalette:
               directImages.length > 0
@@ -189,7 +197,7 @@ export function usePdfExport({
     } catch (error) {
       console.error('Failed to generate PDF:', error)
       toast.error('PDF generation failed', { description: 'An error occurred while building the PDF.' })
-      setCurrentStep(2)
+      // setCurrentStep(2)
     } finally {
       setIsGeneratingPdf(false)
     }
@@ -198,6 +206,12 @@ export function usePdfExport({
   const handleNextToSetup = useCallback(async () => {
     const readyProjects = getReadyProjects(projects)
     const pdfItems = directImages.length > 0 ? directImages.length : readyProjects.length
+    if (pdfItems === 0) {
+      toast.error('No ready images found', {
+        description: 'Please convert at least one image before setting up the PDF.',
+      })
+      return
+    }
     if (pdfItems > access.maxPdfItems) {
       requestPaidAccess(`Your ${access.plan} workspace can export PDF with up to ${access.maxPdfItems} image(s).`)
       return
@@ -207,6 +221,22 @@ export function usePdfExport({
     const theme = getThemeById(globalTheme)
 
     if (readyProjects.length > 0 && directImages.length === 0) {
+      const { badgeBgImageUrl } = useBookDesignStore.getState()
+      let loadedBadgeBgImg: HTMLImageElement | null = null
+      if (badgeBgImageUrl) {
+        try {
+          loadedBadgeBgImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            img.src = badgeBgImageUrl
+            img.onload = () => resolve(img)
+            img.onerror = (e) => reject(e)
+          })
+        } catch (err) {
+          console.error('Failed to load badge background pattern:', err)
+        }
+      }
+
       const generatedPalettes: string[] = []
       for (let idx = 0; idx < readyProjects.length; idx++) {
         const project = readyProjects[idx]
@@ -214,6 +244,7 @@ export function usePdfExport({
         const canvas = exportPaletteToCanvas(project.data, {
           bgColor: theme.backgroundColor, themeColor: theme.backgroundColor,
           pageNumber: idx + 1, transparentBg: true, removeBgColorCells: true,
+          badgeBgImage: loadedBadgeBgImg,
         })
         generatedPalettes.push(canvas.toDataURL('image/png'))
         canvas.width = 0; canvas.height = 0

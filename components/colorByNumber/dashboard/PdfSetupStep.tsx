@@ -110,7 +110,7 @@ interface PdfSetupStepProps {
   setSuffixPages: (pages: string[]) => void;
   globalTheme: string;
   setGlobalTheme: (theme: string) => void;
-  setCurrentStep: (step: 1 | 2 | 3) => void;
+  setCurrentStep: (step: 1 | 'design-config' | 2 | 3) => void;
   setDirectImages: (imgs: DirectImage[]) => void;
   setUploadedFolders: (status: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean }) => void;
   handleGeneratePdf: () => void;

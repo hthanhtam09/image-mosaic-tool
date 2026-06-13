@@ -299,7 +299,13 @@ export default function ToolProjectWorkspace() {
         ? activeProjects.length === 0
         : (summary ? summary.fileCount === 0 : true)
       const targetTab = tab || (isProjectEmpty ? 'image-import' : null)
-      const search = typeof window !== 'undefined' ? window.location.search : ''
+      const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+      if (targetTab) {
+        params.delete('step')
+      } else if (!params.has('step')) {
+        params.set('step', 'design-config')
+      }
+      const search = params.toString() ? `?${params.toString()}` : ''
       const nextUrl = targetTab 
         ? `${projectRoute(targetSlug)}/${targetTab}${search}` 
         : `${projectRoute(targetSlug)}${search}`
@@ -319,34 +325,48 @@ export default function ToolProjectWorkspace() {
       // Load project data after navigation
       setOpeningId(id)
       loadToolProject(id)
-        .then((project) => {
-          if (!project) {
-            void refreshProjects()
-            setShowProjectList(true)
-            navReplace(PROJECTS_ROUTE)
-            return
-          }
-          hydrateProjectFolder(
-            { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
-            project.files ?? [],
-            project.settings
-          )
-          
-          const projectFiles = project.files ?? []
-          let finalTab = targetTab
-          if (!finalTab && projectFiles.length === 0) {
-            finalTab = 'image-import'
-          }
-          setActiveTab(finalTab)
+      .then((project) => {
+        if (!project) {
+          void refreshProjects()
+          setShowProjectList(true)
+          navReplace(PROJECTS_ROUTE)
+          return
+        }
+        hydrateProjectFolder(
+          { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
+          project.files ?? [],
+          project.settings
+        )
+        
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+        const stepParam = params.get('step')
+        let nextStep: 1 | 'design-config' | 2 | 3 = 'design-config'
+        if (stepParam === 'design-config') nextStep = 'design-config'
+        else if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') nextStep = 2
+        else if (stepParam === 'pdf-progress' || stepParam === '3') nextStep = 3
+        else if (stepParam === 'convert' || stepParam === '1') nextStep = 1
+        useColorByNumberStore.getState().setWorkspaceStep(nextStep)
+        
+        const projectFiles = project.files ?? []
+        let finalTab = targetTab
+        if (!finalTab && projectFiles.length === 0) {
+          finalTab = 'image-import'
+        }
+        setActiveTab(finalTab)
 
-          // Rewrite URL to use slug (in case we opened by UUID)
-          const finalSlug = toSlug(project.name)
-          const finalSearch = typeof window !== 'undefined' ? window.location.search : ''
-          const finalUrl = finalTab 
-            ? `${projectRoute(finalSlug)}/${finalTab}${finalSearch}` 
-            : `${projectRoute(finalSlug)}${finalSearch}`
-          const latestHistoryState = typeof window !== 'undefined' ? window.history.state : null
-          navReplace(finalUrl, latestHistoryState)
+        // Rewrite URL to use slug (in case we opened by UUID)
+        const finalSlug = toSlug(project.name)
+        if (finalTab) {
+          params.delete('step')
+        } else if (!params.has('step')) {
+          params.set('step', 'design-config')
+        }
+        const finalSearch = params.toString() ? `?${params.toString()}` : ''
+        const finalUrl = finalTab 
+          ? `${projectRoute(finalSlug)}/${finalTab}${finalSearch}` 
+          : `${projectRoute(finalSlug)}${finalSearch}`
+        const latestHistoryState = typeof window !== 'undefined' ? window.history.state : null
+        navReplace(finalUrl, latestHistoryState)
 
           setStorageError(null)
           // Hydrate thumbnails in background — only patch thumbnailDataUrl on existing store
@@ -386,6 +406,15 @@ export default function ToolProjectWorkspace() {
 
     const handlePopState = () => {
       const { projectSlug, tab } = getProjectAndTabFromUrl()
+      const params = new URLSearchParams(window.location.search)
+      const stepParam = params.get('step')
+      let nextStep: 1 | 'design-config' | 2 | 3 = 'design-config'
+      if (stepParam === 'design-config') nextStep = 'design-config'
+      else if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') nextStep = 2
+      else if (stepParam === 'pdf-progress' || stepParam === '3') nextStep = 3
+      else if (stepParam === 'convert' || stepParam === '1') nextStep = 1
+      useColorByNumberStore.getState().setWorkspaceStep(nextStep)
+
       if (!projectSlug) {
         setShowProjectList(true)
         setActiveTab(null)
@@ -886,6 +915,7 @@ export default function ToolProjectWorkspace() {
         access={access}
         activeTab={activeTab ?? undefined}
         onTabClick={(tab) => {
+          useColorByNumberStore.getState().setWorkspaceStep(1)
           if (tab === 'image-import' && projects.length > 0) {
             setActiveTab(null)
             if (projectFolder) {

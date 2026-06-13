@@ -51,7 +51,10 @@ import {
   rgbToExportPaletteColor,
   paletteIndexToLabel,
   rgbToHex,
+  getCustomLabel,
+  paletteIndexToLabelCustom,
 } from "@/lib/utils";
+import { useBookDesignStore } from "@/store/useBookDesignStore";
 /** 300 DPI for crisp print-quality exports */
 const EXPORT_DPI = 300;
 const EXPORT_PAGE_W = Math.round(8.5 * EXPORT_DPI); // 2550
@@ -150,21 +153,23 @@ const getCodeMap = (
   data: ColorByNumberData,
   removeBgColorCells: boolean,
   bgColor: string,
+  badgeStyle: "number" | "letter" | "mixed",
 ): Map<string, string> => {
   const map = new Map<string, string>();
-  if (!removeBgColorCells) return map;
 
   // Collect unique codes and their colors (skip bg cells)
   const codeToColor = new Map<string, string>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
-    const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
-    const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
-    if (
-      cellName === bgName ||
-      cell.color.toLowerCase() === bgColor.toLowerCase()
-    )
-      continue;
+    if (removeBgColorCells) {
+      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
+      const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
+      if (
+        cellName === bgName ||
+        cell.color.toLowerCase() === bgColor.toLowerCase()
+      )
+        continue;
+    }
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
     }
@@ -180,26 +185,42 @@ const getCodeMap = (
     return a.localeCompare(b);
   });
 
-  // Map each code to its restricted export palette color name, then assign sequential labels
-  // Codes that map to the same color name get the same label
-  const nameToLabel = new Map<string, string>();
-  let labelIdx = 0;
+  if (removeBgColorCells) {
+    // Map each code to its restricted export palette color name, then assign sequential labels
+    // Codes that map to the same color name get the same label
+    const nameToLabel = new Map<string, string>();
+    let labelIdx = 0;
 
-  for (const code of codes) {
-    const hex = codeToColor.get(code)!;
-    const rgb = parseHexToRGB(hex);
-    const exportColor = rgbToExportPaletteColor(rgb);
-    const colorName = exportColor.name;
+    for (const code of codes) {
+      const hex = codeToColor.get(code)!;
+      const rgb = parseHexToRGB(hex);
+      const exportColor = rgbToExportPaletteColor(rgb);
+      const colorName = exportColor.name;
 
-    if (nameToLabel.has(colorName)) {
-      // Same restricted palette color as a previous code — reuse label
-      map.set(code, nameToLabel.get(colorName)!);
+      if (nameToLabel.has(colorName)) {
+        // Same restricted palette color as a previous code — reuse label
+        map.set(code, nameToLabel.get(colorName)!);
+      } else {
+        // New color — assign new sequential label
+        const label = paletteIndexToLabelCustom(labelIdx, badgeStyle);
+        nameToLabel.set(colorName, label);
+        map.set(code, label);
+        labelIdx++;
+      }
+    }
+  } else {
+    // Assign sequential labels (1, 2, 3…) based on sorted code order.
+    // Mark-grid codes (digits / dots) pass through unchanged.
+    if (isMarkGridType(data.gridType)) {
+      for (const code of codes) {
+        map.set(code, code);
+      }
     } else {
-      // New color — assign new sequential label
-      const label = paletteIndexToLabel(labelIdx);
-      nameToLabel.set(colorName, label);
-      map.set(code, label);
-      labelIdx++;
+      let labelIdx = 0;
+      for (const code of codes) {
+        map.set(code, paletteIndexToLabelCustom(labelIdx, badgeStyle));
+        labelIdx++;
+      }
     }
   }
 
@@ -233,10 +254,12 @@ export const getPageLayout = (
 ): PageLayout => {
   const dims = getGridDimensions(data);
   const scale = Math.min(boxW / dims.width, boxH / dims.height);
+  const offsetX = (boxW - dims.width * scale) / 2;
+  const offsetY = (boxH - dims.height * scale) / 2;
   return {
     scale,
-    offsetX: 0,
-    offsetY: 0,
+    offsetX,
+    offsetY,
     gridDims: dims,
     boxW,
     boxH,
@@ -614,6 +637,7 @@ const drawPalSwatch = (
     | "square-mark"
     | "hexagon-mark",
   fillColor: string,
+  bgImage?: HTMLImageElement | null,
 ) => {
   let s = size;
   if (shape === "circle") s = size * 1.35;
@@ -638,6 +662,15 @@ const drawPalSwatch = (
     ctx.strokeStyle = "#333333";
     ctx.fillStyle = fillColor;
     ctx.fill();
+
+    if (bgImage) {
+      ctx.save();
+      ctx.clip();
+      const imgSize = s * 1.5;
+      ctx.drawImage(bgImage, cx - imgSize / 2, cy - imgSize / 2, imgSize, imgSize);
+      ctx.restore();
+    }
+
     ctx.stroke();
   };
 
@@ -1107,7 +1140,8 @@ export const exportToCanvas = (
   const tightCrop = options.tightCrop ?? false;
   const removeBgColorCells = options.removeBgColorCells ?? false;
 
-  const codeMap = getCodeMap(data, removeBgColorCells, bgColor);
+  const { badgeStyle } = useBookDesignStore.getState();
+  const codeMap = getCodeMap(data, removeBgColorCells, bgColor, badgeStyle);
 
   // Extra padding to prevent puzzle tabs / shape overhangs from being clipped.
   // Puzzle tabs protrude by ~18% of cellSize; we add a proportional pixel buffer.
@@ -1235,7 +1269,7 @@ export const exportToCanvas = (
     renderPaletteColumnCBN(ctx, data, layout, {
       clearSwatches: removeBgColorCells,
       showColorNames: removeBgColorCells,
-      codeMap: removeBgColorCells ? codeMap : undefined,
+      codeMap: codeMap,
     });
     ctx.restore();
   }
@@ -1270,8 +1304,8 @@ export const exportToCanvas = (
   const renderCell = (cell: ColorByNumberCell, filledCell: boolean) => {
     const cl = getCellLayout(cell.x, cell.y, data);
     // When partialColorMode is active, determine which cells are colored
-    let isCellColored = colored;
-    if (colored && partialColorMode !== "none") {
+    let isCellColored = colored && !!cell.code;
+    if (isCellColored && partialColorMode !== "none") {
       const nx = cl.cx / gridDims.width; // 0..1 horizontal
       const ny = cl.cy / gridDims.height; // 0..1 vertical
 
@@ -1296,7 +1330,7 @@ export const exportToCanvas = (
     // should be completely invisible – skip both fill AND stroke.
     if (isTransparentCell(data, cell, transparentBg)) return;
 
-    if (removeBgColorCells) {
+    if (removeBgColorCells && !isMarkGridType(data.gridType)) {
       const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
       const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
       if (
@@ -1397,15 +1431,16 @@ export const exportToCanvas = (
       ctx.stroke();
     }
 
-    if (showCodes && cell.code) {
-      if (isMarkGridType(data.gridType)) {
-        if (colored) {
+    if (isMarkGridType(data.gridType)) {
+      if (cell.code) {
+        if (isCellColored) {
+          const symbolColor = "#000000";
           if (data.gridType === "hexagon-mark") {
-            drawHexagonMarkSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize, cl.r);
+            drawHexagonMarkSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize, cl.r, symbolColor);
           } else {
-            drawDotCodeSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize);
+            drawDotCodeSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize, symbolColor);
           }
-        } else {
+        } else if (showCodes) {
           ctx.save();
           ctx.fillStyle = "rgba(0,0,0,0.45)";
           if (data.gridType === "hexagon-mark" && cell.code === ".") {
@@ -1420,8 +1455,11 @@ export const exportToCanvas = (
           }
           ctx.restore();
         }
-        return;
       }
+      return;
+    }
+
+    if (showCodes && cell.code) {
 
       ctx.save();
       const brightness = getBrightness(fillColor);
@@ -1466,11 +1504,14 @@ export const exportToCanvas = (
     for (let y = 0; y < data.height; y++) {
       for (let x = 0; x < data.width; x++) {
         if (!shouldRenderDotCodeBaseCell(data, x, y, transparentBg)) continue;
+
+        const fillColor = "#ffffff";
+
         if (data.gridType === "hexagon-mark") {
           const layout = getCellLayout(x, y, data);
-          drawHexagonMarkCellBase(ctx, layout.cx, layout.cy, layout.r);
+          drawHexagonMarkCellBase(ctx, layout.cx, layout.cy, layout.r, true, fillColor);
         } else {
-          drawDotCodeCellBase(ctx, x * data.cellSize, y * data.cellSize, data.cellSize);
+          drawDotCodeCellBase(ctx, x * data.cellSize, y * data.cellSize, data.cellSize, true, fillColor);
         }
       }
     }
@@ -1547,15 +1588,20 @@ export const exportPaletteToCanvas = (
     pageNumber?: number;
     transparentBg?: boolean;
     removeBgColorCells?: boolean;
+    badgeBgImage?: HTMLImageElement | null;
+    /** When true, skip the 23-color snap/merge step and show all actual colors (for live preview) */
+    forPreview?: boolean;
   },
 ): HTMLCanvasElement => {
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
 
+  const { badgeStyle, showWaterdropIcon, showColorInput } = useBookDesignStore.getState();
   const codeMap = getCodeMap(
     data,
     options?.removeBgColorCells ?? false,
     options?.bgColor ?? "#ffffff",
+    badgeStyle,
   );
 
   // ── Collect palette data (restricted to 23 export palette colors) ──
@@ -1604,6 +1650,14 @@ export const exportPaletteToCanvas = (
       codeToColor.set(code, rawCodeToColor.get(code) ?? "#ffffff");
       codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
       codeToName.set(code, code);
+    }
+  } else if (options?.forPreview) {
+    // Preview mode: use actual raw colors without snapping to 23-color palette
+    for (const code of rawCodes) {
+      const hex = rawCodeToColor.get(code)!;
+      codeToColor.set(code, hex);
+      codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
+      codeToName.set(code, hex);
     }
   } else for (const code of rawCodes) {
     const hex = rawCodeToColor.get(code)!;
@@ -1657,7 +1711,7 @@ export const exportPaletteToCanvas = (
   if (codes.length === 0) return canvas;
 
   const maxCount = Math.max(...codes.map((c) => codeToCount.get(c) ?? 0), 1);
-  const themeColor = options?.themeColor ?? "#1a1a1a";
+  let themeColor = options?.themeColor ?? "#1a1a1a";
 
   // Calculate text and line colors based on background brightness
   const parseHex = (hex: string) => {
@@ -1677,6 +1731,11 @@ export const exportPaletteToCanvas = (
   const [bgR, bgG, bgB] = parseHex(bgHex);
   const bgBrightness = (bgR * 299 + bgG * 587 + bgB * 114) / 1000;
   const isDarkBg = options?.transparentBg ? false : bgBrightness < 128;
+
+  if (themeColor.toLowerCase() === bgHex.toLowerCase()) {
+    themeColor = isDarkBg ? "#ffffff" : "#1a1a1a";
+  }
+
   const markLabelFill = "#000000";
   const separatorColor = "rgba(255,255,255,0.15)";
 
@@ -1766,9 +1825,14 @@ export const exportPaletteToCanvas = (
         );
 
   // Item height: swatch + label area for mark pages; full swatch + droplets + input for color palettes.
+  const hasDroplets = !isMarkPalette && showWaterdropIcon;
+  const hasInput = !isMarkPalette && showColorInput;
+
   const itemH = isMarkPalette
     ? sSW + Math.round(0.3 * EXPORT_DPI)
-    : sSW + sGap + sDropletTopPad + sDH + sInputGap + sInputH;
+    : sSW + 
+      (hasDroplets ? sGap + sDropletTopPad + sDH : 0) + 
+      (hasInput ? sInputGap + sInputH : 0);
   const vGap =
     isMarkPalette
       ? Math.round(0.24 * EXPORT_DPI) // more breathing room between mark rows
@@ -1850,7 +1914,7 @@ export const exportPaletteToCanvas = (
       count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
 
     // ── Swatch: white shape ──
-    drawPalSwatch(ctx, cx, swCY, sw, shape, "#ffffff");
+    drawPalSwatch(ctx, cx, swCY, sw, shape, "#ffffff", options?.badgeBgImage);
 
     // Code number inside swatch (visible on white)
     ctx.fillStyle = "#333333";
@@ -1891,11 +1955,6 @@ export const exportPaletteToCanvas = (
     }
 
     // ── Droplets below swatch (theme-colored) ──
-    const dropTop =
-      iy +
-      sw +
-      (sGap + sDropletTopPad) * scale +
-      (isMarkShape ? sLbl * 0.7 * scale : 0);
     const dW = sDW * scale;
     const dH = sDH * scale;
     const dGapS = sDGap * scale;
@@ -1907,19 +1966,27 @@ export const exportPaletteToCanvas = (
         : count / maxCount;
     const displayDroplets =
       count > 0 ? Math.max(0.5, coverageRatio * PAL_DROPLET_COUNT) : 0;
-    for (let d = 0; !isMarkShape && d < PAL_DROPLET_COUNT; d++) {
-      let fillType = 0;
-      if (d + 1 <= displayDroplets) fillType = 1;
-      else if (d + 0.5 <= displayDroplets) fillType = 0.5;
-      drawDropletShape(
-        ctx,
-        dropStartX + d * (dW + dGapS),
-        dropTop,
-        dW,
-        dH,
-        fillType,
-        themeColor,
-      );
+
+    if (showWaterdropIcon) {
+      const dropTop =
+        iy +
+        sw +
+        (sGap + sDropletTopPad) * scale +
+        (isMarkShape ? sLbl * 0.7 * scale : 0);
+      for (let d = 0; !isMarkShape && d < PAL_DROPLET_COUNT; d++) {
+        let fillType = 0;
+        if (d + 1 <= displayDroplets) fillType = 1;
+        else if (d + 0.5 <= displayDroplets) fillType = 0.5;
+        drawDropletShape(
+          ctx,
+          dropStartX + d * (dW + dGapS),
+          dropTop,
+          dW,
+          dH,
+          fillType,
+          themeColor,
+        );
+      }
     }
 
     if (isMarkShape) return;
@@ -1996,38 +2063,39 @@ export const exportPaletteToCanvas = (
     });
     ctx.restore();
 
-    // ── Input box below droplets ──
-    const scaledInputH = sInputH * scale;
-    const scaledInputW = sInputW * scale;
-    const inputTop = iy + (sSW + sGap + sDropletTopPad + sDH + sInputGap) * scale;
-    const inputLeft = cx - scaledInputW / 2;
-    const inputRadius = Math.min(scaledInputH * 0.25, 6);
+    if (showColorInput) {
+      // ── Input box below droplets ──
+      const scaledInputH = sInputH * scale;
+      const scaledInputW = sInputW * scale;
+      const inputTop = iy + sw + (showWaterdropIcon ? (sGap + sDropletTopPad + sDH) * scale : 0) + sInputGap * scale;
+      const inputLeft = cx - scaledInputW / 2;
+      const inputRadius = Math.min(scaledInputH * 0.25, 6);
 
-    ctx.beginPath();
-    if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(
-        inputLeft,
-        inputTop,
-        scaledInputW,
-        scaledInputH,
-        inputRadius,
-      );
-    } else {
-      ctx.rect(inputLeft, inputTop, scaledInputW, scaledInputH);
-    }
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.15)"; // Slightly darker stroke for visibility
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(
+          inputLeft,
+          inputTop,
+          scaledInputW,
+          scaledInputH,
+          inputRadius,
+        );
+      } else {
+        ctx.rect(inputLeft, inputTop, scaledInputW, scaledInputH);
+      }
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.15)"; // Slightly darker stroke for visibility
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
 
-    // Color name text inside input box
-    const colorName = codeToName.get(code) || code;
-    let nameFontSize = Math.max(11 * scale, scaledInputH * 0.38);
-    ctx.fillStyle = "#222222";
-    ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+      // Color name text inside input box
+      const colorName = codeToName.get(code) || code;
+      let nameFontSize = Math.max(11 * scale, scaledInputH * 0.38);
+      ctx.fillStyle = "#222222";
+      ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
 
     ctx.save();
     ctx.beginPath();
@@ -2077,6 +2145,7 @@ export const exportPaletteToCanvas = (
       ctx.fillText(line, cx, startTextY + lineIdx * lineHeight);
     });
     ctx.restore();
+    }
 
     // ── Separator line between rows ──
     if (row < numRows - 1 && col === rowItemCount - 1) {

@@ -381,7 +381,14 @@ export const rgbToExportPaletteColor = (
 export const paletteIndexToLabel = (index: number): string => {
   const n = index + 1; // 1-based
   if (n <= 9) return String(n);
-  return String.fromCharCode(65 + n - 10);
+  
+  let temp = index - 9;
+  let label = "";
+  while (temp >= 0) {
+    label = String.fromCharCode((temp % 26) + 65) + label;
+    temp = Math.floor(temp / 26) - 1;
+  }
+  return label;
 };
 
 export interface EnhanceOptions {
@@ -638,4 +645,72 @@ export const downloadCanvas = (
   link.download = filename;
   link.href = canvas.toDataURL("image/png");
   link.click();
+};
+
+/**
+ * Get custom label for palette index (1-9, then A, B, … based on badgeStyle)
+ */
+export const paletteIndexToLabelCustom = (
+  index: number,
+  badgeStyle: "number" | "letter" | "mixed",
+): string => {
+  const getLetterLabel = (idx: number): string => {
+    let temp = idx;
+    let label = "";
+    while (temp >= 0) {
+      label = String.fromCharCode((temp % 26) + 65) + label;
+      temp = Math.floor(temp / 26) - 1;
+    }
+    return label;
+  };
+
+  if (badgeStyle === "number") {
+    return String(index + 1);
+  }
+  if (badgeStyle === "letter") {
+    return getLetterLabel(index);
+  }
+  // mixed style: numbers 1-9 for first 9 colors, and letters A-Z... for subsequent colors
+  if (index < 9) {
+    return String(index + 1);
+  }
+  return getLetterLabel(index - 9);
+};
+
+/**
+ * Maps a standard code string to custom badge style representation
+ */
+export const getCustomLabel = (
+  code: string,
+  badgeStyle: "number" | "letter" | "mixed",
+  gridType?: string,
+): string => {
+  if (!code) return "";
+  if (gridType === "square-mark" || gridType === "hexagon-mark") {
+    return code; // marks are not mapped
+  }
+  let index = 0;
+  const num = parseInt(code, 10);
+  if (!isNaN(num) && /^\d+$/.test(code)) {
+    index = num - 1;
+  } else {
+    // Decode letter-based code (e.g. "A", "B", "AA")
+    let val = 0;
+    let isValid = true;
+    for (let i = 0; i < code.length; i++) {
+      const charCode = code.charCodeAt(i);
+      if (charCode >= 65 && charCode <= 90) {
+        val = val * 26 + (charCode - 65 + 1);
+      } else {
+        isValid = false;
+        break;
+      }
+    }
+    if (isValid && code.length > 0) {
+      index = val - 1 + 9;
+    } else {
+      index = 0;
+    }
+  }
+  return paletteIndexToLabelCustom(index, badgeStyle);
 };

@@ -102,6 +102,7 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
   const projectFolder = useColorByNumberStore((state) => state.projectFolder)
   const showProjectList = useColorByNumberStore((state) => state.workspaceShowProjectList)
   const activeTab = useColorByNumberStore((state) => state.workspaceActiveTab)
+  const workspaceStep = useColorByNumberStore((state) => state.workspaceStep)
 
   const handleStudioClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -120,8 +121,9 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
     e.preventDefault()
     if (projectFolder) {
       const slug = toSlug(projectFolder.name)
-      const nextUrl = projectRoute(slug)
+      const nextUrl = `${projectRoute(slug)}?step=design-config`
       useColorByNumberStore.getState().setWorkspaceActiveTab(null)
+      useColorByNumberStore.getState().setWorkspaceStep('design-config')
       if (typeof window !== 'undefined') {
         window.history.replaceState(window.history.state, '', nextUrl)
       }
@@ -129,6 +131,82 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
   }
 
   const tabLabel = getTabLabel(activeTab)
+
+  const slug = projectFolder ? toSlug(projectFolder.name) : ''
+  const projectBaseUrl = projectFolder ? projectRoute(slug) : ''
+
+  const stepsToRender: {
+    label: string
+    href?: string
+    onClick?: (e: React.MouseEvent) => void
+    isLeaf: boolean
+  }[] = []
+
+  if (projectFolder) {
+    const isDesignConfigLeaf = workspaceStep === 'design-config' && !activeTab
+    stepsToRender.push({
+      label: 'Design Config',
+      href: isDesignConfigLeaf ? undefined : `${projectBaseUrl}?step=design-config`,
+      onClick: isDesignConfigLeaf ? undefined : (e) => {
+        e.preventDefault()
+        useColorByNumberStore.getState().setWorkspaceActiveTab(null)
+        useColorByNumberStore.getState().setWorkspaceStep('design-config')
+        if (typeof window !== 'undefined') {
+          window.history.replaceState(window.history.state, '', `${projectBaseUrl}?step=design-config`)
+        }
+      },
+      isLeaf: isDesignConfigLeaf,
+    })
+
+    if (workspaceStep === 1 || workspaceStep === 2 || workspaceStep === 3 || activeTab) {
+      const isConvertLeaf = workspaceStep === 1 && !activeTab
+      stepsToRender.push({
+        label: 'Convert',
+        href: isConvertLeaf ? undefined : `${projectBaseUrl}?step=convert`,
+        onClick: isConvertLeaf ? undefined : (e) => {
+          e.preventDefault()
+          useColorByNumberStore.getState().setWorkspaceActiveTab(null)
+          useColorByNumberStore.getState().setWorkspaceStep(1)
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(window.history.state, '', `${projectBaseUrl}?step=convert`)
+          }
+        },
+        isLeaf: isConvertLeaf,
+      })
+    }
+
+    if (workspaceStep === 2 || workspaceStep === 3) {
+      const isPdfSetupLeaf = workspaceStep === 2 && !activeTab
+      stepsToRender.push({
+        label: 'PDF Setup',
+        href: isPdfSetupLeaf ? undefined : `${projectBaseUrl}?step=pdf`,
+        onClick: isPdfSetupLeaf ? undefined : (e) => {
+          e.preventDefault()
+          useColorByNumberStore.getState().setWorkspaceActiveTab(null)
+          useColorByNumberStore.getState().setWorkspaceStep(2)
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(window.history.state, '', `${projectBaseUrl}?step=pdf`)
+          }
+        },
+        isLeaf: isPdfSetupLeaf,
+      })
+    }
+
+    if (workspaceStep === 3) {
+      const isGeneratingLeaf = workspaceStep === 3 && !activeTab
+      stepsToRender.push({
+        label: 'Generating PDF',
+        isLeaf: isGeneratingLeaf,
+      })
+    }
+
+    if (activeTab) {
+      stepsToRender.push({
+        label: tabLabel,
+        isLeaf: true,
+      })
+    }
+  }
 
   const sidebarWidth = hovering ? 220 : 56
 
@@ -194,22 +272,16 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                     </svg>
-                    {activeTab ? (
-                      <a
-                        href={projectRoute(toSlug(projectFolder.name))}
-                        onClick={handleProjectClick}
-                        className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
-                      >
-                        {projectFolder.name}
-                      </a>
-                    ) : (
-                      <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">
-                        {projectFolder.name}
-                      </span>
-                    )}
+                    <a
+                      href={`${projectRoute(toSlug(projectFolder.name))}?step=design-config`}
+                      onClick={handleProjectClick}
+                      className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
+                    >
+                      {projectFolder.name}
+                    </a>
                   </li>
-                  {activeTab && (
-                    <li className="flex items-center">
+                  {stepsToRender.map((step, idx) => (
+                    <li key={idx} className="flex items-center">
                       <svg
                         className="mx-1 h-3.5 w-3.5 text-[var(--text-muted)] opacity-60 md:mx-1.5"
                         aria-hidden="true"
@@ -219,11 +291,21 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                       </svg>
-                      <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">
-                        {tabLabel}
-                      </span>
+                      {step.isLeaf ? (
+                        <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">
+                          {step.label}
+                        </span>
+                      ) : (
+                        <a
+                          href={step.href}
+                          onClick={step.onClick}
+                          className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
+                        >
+                          {step.label}
+                        </a>
+                      )}
                     </li>
-                  )}
+                  ))}
                 </>
               )}
             </ol>

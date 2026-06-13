@@ -101,6 +101,7 @@ export interface ColorByNumberState {
 
   workspaceShowProjectList: boolean;
   workspaceActiveTab: string | null;
+  workspaceStep: 1 | "design-config" | 2 | 3;
 
   // Actions
   togglePaletteGlobal: () => void;
@@ -129,6 +130,7 @@ export interface ColorByNumberState {
   setToolProjectSummaries: (summaries: ToolProjectSummary[]) => void;
   setWorkspaceShowProjectList: (show: boolean) => void;
   setWorkspaceActiveTab: (tab: string | null) => void;
+  setWorkspaceStep: (step: 1 | "design-config" | 2 | 3) => void;
 
   // Batch Actions
   convertAllIdleProjects: () => Promise<void>;
@@ -168,6 +170,15 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     const VALID_TABS = ['image-import', 'object-focus', 'batch-upload', 'before-after', 'mark-practice']
     return VALID_TABS.includes(tabCandidate || '') ? tabCandidate : null
   })() : null,
+  workspaceStep: typeof window !== 'undefined' ? (() => {
+    const params = new URLSearchParams(window.location.search)
+    const stepParam = params.get('step')
+    if (stepParam === 'design-config') return 'design-config'
+    if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') return 2
+    if (stepParam === 'pdf-progress' || stepParam === '3') return 3
+    if (stepParam === 'convert' || stepParam === '1') return 1
+    return 'design-config'
+  })() : 'design-config',
 
   togglePaletteGlobal: () =>
     set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),
@@ -186,16 +197,10 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   toggleGlobalShowNumbers: () =>
     set((state) => ({
       globalShowNumbers: !state.globalShowNumbers,
-      projects: state.projects.map((p) =>
-        p.status === "completed" ? { ...p, status: "idle" as const } : p,
-      ),
     })),
   setGlobalTheme: (theme) =>
     set((state) => ({
       globalTheme: theme,
-      projects: state.projects.map((p) =>
-        p.status === "completed" ? { ...p, status: "idle" as const } : p,
-      ),
     })),
 
   setGlobalGridType: (gridType) =>
@@ -326,6 +331,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
 
   setWorkspaceShowProjectList: (show) => set({ workspaceShowProjectList: show }),
   setWorkspaceActiveTab: (tab) => set({ workspaceActiveTab: tab }),
+  setWorkspaceStep: (step) => set({ workspaceStep: step }),
 
   removeAllProjects: () =>
     set({

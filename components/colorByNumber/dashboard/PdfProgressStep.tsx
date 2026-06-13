@@ -5,7 +5,7 @@ import { DirectImage } from "@/lib/colorByNumber";
 interface PdfProgressStepProps {
     isGeneratingPdf: boolean;
     pdfProgress: { current: number; total: number };
-    setCurrentStep: (step: 1 | 2 | 3) => void;
+    setCurrentStep: (step: 1 | 'design-config' | 2 | 3) => void;
     setDirectImages: (imgs: DirectImage[]) => void;
     setUploadedFolders: (status: { color: boolean; uncolor: boolean; palette: boolean; solutionsCollage: boolean }) => void;
 }

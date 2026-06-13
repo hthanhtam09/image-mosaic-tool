@@ -6,10 +6,13 @@
 
 import { useMemo } from "react";
 import { useColorByNumberStore, useActiveProject } from "@/store/useColorByNumberStore";
+import { useBookDesignStore } from "@/store/useBookDesignStore";
+import { getCustomLabel } from "@/lib/utils";
 
 export default function ColorByNumberPalette() {
   const { isPaletteVisible, togglePaletteGlobal, setSelectedCode } = useColorByNumberStore();
   const activeProject = useActiveProject();
+  const { badgeStyle } = useBookDesignStore();
   
   const data = activeProject?.data;
   const filled = useMemo(() => activeProject?.filled ?? {}, [activeProject?.filled]);
@@ -126,11 +129,11 @@ export default function ColorByNumberPalette() {
                     className={`cursor-pointer border-b border-[var(--border-subtle)] transition-colors hover:bg-white/5 ${
                       isSelected ? "bg-[var(--accent-muted)]" : ""
                     }`}
-                    aria-label={`Chọn màu ${row.code}, ${row.count}/${row.total} ô đã tô`}
+                    aria-label={`Chọn màu ${getCustomLabel(row.code, badgeStyle, data?.gridType)}, ${row.count}/${row.total} ô đã tô`}
                     aria-pressed={isSelected}
                   >
                     <td className="py-2.5 pr-4 font-mono font-semibold text-[var(--text-primary)]">
-                      {row.code}
+                      {getCustomLabel(row.code, badgeStyle, data?.gridType)}
                     </td>
                     <td className="py-2.5 pr-4">
                       <div

@@ -28,12 +28,24 @@ const ctxLine = (
 
 // ─── Square-mark (dot-code) cell ─────────────────────────────────────────────
 
+const getBrightness = (hex: string): number => {
+  const cleanHex = hex.replace("#", "");
+  if (cleanHex.length !== 6) return 255;
+  const r = parseInt(cleanHex.slice(0, 2), 16);
+  const g = parseInt(cleanHex.slice(2, 4), 16);
+  const b = parseInt(cleanHex.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000;
+};
+
+// ─── Square-mark (dot-code) cell ─────────────────────────────────────────────
+
 export const drawDotCodeCellBase = (
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   size: number,
   showBackground: boolean = true,
+  bgColor: string = "#ffffff",
 ) => {
   const dotR = Math.max(1.1, size * 0.055);
   const smallR = Math.max(0.55, size * 0.025);
@@ -44,13 +56,16 @@ export const drawDotCodeCellBase = (
   const bottom = y + size - pad;
 
   if (showBackground) {
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = bgColor;
     ctx.fillRect(x, y, size, size);
   }
 
-  ctx.fillStyle = "#000000";
+  const brightness = getBrightness(bgColor);
+  const dotColor = brightness < 128 ? "#ffffff" : "#000000";
+
   const drawDot = (cx: number, cy: number, r: number, alpha: number) => {
     ctx.save();
+    ctx.fillStyle = dotColor;
     ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -79,6 +94,7 @@ export const drawDotCodeSymbol = (
   cx: number,
   cy: number,
   size: number,
+  symbolColor: string = "#000000",
 ) => {
   const half = size / 2;
   const left = cx - half;
@@ -87,8 +103,8 @@ export const drawDotCodeSymbol = (
   const bottom = cy + half;
 
   ctx.save();
-  ctx.strokeStyle = "#000000";
-  ctx.fillStyle = "#000000";
+  ctx.strokeStyle = symbolColor;
+  ctx.fillStyle = symbolColor;
   ctx.lineWidth = Math.max(1.4, size * 0.13);
   ctx.lineCap = "round";
 
@@ -117,20 +133,24 @@ export const drawHexagonMarkCellBase = (
   cy: number,
   r: number,
   showBackground = true,
+  bgColor: string = "#ffffff",
 ) => {
   const points = getHexagonPoints(cx, cy, r);
   if (showBackground) {
     getRoundedPolygonPath(ctx, points, r * 0.04);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = bgColor;
     ctx.fill();
   }
+
+  const brightness = getBrightness(bgColor);
+  const dotColor = brightness < 128 ? "#ffffff" : "#000000";
 
   const dotR = Math.max(1.1, r * 0.085);
   const smallR = Math.max(0.55, r * 0.04);
   const steps = 4;
   ctx.save();
 
-  ctx.fillStyle = "#000000";
+  ctx.fillStyle = dotColor;
   ctx.globalAlpha = 0.28;
   for (let i = 0; i < points.length; i++) {
     const start = points[i];
@@ -161,14 +181,15 @@ export const drawHexagonMarkSymbol = (
   cy: number,
   size: number,
   markRadius?: number,
+  symbolColor: string = "#000000",
 ) => {
   const r = markRadius ?? size / Math.sqrt(3);
   const points = getHexagonPoints(cx, cy, r);
   const [top, upperRight, lowerRight, bottom, lowerLeft, upperLeft] = points;
 
   ctx.save();
-  ctx.strokeStyle = "#000000";
-  ctx.fillStyle = "#000000";
+  ctx.strokeStyle = symbolColor;
+  ctx.fillStyle = symbolColor;
   ctx.lineWidth = Math.max(1.4, size * 0.11);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";

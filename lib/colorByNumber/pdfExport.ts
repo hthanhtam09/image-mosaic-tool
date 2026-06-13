@@ -4,6 +4,7 @@ import { exportToCanvas, exportPaletteToCanvas, PartialColorMode } from "./expor
 import { NOTO_SANS_REGULAR, NOTO_SANS_BOLD } from "./fonts";
 import { getThemeById } from "./themes";
 import { shouldShowCodes, shouldUseTightCrop } from "./objectFocus";
+import { useBookDesignStore } from "../../store/useBookDesignStore";
 
 
 export interface PDFCsvRow {
@@ -197,7 +198,23 @@ export const generateBookPdf = async (
   pdf.addFileToVFS("NotoSans-Bold.ttf", NOTO_SANS_BOLD);
   pdf.addFont("NotoSans-Regular.ttf", "Noto Sans", "normal");
   pdf.addFont("NotoSans-Bold.ttf", "Noto Sans", "bold");
-  pdf.setFont("Noto Sans", "normal");
+  
+  let pdfFontName = "Noto Sans";
+  const customFontName = useBookDesignStore.getState().customFontName;
+  const customFontBase64 = useBookDesignStore.getState().customFontBase64;
+  const customFontExtension = useBookDesignStore.getState().customFontExtension;
+  if (customFontName && customFontBase64) {
+    const filename = `customfont.${customFontExtension || "ttf"}`;
+    try {
+      pdf.addFileToVFS(filename, customFontBase64);
+      pdf.addFont(filename, customFontName, "normal");
+      pdf.addFont(filename, customFontName, "bold");
+      pdfFontName = customFontName;
+    } catch (err) {
+      console.error("Failed to add custom font to PDF:", err);
+    }
+  }
+  pdf.setFont(pdfFontName, "normal");
 
   const totalPairs = directImages.length > 0 ? directImages.length : projects.length;
   const totalPrefix = prefixPages.length;
@@ -278,6 +295,16 @@ export const generateBookPdf = async (
           } else if (directImages && directImages.length > 0 && directImages[i]?.paletteUrl) {
               paletteImgData = await removeBackgroundFromDataUrl(directImages[i].paletteUrl!);
           } else if (project?.data) {
+              const { badgeBgImageUrl } = useBookDesignStore.getState();
+              let badgeBgImage: HTMLImageElement | null = null;
+              if (badgeBgImageUrl) {
+                  try {
+                      badgeBgImage = await loadImageFromDataUrl(badgeBgImageUrl);
+                  } catch (e) {
+                      console.error("Failed to load badge background pattern for KDP export:", e);
+                  }
+              }
+
               // Render Palette Image mixed with Background
               const canvasPalette = exportPaletteToCanvas(project.data, {
                   bgColor: bgColorHex,
@@ -285,6 +312,7 @@ export const generateBookPdf = async (
                   pageNumber: i + 1,
                   transparentBg: true,
                   removeBgColorCells: true,
+                  badgeBgImage,
               });
               paletteImgData = canvasPalette.toDataURL("image/png");
           }
@@ -322,7 +350,7 @@ export const generateBookPdf = async (
           // Overlay Text (Quotes/Riddle)
           pdf.setTextColor(textColorHex);
           
-          pdf.setFont("Noto Sans", "bold");
+          pdf.setFont(pdfFontName, "bold");
           
           pdf.setFontSize(38); // 38px (pt in jsPDF)
           const numText = csvRow.number.toString();
@@ -343,7 +371,7 @@ export const generateBookPdf = async (
               startY = (PAGE_H_PT / 2) - 10 - (textHeight / 2);
           }
 
-          pdf.setFont("Noto Sans", "bold");
+          pdf.setFont(pdfFontName, "bold");
           pdf.setFontSize(38);
           pdf.text(numText, (PAGE_W_PT - numW) / 2, startY);
 
@@ -354,7 +382,7 @@ export const generateBookPdf = async (
           pdf.setLineWidth(1.5);
           pdf.line((PAGE_W_PT - lineLength) / 2, lineY, (PAGE_W_PT + lineLength) / 2, lineY);
 
-          pdf.setFont("Noto Sans", "normal");
+          pdf.setFont(pdfFontName, "normal");
           
           pdf.setFontSize(14); // 14px (pt in jsPDF)
           

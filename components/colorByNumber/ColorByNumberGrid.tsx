@@ -43,7 +43,8 @@ import type {
   PageLayout,
 } from "@/lib/colorByNumber";
 
-import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT } from "@/lib/utils";
+import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT, getCustomLabel } from "@/lib/utils";
+import { useBookDesignStore } from "@/store/useBookDesignStore";
 
 const STROKE_COLOR = "#000000";
 const DEFAULT_FILL_LIGHT = "#ffffff";
@@ -85,11 +86,13 @@ const DotCodeSymbol = ({
   cx,
   cy,
   size,
+  symbolColor = "#000000",
 }: {
   code: string;
   cx: number;
   cy: number;
   size: number;
+  symbolColor?: string;
 }) => {
   const strokeWidth = Math.max(1.4, size * 0.13);
   const half = size / 2;
@@ -98,12 +101,12 @@ const DotCodeSymbol = ({
   const left = cx - half;
   const right = cx + half;
   const common = {
-    stroke: "#000000",
+    stroke: symbolColor,
     strokeWidth,
     strokeLinecap: "round" as const,
   };
 
-  if (false && code === "5") {
+  if (code === "5") {
     const bleed = Math.max(0.75, size * 0.035);
     return (
       <rect
@@ -111,7 +114,7 @@ const DotCodeSymbol = ({
         y={top - bleed}
         width={size + bleed * 2}
         height={size + bleed * 2}
-        fill="#000000"
+        fill={symbolColor}
       />
     );
   }
@@ -139,11 +142,13 @@ const DotCodeCellBase = ({
   y,
   size,
   showBackground = true,
+  bgColor = "#ffffff",
 }: {
   x: number;
   y: number;
   size: number;
   showBackground?: boolean;
+  bgColor?: string;
 }) => {
   const dotR = Math.max(1.1, size * 0.055);
   const smallR = Math.max(0.55, size * 0.025);
@@ -171,7 +176,7 @@ const DotCodeCellBase = ({
   return (
     <g>
       {showBackground && (
-        <rect x={x} y={y} width={size} height={size} fill="#ffffff" />
+        <rect x={x} y={y} width={size} height={size} fill={bgColor} />
       )}
       {dots.map((dot, i) => (
         <circle
@@ -198,11 +203,13 @@ const HexagonMarkCellBase = ({
   cy,
   r,
   showBackground = true,
+  bgColor = "#ffffff",
 }: {
   cx: number;
   cy: number;
   r: number;
   showBackground?: boolean;
+  bgColor?: string;
 }) => {
   const points = getHexagonPoints(cx, cy, r);
   const d = getRoundedPolygonPath(points, r * 0.04);
@@ -225,7 +232,7 @@ const HexagonMarkCellBase = ({
 
   return (
     <g>
-      {showBackground && <path d={d} fill="#ffffff" />}
+      {showBackground && <path d={d} fill={bgColor} />}
       {edgeDots.map((dot, i) => (
         <circle
           key={`edge-${i}`}
@@ -241,58 +248,42 @@ const HexagonMarkCellBase = ({
       ))}
     </g>
   );
-};
-
-const HexagonMarkSymbol = ({
+};const HexagonMarkSymbol = ({
   code,
   cx,
   cy,
   size,
   markRadius,
+  symbolColor = "#000000",
 }: {
   code: string;
   cx: number;
   cy: number;
   size: number;
   markRadius?: number;
+  symbolColor?: string;
 }) => {
   const r = markRadius ?? size / Math.sqrt(3);
   const points = getHexagonPoints(cx, cy, r);
   const [top, upperRight, lowerRight, bottom, lowerLeft, upperLeft] = points;
   const strokeWidth = Math.max(1.4, size * 0.11);
   const common = {
-    stroke: "#000000",
+    stroke: symbolColor,
     strokeWidth,
+    strokeLinejoin: "round" as const,
     strokeLinecap: "round" as const,
   };
 
   if (code === ".") {
-    return <circle cx={cx} cy={cy} r={Math.max(1.4, size * 0.15)} fill="#000000" />;
-  }
-
-  if (false && code === "5") {
-    return (
-      <text
-        x={cx}
-        y={cy}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={size * 0.82}
-        fontWeight={800}
-        fontFamily="'Noto Sans Symbols 2', 'Noto Sans', sans-serif"
-        fill="#000000"
-      >
-        ✱
-      </text>
-    );
+    return <circle cx={cx} cy={cy} r={Math.max(1.4, size * 0.15)} fill={symbolColor} />;
   }
 
   return (
     <g>
-      {code === "1" && (
+      {(code === "1" || code === "5") && (
         <line x1={top.x} y1={top.y} x2={bottom.x} y2={bottom.y} {...common} />
       )}
-      {code === "2" && (
+      {(code === "2" || code === "4" || code === "5") && (
         <line
           x1={lowerLeft.x}
           y1={lowerLeft.y}
@@ -301,7 +292,7 @@ const HexagonMarkSymbol = ({
           {...common}
         />
       )}
-      {code === "3" && (
+      {(code === "3" || code === "4" || code === "5") && (
         <line
           x1={upperLeft.x}
           y1={upperLeft.y}
@@ -309,27 +300,6 @@ const HexagonMarkSymbol = ({
           y2={lowerRight.y}
           {...common}
         />
-      )}
-      {(code === "4" || code === "5") && (
-        <>
-          <line
-            x1={lowerLeft.x}
-            y1={lowerLeft.y}
-            x2={upperRight.x}
-            y2={upperRight.y}
-            {...common}
-          />
-          <line
-            x1={upperLeft.x}
-            y1={upperLeft.y}
-            x2={lowerRight.x}
-            y2={lowerRight.y}
-            {...common}
-          />
-        </>
-      )}
-      {code === "5" && (
-        <line x1={top.x} y1={top.y} x2={bottom.x} y2={bottom.y} {...common} />
       )}
     </g>
   );
@@ -445,6 +415,7 @@ const PaletteColumnSVG = ({
   data: ColorByNumberData;
   layout: PaletteLayout;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
   const {
     codes,
     codeToColor,
@@ -799,7 +770,7 @@ const PaletteColumnSVG = ({
                 paintOrder="stroke"
                 fill="#ffffff"
               >
-                {code}
+                {getCustomLabel(code, badgeStyle, data.gridType)}
               </text>
             )}
 
@@ -1241,6 +1212,8 @@ const CellTrapezoid = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1313,7 +1286,7 @@ const CellTrapezoid = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -1339,6 +1312,8 @@ const CellFishScale = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1397,7 +1372,7 @@ const CellFishScale = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -1423,6 +1398,8 @@ const CellIslamic = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1479,7 +1456,7 @@ const CellIslamic = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -1505,6 +1482,8 @@ const CellPuzzle = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1569,7 +1548,7 @@ const CellPuzzle = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -1595,6 +1574,8 @@ const CellPentagon = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1661,7 +1642,7 @@ const CellPentagon = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -1687,6 +1668,8 @@ const CellCircle = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1743,7 +1726,7 @@ const CellCircle = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -1769,6 +1752,8 @@ const CellSquare = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1797,6 +1782,17 @@ const CellSquare = ({
   const s = data.cellSize;
   const isMarkGrid = isMarkGridType(data.gridType);
 
+  const getBrightness = (hex: string): number => {
+    const cleanHex = hex.replace("#", "");
+    if (cleanHex.length !== 6) return 255;
+    const r = parseInt(cleanHex.slice(0, 2), 16);
+    const g = parseInt(cleanHex.slice(2, 4), 16);
+    const b = parseInt(cleanHex.slice(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000;
+  };
+  const brightness = getBrightness(fillColor);
+  const symbolColor = isMarkGrid ? "#000000" : (brightness < 128 ? "#ffffff" : "#000000");
+
   return (
     <g>
       {isMarkGrid ? (
@@ -1814,8 +1810,7 @@ const CellSquare = ({
         />
       )}
       {isMarkGrid &&
-        showNumbers &&
-        (colored ? (
+        (isCellColored ? (
           data.gridType === "hexagon-mark" ? (
             <HexagonMarkSymbol
               code={cell.code}
@@ -1823,6 +1818,7 @@ const CellSquare = ({
               cy={layout.cy}
               size={s}
               markRadius={layout.r}
+              symbolColor={symbolColor}
             />
           ) : (
             <DotCodeSymbol
@@ -1830,31 +1826,34 @@ const CellSquare = ({
               cx={layout.cx}
               cy={layout.cy}
               size={s}
+              symbolColor={symbolColor}
             />
           )
-        ) : data.gridType === "hexagon-mark" && cell.code === "." ? (
-          <circle
-            cx={layout.cx}
-            cy={layout.cy}
-            r={Math.max(1.1, s * 0.09)}
-            fill="#8a8a8a"
-            opacity={0.55}
-          />
-        ) : (
-          <text
-            x={layout.cx}
-            y={layout.cy}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#8a8a8a"
-            opacity={0.55}
-            fontSize={s * 0.7}
-            fontWeight={500}
-            fontFamily="'Noto Sans', sans-serif"
-          >
-            {cell.code}
-          </text>
-        ))}
+        ) : showNumbers ? (
+          data.gridType === "hexagon-mark" && cell.code === "." ? (
+            <circle
+              cx={layout.cx}
+              cy={layout.cy}
+              r={Math.max(1.1, s * 0.09)}
+              fill="#8a8a8a"
+              opacity={0.55}
+            />
+          ) : (
+            <text
+              x={layout.cx}
+              y={layout.cy}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#8a8a8a"
+              opacity={0.55}
+              fontSize={s * 0.7}
+              fontWeight={500}
+              fontFamily="'Noto Sans', sans-serif"
+            >
+              {cell.code}
+            </text>
+          )
+        ) : null)}
       {!isMarkGrid && showNumbers && (
         <text
           x={layout.cx}
@@ -1876,7 +1875,7 @@ const CellSquare = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -1902,6 +1901,8 @@ const CellDiamond = ({
   gridDims?: { width: number; height: number };
   removeBackground?: boolean;
 }) => {
+  const { badgeStyle } = useBookDesignStore();
+  const displayCode = getCustomLabel(cell.code, badgeStyle, data.gridType);
   const layout = getCellLayout(cell.x, cell.y, data);
   let isCellColored = colored;
   if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
@@ -1965,7 +1966,7 @@ const CellDiamond = ({
               }
             : {})}
         >
-          {cell.code}
+          {displayCode}
         </text>
       )}
     </g>
@@ -2005,6 +2006,7 @@ const PageGrid = ({
   const pagePaddingX = getPagePaddingX(data);
 
   const gridDims = getGridDimensions(data);
+  const cellsByCoord = useMemo(() => new Map(data.cells.map((c) => [`${c.x},${c.y}`, c])), [data.cells]);
 
   const CellComponent =
     data.gridType === "honeycomb"
@@ -2105,13 +2107,38 @@ const PageGrid = ({
               .filter(({ x, y }) =>
                 shouldRenderDotCodeBaseCell(data, x, y, removeBackground),
               )
-              .map(({ x, y }) =>
-                data.gridType === "hexagon-mark" ? (
+              .map(({ x, y }) => {
+                const cell = cellsByCoord.get(`${x},${y}`);
+                const cellColor = cell ? cell.color : "#ffffff";
+                const cellFilled = cell ? !!filled[`${x},${y}`] : false;
+                let isCellColored = colored;
+                if (colored && partialColorMode && partialColorMode !== "none" && gridDims) {
+                  const layout = getCellLayout(x, y, data);
+                  const nx = layout.cx / gridDims.width;
+                  const ny = layout.cy / gridDims.height;
+                  if (partialColorMode === "diagonal-bl-tr") {
+                    isCellColored = ny <= 1 - nx;
+                  } else if (partialColorMode === "diagonal-tl-br") {
+                    isCellColored = ny <= nx;
+                  } else if (partialColorMode === "horizontal-middle") {
+                    isCellColored = ny <= 0.5;
+                  } else if (partialColorMode === "horizontal-sides") {
+                    isCellColored = ny > 0.5;
+                  }
+                }
+                const fillColor = isMarkGridType(data.gridType)
+                  ? "#ffffff"
+                  : isCellColored
+                    ? getCellFillColor(cellColor, cellFilled)
+                    : DEFAULT_FILL_LIGHT;
+
+                return data.gridType === "hexagon-mark" ? (
                   <HexagonMarkCellBase
                     key={`base-${x},${y}`}
                     cx={getCellLayout(x, y, data).cx}
                     cy={getCellLayout(x, y, data).cy}
                     r={getCellLayout(x, y, data).r}
+                    bgColor={fillColor}
                   />
                 ) : (
                   <DotCodeCellBase
@@ -2119,9 +2146,10 @@ const PageGrid = ({
                     x={x * data.cellSize}
                     y={y * data.cellSize}
                     size={data.cellSize}
+                    bgColor={fillColor}
                   />
-                ),
-              )}
+                );
+              })}
           {data.cells.map((cell) => (
             <CellComponent
               key={`${cell.x},${cell.y}`}

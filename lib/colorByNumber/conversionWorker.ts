@@ -456,6 +456,7 @@ self.onmessage = (e: MessageEvent) => {
       cellSize,
       false,
       true,
+      gridType,
     );
     for (const block of preliminaryBlocks) {
       paletteWeights[block.paletteIndex]++;
@@ -476,6 +477,7 @@ self.onmessage = (e: MessageEvent) => {
     cellSize,
     useDithering,
     true,
+    gridType,
   );
 
   // 2b. FILTER MINOR COLORS
@@ -583,8 +585,7 @@ self.onmessage = (e: MessageEvent) => {
 
   if (
     removeWhiteBackground &&
-    rawCells.length > 0 &&
-    gridType !== "hexagon-mark"
+    rawCells.length > 0
   ) {
     const boundCells = isMarkGrid(gridType)
       ? rawCells.filter((c) => Boolean(c.code))
@@ -594,6 +595,16 @@ self.onmessage = (e: MessageEvent) => {
 
     minX = Math.max(0, Math.min(...cellsForBounds.map((c) => c.x)) - cropPadding);
     minY = Math.max(0, Math.min(...cellsForBounds.map((c) => c.y)) - cropPadding);
+    const isStaggered =
+      gridType === "hexagon-mark" ||
+      gridType === "honeycomb" ||
+      gridType === "diamond" ||
+      gridType === "pentagon" ||
+      gridType === "fish-scale";
+    if (isStaggered && minY % 2 !== 0) {
+      minY = Math.max(0, minY - 1);
+    }
+
     maxX = Math.min(cols - 1, Math.max(...cellsForBounds.map((c) => c.x)) + cropPadding);
     maxY = Math.min(rows - 1, Math.max(...cellsForBounds.map((c) => c.y)) + cropPadding);
 

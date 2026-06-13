@@ -15,6 +15,7 @@ import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 import { useCallback, useState } from 'react'
 import { toast } from '@/store/useToastStore'
+import { useBookDesignStore } from '@/store/useBookDesignStore'
 
 interface UseZipExportOptions {
   access: ToolAccess
@@ -36,6 +37,7 @@ export function useZipExport({
   paletteImages,
 }: UseZipExportOptions) {
   const [isZipping, setIsZipping] = useState(false)
+  const [zipProgress, setZipProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
 
   const handleDownloadAllImages = useCallback(async () => {
     if (!access.canExportZip) {
@@ -46,6 +48,7 @@ export function useZipExport({
     if (readyProjects.length === 0) return
 
     setIsZipping(true)
+    setZipProgress({ current: 0, total: readyProjects.length })
     const zip = new JSZip()
     const rootFolder = zip.folder('converted_images')
     const colorFolder = rootFolder?.folder('color')
@@ -58,7 +61,24 @@ export function useZipExport({
     const collageLabels: Array<string | undefined> = []
 
     try {
+      const { badgeBgImageUrl } = useBookDesignStore.getState()
+      let loadedBadgeBgImg: HTMLImageElement | null = null
+      if (badgeBgImageUrl) {
+        try {
+          loadedBadgeBgImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            img.src = badgeBgImageUrl
+            img.onload = () => resolve(img)
+            img.onerror = (e) => reject(e)
+          })
+        } catch (err) {
+          console.error('Failed to load badge background pattern:', err)
+        }
+      }
+
       for (let i = 0; i < readyProjects.length; i++) {
+        setZipProgress({ current: i + 1, total: readyProjects.length })
         const project = readyProjects[i]
         const baseName = project.name.replace(/\.[^/.]+$/, '')
         const theme = getThemeById(globalTheme)
@@ -78,9 +98,11 @@ export function useZipExport({
         }
         canvasColor.width = 0; canvasColor.height = 0
 
+        const displayMode = useBookDesignStore.getState().coloringDisplayMode
         const canvasUncolor = exportToCanvas(project.data!, project.filled, {
           showCodes: shouldShowCodes(project.data, project.removeBackground, !project.removeBackground),
-          colored: false, showPalette: false,
+          colored: false,
+          showPalette: project.removeBackground ? false : (displayMode === 'side-by-side'),
           partialColorMode: project.partialColorMode,
           bgColor: theme.backgroundColor, transparentBg: project.removeBackground,
           tightCrop: useObjectTightCrop, removeBgColorCells: true,
@@ -92,6 +114,7 @@ export function useZipExport({
           const canvasPalette = exportPaletteToCanvas(project.data, {
             bgColor: theme.backgroundColor, themeColor: theme.backgroundColor,
             pageNumber: i + 1, transparentBg: true, removeBgColorCells: true,
+            badgeBgImage: loadedBadgeBgImg,
           })
           paletteFolder.file(`${baseName}.png`, canvasToDpiPngBase64(canvasPalette), { base64: true })
           canvasPalette.width = 0; canvasPalette.height = 0
@@ -118,5 +141,5 @@ export function useZipExport({
     }
   }, [access, globalShowNumbers, globalTheme, paletteImages, projects, requestPaidAccess, solutionNameList])
 
-  return { isZipping, handleDownloadAllImages }
+  return { isZipping, zipProgress, handleDownloadAllImages }
 }

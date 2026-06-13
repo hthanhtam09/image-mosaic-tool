@@ -740,26 +740,10 @@ export default function EmptyState({
     )
   }
 
-  const hiddenInputs = (
-    <>
-      <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" multiple onChange={handleImageFileChange} />
-      <input ref={transparentImageInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" multiple onChange={handleTransparentImageFileChange} />
-      <input
-        ref={dirInputRef}
-        type="file"
-        {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory: string; directory: string })}
-        className="hidden"
-        onChange={handleDirUploadChange}
-      />
-      <input ref={beforeAfterInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={handleBeforeAfterImageChange} />
-    </>
-  )
-
   // contentOnly: render only the content area (no sidebar)
   if (contentOnly) {
     return (
       <>
-        {hiddenInputs}
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
           {visibleTabs.map((tab) => {
             const isActive = effectiveTab === tab.id
@@ -837,9 +821,6 @@ export default function EmptyState({
           </div>
         </div>
       </main>
-
-      {/* Hidden Inputs */}
-      {hiddenInputs}
     </div>
   )
 }

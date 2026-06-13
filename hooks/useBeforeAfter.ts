@@ -52,6 +52,7 @@ export function useBeforeAfter({
   const [beforeAfterJob, setBeforeAfterJob] = useState<BeforeAfterJob | null>(null)
   const [isProcessingFolder, setIsProcessingFolder] = useState(false)
   const [isZipping, setIsZipping] = useState(false)
+  const [baProgress, setBaProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
   const beforeAfterInputRef = useRef<HTMLInputElement>(null)
 
   const generateBeforeAfterJob = useCallback(
@@ -67,10 +68,12 @@ export function useBeforeAfter({
       const uncolorCanvas = exportToCanvas(data, {}, {
         showCodes: true, colored: false, showPalette: false,
         bgColor: colorTheme.backgroundColor, showMagnifier: false,
+        transparentBg: true, removeBgColorCells: true,
       })
       const colorCanvas = exportToCanvas(data, {}, {
         showCodes: true, colored: true, showPalette: false,
         bgColor: colorTheme.backgroundColor, showMagnifier: false,
+        transparentBg: true, removeBgColorCells: true,
       })
       const beforeUrl = uncolorCanvas.toDataURL('image/png')
       const afterUrl = colorCanvas.toDataURL('image/png')
@@ -152,10 +155,13 @@ export function useBeforeAfter({
     const pairs = directImages.filter((img) => img.uncolorUrl && img.colorUrl)
     if (pairs.length === 0) return
     setIsZipping(true)
+    setBaProgress({ current: 0, total: pairs.length })
     try {
       const zip = new JSZip()
       const folder = zip.folder('before_after')
-      for (const img of pairs) {
+      for (let i = 0; i < pairs.length; i++) {
+        const img = pairs[i]
+        setBaProgress({ current: i + 1, total: pairs.length })
         const canvas = await exportBeforeAfterToCanvas(img.uncolorUrl, img.colorUrl, beforeAfterTheme)
         const baseName = img.name.replace(/\.[^/.]+$/, '')
         folder?.file(`${baseName}.png`, canvasToDpiPngBase64(canvas), { base64: true })
@@ -180,6 +186,7 @@ export function useBeforeAfter({
     beforeAfterJob,
     isProcessingFolder,
     isZipping,
+    baProgress,
     beforeAfterInputRef,
     handleBeforeAfterImageChange,
     updateBeforeAfterGridType,

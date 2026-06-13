@@ -20,5 +20,12 @@ export const THEMES: Theme[] = [
 // Removed redundant ThemeId type alias
 
 export const getThemeById = (id: string): Theme => {
+  if (id && id.startsWith('#')) {
+    return {
+      id: id,
+      name: 'Custom',
+      backgroundColor: id,
+    };
+  }
   return THEMES.find(t => t.id === id) || THEMES[0];
 };

@@ -207,6 +207,7 @@ export const createMosaicBlocks = (
   blockSize: number,
   useDithering = true,
   useBlockAverage = false,
+  gridType?: string,
 ): MosaicBlock[] => {
   void useDithering;
 
@@ -222,10 +223,18 @@ export const createMosaicBlocks = (
     pixelLabs[i] = rgbToLab({ r: data[j], g: data[j + 1], b: data[j + 2] });
   }
 
+  const isStaggered =
+    gridType === "hexagon-mark" ||
+    gridType === "honeycomb" ||
+    gridType === "diamond" ||
+    gridType === "pentagon" ||
+    gridType === "fish-scale";
+
   if (useBlockAverage) {
     for (let row = 0; row < rows; row++) {
+      const rowOffset = isStaggered && row % 2 === 1 ? Math.round(blockSize / 2) : 0;
       for (let col = 0; col < cols; col++) {
-        const blockX = col * blockSize;
+        const blockX = col * blockSize + rowOffset;
         const blockY = row * blockSize;
         let opaqueCount = 0;
         let sumR = 0;
@@ -266,7 +275,7 @@ export const createMosaicBlocks = (
           color: palette[bestIndex],
           avgColor:
             totalRgbWeight > 0
-              ? {
+               ? {
                   r: Math.round(sumR / totalRgbWeight),
                   g: Math.round(sumG / totalRgbWeight),
                   b: Math.round(sumB / totalRgbWeight),
@@ -281,8 +290,9 @@ export const createMosaicBlocks = (
   }
 
   for (let row = 0; row < rows; row++) {
+    const rowOffset = isStaggered && row % 2 === 1 ? Math.round(blockSize / 2) : 0;
     for (let col = 0; col < cols; col++) {
-      const blockX = col * blockSize;
+      const blockX = col * blockSize + rowOffset;
       const blockY = row * blockSize;
       const votes = new Array<number>(palette.length).fill(0);
 

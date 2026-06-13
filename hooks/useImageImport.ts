@@ -137,7 +137,7 @@ export function useImageImport({
   }, [access.canUsePremiumPresets, requestPaidAccess])
 
   const handleTransparentImageFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>, projectsLength: number, setCurrentStep: (s: 1 | 2 | 3) => void) => {
+    async (e: React.ChangeEvent<HTMLInputElement>, projectsLength: number, setCurrentStep: (s: 1 | 'design-config' | 2 | 3) => void) => {
       const files = e.target.files
       if (!files || files.length === 0) return
       setIsConverting(true)
