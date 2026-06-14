@@ -209,7 +209,10 @@ const assignMarkCodesByValue = (
 
     normalizedEdgeByOrdinal.set(entry.ordinal, normalizedEdge);
     rawLevelByOrdinal.set(entry.ordinal, rawLevel);
-    levelByOrdinal.set(entry.ordinal, clamp(codeIndex, 0, markCodes.length - 1));
+    levelByOrdinal.set(
+      entry.ordinal,
+      clamp(codeIndex, 0, markCodes.length - 1),
+    );
   }
 
   const smoothedLevelByOrdinal = new Map<number, number>();
@@ -227,7 +230,10 @@ const assignMarkCodesByValue = (
 
     let smoothedLevel = level;
     const normalizedEdge = normalizedEdgeByOrdinal.get(entry.ordinal) ?? 0;
-    if (normalizedEdge <= toneConfig.edgeThreshold && neighborLevels.length >= 3) {
+    if (
+      normalizedEdge <= toneConfig.edgeThreshold &&
+      neighborLevels.length >= 3
+    ) {
       const average =
         neighborLevels.reduce((sum, neighborLevel) => sum + neighborLevel, 0) /
         neighborLevels.length;
@@ -512,9 +518,9 @@ self.onmessage = (e: MessageEvent) => {
     const nonWhiteFixedIndices = Array.from(
       new Set(
         usedPalette
-          .map((c, i) => indexIsWhite[i] ? -1 : dynamicToFixedIndex[i])
-          .filter((idx) => idx !== -1)
-      )
+          .map((c, i) => (indexIsWhite[i] ? -1 : dynamicToFixedIndex[i]))
+          .filter((idx) => idx !== -1),
+      ),
     ).sort((a, b) => a - b);
 
     // Map each unique fixed index to a sequential code
@@ -563,11 +569,14 @@ self.onmessage = (e: MessageEvent) => {
     return {
       x,
       y,
-      code: markBlockCodes?.[blockOrdinal] ?? indexToCode.get(block.paletteIndex) ?? "",
+      code:
+        markBlockCodes?.[blockOrdinal] ??
+        indexToCode.get(block.paletteIndex) ??
+        "",
       color: rgbToHex(
         isMarkGrid(gridType)
-          ? block.avgColor ?? block.color
-          : FIXED_PALETTE[dynamicToFixedIndex[block.paletteIndex]]
+          ? (block.avgColor ?? block.color)
+          : FIXED_PALETTE[dynamicToFixedIndex[block.paletteIndex]],
       ),
       fixedPaletteIndex: dynamicToFixedIndex[block.paletteIndex],
     };
@@ -578,18 +587,18 @@ self.onmessage = (e: MessageEvent) => {
   let finalRows = rows;
   let finalBackgroundCellKeys = backgroundCellKeys;
 
-  if (
-    removeWhiteBackground &&
-    rawCells.length > 0
-  ) {
-    const boundCells = isMarkGrid(gridType)
-      ? rawCells.filter((c) => Boolean(c.code))
-      : rawCells;
-    const cellsForBounds = boundCells.length > 0 ? boundCells : rawCells;
-    const cropPadding = isMarkGrid(gridType) ? 2 : 1;
+  if (removeWhiteBackground && rawCells.length > 0 && !isMarkGrid(gridType)) {
+    const cellsForBounds = rawCells;
+    const cropPadding = 1;
 
-    minX = Math.max(0, Math.min(...cellsForBounds.map((c) => c.x)) - cropPadding);
-    minY = Math.max(0, Math.min(...cellsForBounds.map((c) => c.y)) - cropPadding);
+    minX = Math.max(
+      0,
+      Math.min(...cellsForBounds.map((c) => c.x)) - cropPadding,
+    );
+    minY = Math.max(
+      0,
+      Math.min(...cellsForBounds.map((c) => c.y)) - cropPadding,
+    );
     const isStaggered =
       gridType === "hexagon-mark" ||
       gridType === "honeycomb" ||
@@ -600,8 +609,14 @@ self.onmessage = (e: MessageEvent) => {
       minY = Math.max(0, minY - 1);
     }
 
-    maxX = Math.min(cols - 1, Math.max(...cellsForBounds.map((c) => c.x)) + cropPadding);
-    maxY = Math.min(rows - 1, Math.max(...cellsForBounds.map((c) => c.y)) + cropPadding);
+    maxX = Math.min(
+      cols - 1,
+      Math.max(...cellsForBounds.map((c) => c.x)) + cropPadding,
+    );
+    maxY = Math.min(
+      rows - 1,
+      Math.max(...cellsForBounds.map((c) => c.y)) + cropPadding,
+    );
 
     finalCols = maxX - minX + 1;
     finalRows = maxY - minY + 1;

@@ -5,20 +5,27 @@
  */
 
 import { useMemo } from "react";
-import { useColorByNumberStore, useActiveProject } from "@/store/useColorByNumberStore";
+import {
+  useColorByNumberStore,
+  useActiveProject,
+} from "@/store/useColorByNumberStore";
 import { useBookDesignStore } from "@/store/useBookDesignStore";
 import { getCustomLabel, rgbToHex, parseHexToRGB } from "@/lib/utils";
 import { FIXED_PALETTE, findClosestFixedColorIndex } from "@/lib/palette";
 
 export default function ColorByNumberPalette() {
-  const { isPaletteVisible, togglePaletteGlobal, setSelectedCode } = useColorByNumberStore();
+  const { isPaletteVisible, togglePaletteGlobal, setSelectedCode } =
+    useColorByNumberStore();
   const activeProject = useActiveProject();
   const { badgeStyle } = useBookDesignStore();
-  
+
   const data = activeProject?.data;
-  const filled = useMemo(() => activeProject?.filled ?? {}, [activeProject?.filled]);
+  const filled = useMemo(
+    () => activeProject?.filled ?? {},
+    [activeProject?.filled],
+  );
   const selectedCode = activeProject?.selectedCode;
-  
+
   const togglePalette = togglePaletteGlobal;
 
   const paletteRows = useMemo(() => {
@@ -30,9 +37,14 @@ export default function ColorByNumberPalette() {
 
     for (const cell of data.cells) {
       if (!cell.code) continue; // skip white cells (no code)
-      const cellColor = cell.fixedPaletteIndex !== undefined
-        ? rgbToHex(FIXED_PALETTE[cell.fixedPaletteIndex])
-        : rgbToHex(FIXED_PALETTE[findClosestFixedColorIndex(parseHexToRGB(cell.color))]);
+      const cellColor =
+        cell.fixedPaletteIndex !== undefined
+          ? rgbToHex(FIXED_PALETTE[cell.fixedPaletteIndex])
+          : rgbToHex(
+              FIXED_PALETTE[
+                findClosestFixedColorIndex(parseHexToRGB(cell.color))
+              ],
+            );
       if (!codeToColor.has(cell.code)) {
         codeToColor.set(cell.code, cellColor);
       }
@@ -42,14 +54,10 @@ export default function ColorByNumberPalette() {
       }
     }
 
-    const codes = data.gridType === "hexagon-mark" ? [".", "1", "2", "3", "4", "5"] : [...codeToColor.keys()].sort((a, b) => {
-      const aNum = Number.parseInt(a, 10);
-      const bNum = Number.parseInt(b, 10);
-      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
-      if (!Number.isNaN(aNum)) return -1;
-      if (!Number.isNaN(bNum)) return 1;
-      return a.localeCompare(b);
-    });
+    const codes =
+      data.gridType === "hexagon-mark"
+        ? [".", "1", "2", "3", "4", "5"]
+        : ["1", "2", "3", "4", "5"];
 
     return codes.map((code) => ({
       code,
@@ -72,29 +80,38 @@ export default function ColorByNumberPalette() {
   // Collapsed state
   if (!isPaletteVisible) {
     return (
-       <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-2 flex justify-end">
-          <button
-            onClick={togglePalette}
-             className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            Show Palette ↑
-          </button>
-       </div>
+      <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-2 flex justify-end">
+        <button
+          onClick={togglePalette}
+          className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)] transition-colors"
+        >
+          Show Palette ↑
+        </button>
+      </div>
     );
   }
 
   return (
     <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-6 py-5 relative">
       <div className="absolute top-2 right-4">
-          <button
-            onClick={togglePalette}
-            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors bg-black/5 rounded-md hover:bg-black/10"
-            title="Hide palette"
+        <button
+          onClick={togglePalette}
+          className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors bg-black/5 rounded-md hover:bg-black/10"
+          title="Hide palette"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
       </div>
 
       <div className="mx-auto max-w-6xl">

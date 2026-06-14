@@ -504,8 +504,9 @@ const PaletteColumnSVG = ({
 
         const count = codeToCount.get(code) ?? 0;
         const coverage = count / Math.max(1, data.width * data.height);
-        const dotCodeFillRatio =
-          count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
+        const dotCodeFillRatio = count > 0
+          ? Math.max(0.5, Math.min(1, coverage * codes.length))
+          : 0;
 
         // Droplet calculations
         const codeLabelY = yPos + sSW + sGap + sDH / 2;
@@ -793,9 +794,7 @@ const PaletteColumnSVG = ({
                   const ratio = isMarkGridType(data.gridType)
                     ? dotCodeFillRatio
                     : count / maxCount;
-                  displayDroplets = ratio * PAL_DROPLET_COUNT;
-                  // If colored at all, show at least half a drop
-                  if (displayDroplets < 0.5) displayDroplets = 0.5;
+                  displayDroplets = Math.max(0.5, ratio * PAL_DROPLET_COUNT);
                 }
 
                 const isFull = d + 1 <= displayDroplets;

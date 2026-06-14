@@ -45,7 +45,11 @@ export type PartialColorMode =
   | "diagonal-tl-br"
   | "horizontal-middle"
   | "horizontal-sides";
-import { getPaletteColorName, FIXED_PALETTE, findClosestFixedColorIndex } from "@/lib/palette";
+import {
+  getPaletteColorName,
+  FIXED_PALETTE,
+  findClosestFixedColorIndex,
+} from "@/lib/palette";
 import {
   paletteIndexToLabel,
   rgbToHex,
@@ -71,7 +75,9 @@ export const PALETTE_GAP = 30; // Gap between palette and grid.
 export const PALETTE_X_OFFSET = 0; // Do not pull palette/grid into the left safe margin.
 
 export const getPagePaddingX = (data: ColorByNumberData): number =>
-  data.gridType === "square-mark" || data.gridType === "hexagon-mark" ? DOT_CODE_PAGE_PADDING_X : PAGE_PADDING_X;
+  data.gridType === "square-mark" || data.gridType === "hexagon-mark"
+    ? DOT_CODE_PAGE_PADDING_X
+    : PAGE_PADDING_X;
 
 const DOT_CODE_CODES = ["1", "2", "3", "4", "5"];
 const HEXAGON_MARK_CODES = [".", "1", "2", "3", "4", "5"];
@@ -79,7 +85,9 @@ const HEXAGON_MARK_CODES = [".", "1", "2", "3", "4", "5"];
 const isMarkGridType = (gridType: ColorByNumberData["gridType"]): boolean =>
   gridType === "square-mark" || gridType === "hexagon-mark";
 
-const markCodesForGridType = (gridType: ColorByNumberData["gridType"]): string[] =>
+const markCodesForGridType = (
+  gridType: ColorByNumberData["gridType"],
+): string[] =>
   gridType === "hexagon-mark" ? HEXAGON_MARK_CODES : DOT_CODE_CODES;
 
 export const saveProgressToStorage = (
@@ -161,24 +169,26 @@ const getCodeMap = (
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (removeBgColorCells) {
-      const fixedIndex = cell.fixedPaletteIndex !== undefined
-        ? cell.fixedPaletteIndex
-        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const fixedIndex =
+        cell.fixedPaletteIndex !== undefined
+          ? cell.fixedPaletteIndex
+          : findClosestFixedColorIndex(parseHexToRGB(cell.color));
       const cellName = getPaletteColorName(fixedIndex);
       const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(bgColor));
       const bgName = getPaletteColorName(bgFixedIndex);
       if (
         bgName === "White" &&
         (cellName === "White" ||
-         cell.color.toLowerCase() === bgColor.toLowerCase())
+          cell.color.toLowerCase() === bgColor.toLowerCase())
       )
         continue;
     }
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
-      const fixedIndex = cell.fixedPaletteIndex !== undefined
-        ? cell.fixedPaletteIndex
-        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const fixedIndex =
+        cell.fixedPaletteIndex !== undefined
+          ? cell.fixedPaletteIndex
+          : findClosestFixedColorIndex(parseHexToRGB(cell.color));
       codeToFixedIndex.set(cell.code, fixedIndex);
     }
   }
@@ -248,9 +258,9 @@ const getBrightness = (hex: string): number => {
 // Drawing helpers are imported from markDrawing.ts and patternDrawing.ts above.
 
 /**
- * Compute the transform needed to fill the grid into the given box (top-left aligned, no centering).
- * The grid is stretched to fill the available area exactly, keeping the aspect ratio implicit
- * in the cell dimensions. No letterboxing — the grid fills edge-to-edge within the KDP safe area.
+ * Compute the transform needed to fit the grid inside the KDP-safe box.
+ * We keep the scale at the largest value that still keeps the whole grid
+ * inside the printable area, which preserves the original safe-margin behavior.
  */
 export const getPageLayout = (
   data: ColorByNumberData,
@@ -261,6 +271,7 @@ export const getPageLayout = (
   const scale = Math.min(boxW / dims.width, boxH / dims.height);
   const offsetX = (boxW - dims.width * scale) / 2;
   const offsetY = (boxH - dims.height * scale) / 2;
+
   return {
     scale,
     offsetX,
@@ -379,24 +390,28 @@ export const calculatePaletteLayout = (
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
-      const fixedIndex = cell.fixedPaletteIndex !== undefined
-        ? cell.fixedPaletteIndex
-        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const fixedIndex =
+        cell.fixedPaletteIndex !== undefined
+          ? cell.fixedPaletteIndex
+          : findClosestFixedColorIndex(parseHexToRGB(cell.color));
       const cellName = getPaletteColorName(fixedIndex);
-      const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(options.bgColor));
+      const bgFixedIndex = findClosestFixedColorIndex(
+        parseHexToRGB(options.bgColor),
+      );
       const bgName = getPaletteColorName(bgFixedIndex);
       if (
         bgName === "White" &&
         (cellName === "White" ||
-         cell.color.toLowerCase() === options.bgColor.toLowerCase())
+          cell.color.toLowerCase() === options.bgColor.toLowerCase())
       )
         continue;
     }
     if (!rawCodeToColor.has(cell.code)) {
       rawCodeToColor.set(cell.code, cell.color);
-      const fixedIndex = cell.fixedPaletteIndex !== undefined
-        ? cell.fixedPaletteIndex
-        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const fixedIndex =
+        cell.fixedPaletteIndex !== undefined
+          ? cell.fixedPaletteIndex
+          : findClosestFixedColorIndex(parseHexToRGB(cell.color));
       rawCodeToFixedIndex.set(cell.code, fixedIndex);
     }
     rawCodeToCount.set(cell.code, (rawCodeToCount.get(cell.code) ?? 0) + 1);
@@ -451,12 +466,13 @@ export const calculatePaletteLayout = (
   }
 
   if (isMarkGridType(data.gridType)) {
-    const usedDotCodes =
-      data.gridType === "hexagon-mark"
-        ? markCodesForGridType(data.gridType)
-        : markCodesForGridType(data.gridType).filter((code) => (rawCodeToCount.get(code) ?? 0) > 0);
-    codeToColor = new Map(usedDotCodes.map((code) => [code, rawCodeToColor.get(code) ?? "#ffffff"]));
-    codeToCount = new Map(usedDotCodes.map((code) => [code, rawCodeToCount.get(code) ?? 0]));
+    const markCodes = markCodesForGridType(data.gridType);
+    codeToColor = new Map(
+      markCodes.map((code) => [code, rawCodeToColor.get(code) ?? "#ffffff"]),
+    );
+    codeToCount = new Map(
+      markCodes.map((code) => [code, rawCodeToCount.get(code) ?? 0]),
+    );
   }
 
   const codes = [...codeToColor.keys()].sort((a, b) => {
@@ -680,7 +696,13 @@ const drawPalSwatch = (
       ctx.save();
       ctx.clip();
       const imgSize = s * 1.5;
-      ctx.drawImage(bgImage, cx - imgSize / 2, cy - imgSize / 2, imgSize, imgSize);
+      ctx.drawImage(
+        bgImage,
+        cx - imgSize / 2,
+        cy - imgSize / 2,
+        imgSize,
+        imgSize,
+      );
       ctx.restore();
     }
 
@@ -827,7 +849,7 @@ const renderPaletteColumnCBN = (
                     ? "square-mark"
                     : data.gridType === "hexagon-mark"
                       ? "hexagon-mark"
-                    : "square";
+                      : "square";
 
   codes.forEach((code, i) => {
     // Calculate row and column index
@@ -840,7 +862,9 @@ const renderPaletteColumnCBN = (
 
     const cx = xPos + itemCx;
     const isMarkShape = shape === "square-mark" || shape === "hexagon-mark";
-    const color = isMarkGridType(data.gridType) ? "#000000" : codeToColor.get(code) ?? "#999";
+    const color = isMarkGridType(data.gridType)
+      ? "#000000"
+      : (codeToColor.get(code) ?? "#999");
     const swCY = yPos + sSW / 2;
     const clearSwatches = renderOpts?.clearSwatches ?? false;
     const count = codeToCount.get(code) ?? 0;
@@ -849,7 +873,14 @@ const renderPaletteColumnCBN = (
       count > 0 ? Math.max(0.08, Math.min(1, coverage * codes.length)) : 0;
 
     // Swatch — white when clearSwatches mode, otherwise filled with the actual color
-    drawPalSwatch(ctx, cx, swCY, sSW, shape, isMarkShape || clearSwatches ? "#ffffff" : color);
+    drawPalSwatch(
+      ctx,
+      cx,
+      swCY,
+      sSW,
+      shape,
+      isMarkShape || clearSwatches ? "#ffffff" : color,
+    );
 
     // Label inside swatch
     // In clearSwatches mode, draw black label (visible on white bg); otherwise white
@@ -863,10 +894,19 @@ const renderPaletteColumnCBN = (
     ctx.textBaseline = "middle";
     ctx.strokeStyle = labelStroke;
     ctx.lineWidth = 3;
-    const displayCode = isMarkShape ? code : renderOpts?.codeMap?.get(code) || code;
+    const displayCode = isMarkShape
+      ? code
+      : renderOpts?.codeMap?.get(code) || code;
     if (isMarkShape) {
       if (shape === "hexagon-mark") {
-        drawHexagonMarkSymbol(ctx, displayCode, cx, swCY, sSW * 1.25, (sSW * 1.25) / 2);
+        drawHexagonMarkSymbol(
+          ctx,
+          displayCode,
+          cx,
+          swCY,
+          sSW * 1.25,
+          (sSW * 1.25) / 2,
+        );
       } else {
         drawDotCodeSymbol(ctx, displayCode, cx, swCY, sSW * 1.15);
       }
@@ -900,10 +940,7 @@ const renderPaletteColumnCBN = (
     let displayDroplets = 0;
 
     if (count > 0) {
-      const ratio =
-        isMarkShape
-          ? dotCodeFillRatio
-          : count / maxCount;
+      const ratio = isMarkShape ? dotCodeFillRatio : count / maxCount;
       displayDroplets = ratio * PAL_DROPLET_COUNT;
       // If colored at all, show at least half a drop
       if (displayDroplets < 0.5) displayDroplets = 0.5;
@@ -923,15 +960,7 @@ const renderPaletteColumnCBN = (
         fillType = 0.5;
       }
 
-      drawDropletShape(
-        ctx,
-        dx,
-        dropTop,
-        sDW,
-        sDH,
-        fillType,
-        color,
-      );
+      drawDropletShape(ctx, dx, dropTop, sDW, sDH, fillType, color);
     }
 
     if (isMarkShape) return;
@@ -1233,10 +1262,7 @@ export const exportToCanvas = (
   // 4. Fit grid into gridAvailableH/W
   const gridLayout = getPageLayout(data, gridAvailableW, gridAvailableH);
 
-  // 5. Calculate vertical centering
-
-  // Anchor to TOP padding (0.4 inch) instead of centering vertically
-  // Vertical positioning: align palette swatches with grid rows
+  // 5. Position the grid flush against the KDP-safe box.
   const firstCell = getCellLayout(0, 0, data);
   const gridVisualTop = padY + CONTENT_SAFE_INSET + GRID_CLIP_PADDING;
   const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
@@ -1297,9 +1323,8 @@ export const exportToCanvas = (
     (paletteWidth > 0 ? PALETTE_X_OFFSET : 0) +
     paletteWidth +
     (paletteWidth > 0 ? PALETTE_GAP : 0) +
-    gridLayout.offsetX +
     GRID_CLIP_PADDING +
-    (tightCrop ? -visualBounds.minX : 0); // Compensate for visual minX bleed in tight mode
+    (tightCrop ? -visualBounds.minX : 0);
 
   const gridYOffset = tightCrop ? -visualBounds.minY : 0;
   ctx.translate(gridStartX, gridVisualTopPos + gridYOffset);
@@ -1344,24 +1369,30 @@ export const exportToCanvas = (
     if (isTransparentCell(data, cell, transparentBg)) return;
 
     if (removeBgColorCells && !isMarkGridType(data.gridType)) {
-      const fixedIndex = cell.fixedPaletteIndex !== undefined
-        ? cell.fixedPaletteIndex
-        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const fixedIndex =
+        cell.fixedPaletteIndex !== undefined
+          ? cell.fixedPaletteIndex
+          : findClosestFixedColorIndex(parseHexToRGB(cell.color));
       const cellName = getPaletteColorName(fixedIndex);
       const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(bgColor));
       const bgName = getPaletteColorName(bgFixedIndex);
       if (
         bgName === "White" &&
         (cellName === "White" ||
-         cell.color.toLowerCase() === bgColor.toLowerCase())
+          cell.color.toLowerCase() === bgColor.toLowerCase())
       )
         return;
     }
 
     // Remap cell colors to the FIXED_PALETTE colors
-    const effectiveCellColor = cell.fixedPaletteIndex !== undefined
-      ? rgbToHex(FIXED_PALETTE[cell.fixedPaletteIndex])
-      : rgbToHex(FIXED_PALETTE[findClosestFixedColorIndex(parseHexToRGB(cell.color))]);
+    const effectiveCellColor =
+      cell.fixedPaletteIndex !== undefined
+        ? rgbToHex(FIXED_PALETTE[cell.fixedPaletteIndex])
+        : rgbToHex(
+            FIXED_PALETTE[
+              findClosestFixedColorIndex(parseHexToRGB(cell.color))
+            ],
+          );
 
     const fillColor = isCellColored
       ? getCellFillColor(effectiveCellColor, filledCell)
@@ -1454,16 +1485,37 @@ export const exportToCanvas = (
         if (isCellColored) {
           const symbolColor = "#000000";
           if (data.gridType === "hexagon-mark") {
-            drawHexagonMarkSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize, cl.r, symbolColor);
+            drawHexagonMarkSymbol(
+              ctx,
+              cell.code,
+              cl.cx,
+              cl.cy,
+              data.cellSize,
+              cl.r,
+              symbolColor,
+            );
           } else {
-            drawDotCodeSymbol(ctx, cell.code, cl.cx, cl.cy, data.cellSize, symbolColor);
+            drawDotCodeSymbol(
+              ctx,
+              cell.code,
+              cl.cx,
+              cl.cy,
+              data.cellSize,
+              symbolColor,
+            );
           }
         } else if (showCodes) {
           ctx.save();
           ctx.fillStyle = "rgba(0,0,0,0.45)";
           if (data.gridType === "hexagon-mark" && cell.code === ".") {
             ctx.beginPath();
-            ctx.arc(cl.cx, cl.cy, Math.max(1.1, data.cellSize * 0.09), 0, Math.PI * 2);
+            ctx.arc(
+              cl.cx,
+              cl.cy,
+              Math.max(1.1, data.cellSize * 0.09),
+              0,
+              Math.PI * 2,
+            );
             ctx.fill();
           } else {
             ctx.font = `500 ${data.cellSize * 0.7}px 'Noto Sans', sans-serif`;
@@ -1478,7 +1530,6 @@ export const exportToCanvas = (
     }
 
     if (showCodes && cell.code) {
-
       ctx.save();
       const brightness = getBrightness(fillColor);
       const textFill = brightness < 128 ? "#ffffff" : "#999999";
@@ -1527,9 +1578,23 @@ export const exportToCanvas = (
 
         if (data.gridType === "hexagon-mark") {
           const layout = getCellLayout(x, y, data);
-          drawHexagonMarkCellBase(ctx, layout.cx, layout.cy, layout.r, true, fillColor);
+          drawHexagonMarkCellBase(
+            ctx,
+            layout.cx,
+            layout.cy,
+            layout.r,
+            true,
+            fillColor,
+          );
         } else {
-          drawDotCodeCellBase(ctx, x * data.cellSize, y * data.cellSize, data.cellSize, true, fillColor);
+          drawDotCodeCellBase(
+            ctx,
+            x * data.cellSize,
+            y * data.cellSize,
+            data.cellSize,
+            true,
+            fillColor,
+          );
         }
       }
     }
@@ -1541,7 +1606,12 @@ export const exportToCanvas = (
 
   ctx.restore();
 
-  if (showMagnifier && data.gridType === "square-mark" && colored && transparentBg) {
+  if (
+    showMagnifier &&
+    data.gridType === "square-mark" &&
+    colored &&
+    transparentBg
+  ) {
     const magnifier = getDotCodeMagnifierLayout({
       pageW,
       pageH,
@@ -1614,7 +1684,8 @@ export const exportPaletteToCanvas = (
   const pageW = EXPORT_PAGE_W;
   const pageH = EXPORT_PAGE_H;
 
-  const { badgeStyle, showWaterdropIcon, showColorInput } = useBookDesignStore.getState();
+  const { badgeStyle, showWaterdropIcon, showColorInput } =
+    useBookDesignStore.getState();
   const codeMap = getCodeMap(
     data,
     options?.removeBgColorCells ?? false,
@@ -1630,24 +1701,28 @@ export const exportPaletteToCanvas = (
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
-      const fixedIndex = cell.fixedPaletteIndex !== undefined
-        ? cell.fixedPaletteIndex
-        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const fixedIndex =
+        cell.fixedPaletteIndex !== undefined
+          ? cell.fixedPaletteIndex
+          : findClosestFixedColorIndex(parseHexToRGB(cell.color));
       const cellName = getPaletteColorName(fixedIndex);
-      const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(options.bgColor));
+      const bgFixedIndex = findClosestFixedColorIndex(
+        parseHexToRGB(options.bgColor),
+      );
       const bgName = getPaletteColorName(bgFixedIndex);
       if (
         bgName === "White" &&
         (cellName === "White" ||
-         cell.color.toLowerCase() === options.bgColor.toLowerCase())
+          cell.color.toLowerCase() === options.bgColor.toLowerCase())
       )
         continue;
     }
     if (!rawCodeToColor.has(cell.code)) {
       rawCodeToColor.set(cell.code, cell.color);
-      const fixedIndex = cell.fixedPaletteIndex !== undefined
-        ? cell.fixedPaletteIndex
-        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const fixedIndex =
+        cell.fixedPaletteIndex !== undefined
+          ? cell.fixedPaletteIndex
+          : findClosestFixedColorIndex(parseHexToRGB(cell.color));
       rawCodeToFixedIndex.set(cell.code, fixedIndex);
     }
     rawCodeToCount.set(cell.code, (rawCodeToCount.get(cell.code) ?? 0) + 1);
@@ -1672,7 +1747,6 @@ export const exportPaletteToCanvas = (
 
   if (isMarkGridType(data.gridType)) {
     for (const code of markCodesForGridType(data.gridType)) {
-      if (data.gridType !== "hexagon-mark" && (rawCodeToCount.get(code) ?? 0) <= 0) continue;
       codeToColor.set(code, rawCodeToColor.get(code) ?? "#ffffff");
       codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
       codeToName.set(code, code);
@@ -1686,40 +1760,40 @@ export const exportPaletteToCanvas = (
       codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
       codeToName.set(code, getPaletteColorName(fixedIndex));
     }
-  } else for (const code of rawCodes) {
-    const hex = rawCodeToColor.get(code)!;
-    const fixedIndex = rawCodeToFixedIndex.get(code)!;
-    const canonicalHex = rgbToHex(FIXED_PALETTE[fixedIndex]);
-    const colorName = getPaletteColorName(fixedIndex);
+  } else
+    for (const code of rawCodes) {
+      const hex = rawCodeToColor.get(code)!;
+      const fixedIndex = rawCodeToFixedIndex.get(code)!;
+      const canonicalHex = rgbToHex(FIXED_PALETTE[fixedIndex]);
+      const colorName = getPaletteColorName(fixedIndex);
 
-    if (nameToCode.has(colorName)) {
-      // This color name already exists → merge count into the first code
-      const existingCode = nameToCode.get(colorName)!;
-      codeToCount.set(
-        existingCode,
-        (codeToCount.get(existingCode) ?? 0) + (rawCodeToCount.get(code) ?? 0),
-      );
-    } else {
-      // New color name → register this code
-      nameToCode.set(colorName, code);
-      codeToColor.set(code, canonicalHex);
-      codeToName.set(code, colorName);
-      codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
+      if (nameToCode.has(colorName)) {
+        // This color name already exists → merge count into the first code
+        const existingCode = nameToCode.get(colorName)!;
+        codeToCount.set(
+          existingCode,
+          (codeToCount.get(existingCode) ?? 0) +
+            (rawCodeToCount.get(code) ?? 0),
+        );
+      } else {
+        // New color name → register this code
+        nameToCode.set(colorName, code);
+        codeToColor.set(code, canonicalHex);
+        codeToName.set(code, colorName);
+        codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
+      }
     }
-  }
 
   const codes = isMarkGridType(data.gridType)
-    ? data.gridType === "hexagon-mark"
-      ? markCodesForGridType(data.gridType)
-      : markCodesForGridType(data.gridType).filter((code) => (codeToCount.get(code) ?? 0) > 0)
+    ? markCodesForGridType(data.gridType)
     : [...codeToColor.keys()].sort((a, b) => {
-    const aN = parseInt(a, 10),
-      bN = parseInt(b, 10);
-    if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
-    if (!isNaN(aN)) return -1;
-    if (!isNaN(bN)) return 1;
-    return a.localeCompare(b);
-  });
+        const aN = parseInt(a, 10),
+          bN = parseInt(b, 10);
+        if (!isNaN(aN) && !isNaN(bN)) return aN - bN;
+        if (!isNaN(aN)) return -1;
+        if (!isNaN(bN)) return 1;
+        return a.localeCompare(b);
+      });
 
   const canvas = document.createElement("canvas");
   canvas.width = pageW;
@@ -1794,7 +1868,7 @@ export const exportPaletteToCanvas = (
                     ? "square-mark"
                     : data.gridType === "hexagon-mark"
                       ? "hexagon-mark"
-                    : "square";
+                      : "square";
 
   // ── Layout constants ──
   const EXTRA_RIGHT = 30;
@@ -1841,13 +1915,15 @@ export const exportPaletteToCanvas = (
   // Items per row
   const isMarkPalette = isMarkGridType(data.gridType);
   const maxItemsPerRow = 6;
-  const itemsPerRow =
-    isMarkPalette
-      ? 3
-      : Math.max(
-          1,
-          Math.min(maxItemsPerRow, Math.floor((contentW + hGap) / (itemW + hGap))),
-        );
+  const itemsPerRow = isMarkPalette
+    ? 3
+    : Math.max(
+        1,
+        Math.min(
+          maxItemsPerRow,
+          Math.floor((contentW + hGap) / (itemW + hGap)),
+        ),
+      );
 
   // Item height: swatch + label area for mark pages; full swatch + droplets + input for color palettes.
   const hasDroplets = !isMarkPalette && showWaterdropIcon;
@@ -1855,19 +1931,16 @@ export const exportPaletteToCanvas = (
 
   const itemH = isMarkPalette
     ? sSW + Math.round(0.3 * EXPORT_DPI)
-    : sSW + 
-      (hasDroplets ? sGap + sDropletTopPad + sDH : 0) + 
+    : sSW +
+      (hasDroplets ? sGap + sDropletTopPad + sDH : 0) +
       (hasInput ? sInputGap + sInputH : 0);
-  const vGap =
-    isMarkPalette
-      ? Math.round(0.24 * EXPORT_DPI) // more breathing room between mark rows
-      : Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
+  const vGap = isMarkPalette
+    ? Math.round(0.24 * EXPORT_DPI) // more breathing room between mark rows
+    : Math.round(0.5 * EXPORT_DPI); // Increased vertical gap between rows
 
   const numRows = Math.ceil(codes.length / itemsPerRow);
   const totalH = numRows * itemH + Math.max(0, numRows - 1) * vGap;
-  const bannerToMarksGap = isMarkPalette
-    ? Math.round(0.85 * EXPORT_DPI)
-    : 120;
+  const bannerToMarksGap = isMarkPalette ? Math.round(0.85 * EXPORT_DPI) : 120;
 
   let bannerHeight = 0;
   if (options?.pageNumber != null) {
@@ -1922,7 +1995,10 @@ export const exportPaletteToCanvas = (
   codes.forEach((code, i) => {
     const row = Math.floor(i / itemsPerRow);
     const col = i % itemsPerRow;
-    const rowItemCount = Math.min(itemsPerRow, codes.length - row * itemsPerRow);
+    const rowItemCount = Math.min(
+      itemsPerRow,
+      codes.length - row * itemsPerRow,
+    );
     const rowW = rowItemCount * itemW + Math.max(0, rowItemCount - 1) * hGap;
     const rowStartX = padX + (contentW - rowW * scale) / 2;
 
@@ -1951,7 +2027,14 @@ export const exportPaletteToCanvas = (
     const displayCode = isMarkShape ? code : codeMap.get(code) || code;
     if (isMarkShape) {
       if (shape === "hexagon-mark") {
-        drawHexagonMarkSymbol(ctx, displayCode, cx, swCY, sw * 1.25, (sw * 1.25) / 2);
+        drawHexagonMarkSymbol(
+          ctx,
+          displayCode,
+          cx,
+          swCY,
+          sw * 1.25,
+          (sw * 1.25) / 2,
+        );
       } else {
         drawDotCodeSymbol(ctx, displayCode, cx, swCY, sw * 1.15);
       }
@@ -1960,13 +2043,20 @@ export const exportPaletteToCanvas = (
       ctx.font = `700 ${Math.max(18 * scale, sw * (sLbl / sSW) * 1.05)}px 'Noto Sans', sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(displayCode, cx, iy + sw + (sGap + sDropletTopPad) * scale + (sDH * scale) / 2);
+      ctx.fillText(
+        displayCode,
+        cx,
+        iy + sw + (sGap + sDropletTopPad) * scale + (sDH * scale) / 2,
+      );
       ctx.restore();
 
       if (isMarkShape) {
         drawDropletShape(
           ctx,
-          cx + (sw * 1.15) / 2 + sArcGap * 3.4 * scale + (sDW * 1.45 * scale) / 2,
+          cx +
+            (sw * 1.15) / 2 +
+            sArcGap * 3.4 * scale +
+            (sDW * 1.45 * scale) / 2,
           swCY - (sDH * 1.45 * scale) / 2,
           sDW * 1.45 * scale,
           sDH * 1.45 * scale,
@@ -1985,10 +2075,7 @@ export const exportPaletteToCanvas = (
     const dGapS = sDGap * scale;
     const totalDropW = PAL_DROPLET_COUNT * dW + (PAL_DROPLET_COUNT - 1) * dGapS;
     const dropStartX = cx - totalDropW / 2 + dW / 2;
-    const coverageRatio =
-      isMarkShape
-        ? dotCodeFillRatio
-        : count / maxCount;
+    const coverageRatio = isMarkShape ? dotCodeFillRatio : count / maxCount;
     const displayDroplets =
       count > 0 ? Math.max(0.5, coverageRatio * PAL_DROPLET_COUNT) : 0;
 
@@ -2092,7 +2179,11 @@ export const exportPaletteToCanvas = (
       // ── Input box below droplets ──
       const scaledInputH = sInputH * scale;
       const scaledInputW = sInputW * scale;
-      const inputTop = iy + sw + (showWaterdropIcon ? (sGap + sDropletTopPad + sDH) * scale : 0) + sInputGap * scale;
+      const inputTop =
+        iy +
+        sw +
+        (showWaterdropIcon ? (sGap + sDropletTopPad + sDH) * scale : 0) +
+        sInputGap * scale;
       const inputLeft = cx - scaledInputW / 2;
       const inputRadius = Math.min(scaledInputH * 0.25, 6);
 
@@ -2122,54 +2213,55 @@ export const exportPaletteToCanvas = (
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-    ctx.save();
-    ctx.beginPath();
-    if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(
-        inputLeft + sInputPad * scale,
-        inputTop,
-        scaledInputW - sInputPad * 2 * scale,
-        scaledInputH,
-        2
-      );
-    } else {
-      ctx.rect(
-        inputLeft + sInputPad * scale,
-        inputTop,
-        scaledInputW - sInputPad * 2 * scale,
-        scaledInputH
-      );
-    }
-    ctx.clip();
-
-    const words = colorName.split(" ");
-    const lines = [];
-    let currentLine = words[0] || "";
-    for (let j = 1; j < words.length; j++) {
-      const word = words[j];
-      const width = ctx.measureText(currentLine + " " + word).width;
-      if (width < scaledInputW - sInputPad * 2 * scale - 4) {
-        currentLine += " " + word;
+      ctx.save();
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(
+          inputLeft + sInputPad * scale,
+          inputTop,
+          scaledInputW - sInputPad * 2 * scale,
+          scaledInputH,
+          2,
+        );
       } else {
-        lines.push(currentLine);
-        currentLine = word;
+        ctx.rect(
+          inputLeft + sInputPad * scale,
+          inputTop,
+          scaledInputW - sInputPad * 2 * scale,
+          scaledInputH,
+        );
       }
-    }
-    if (currentLine) lines.push(currentLine);
+      ctx.clip();
 
-    if (lines.length > 2) {
-      nameFontSize = Math.max(10 * scale, scaledInputH * 0.3);
-      ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
-    }
+      const words = colorName.split(" ");
+      const lines = [];
+      let currentLine = words[0] || "";
+      for (let j = 1; j < words.length; j++) {
+        const word = words[j];
+        const width = ctx.measureText(currentLine + " " + word).width;
+        if (width < scaledInputW - sInputPad * 2 * scale - 4) {
+          currentLine += " " + word;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
 
-    const lineHeight = nameFontSize * 1.15;
-    const totalTextHeight = lines.length * lineHeight;
-    const startTextY = inputTop + scaledInputH / 2 - totalTextHeight / 2 + lineHeight / 2;
+      if (lines.length > 2) {
+        nameFontSize = Math.max(10 * scale, scaledInputH * 0.3);
+        ctx.font = `500 ${nameFontSize}px 'Noto Sans', sans-serif`;
+      }
 
-    lines.forEach((line, lineIdx) => {
-      ctx.fillText(line, cx, startTextY + lineIdx * lineHeight);
-    });
-    ctx.restore();
+      const lineHeight = nameFontSize * 1.15;
+      const totalTextHeight = lines.length * lineHeight;
+      const startTextY =
+        inputTop + scaledInputH / 2 - totalTextHeight / 2 + lineHeight / 2;
+
+      lines.forEach((line, lineIdx) => {
+        ctx.fillText(line, cx, startTextY + lineIdx * lineHeight);
+      });
+      ctx.restore();
     }
 
     // ── Separator line between rows ──
@@ -2295,9 +2387,13 @@ export const exportCollagePagesToCanvas = (
         ) {
           displayLabel = displayLabel.slice(0, -1);
         }
-        if (displayLabel !== label) displayLabel = `${displayLabel.slice(0, -1)}...`;
+        if (displayLabel !== label)
+          displayLabel = `${displayLabel.slice(0, -1)}...`;
         const labelW = ctx.measureText(displayLabel).width;
-        const startX = cx + cellInnerPadX + (cellW - cellInnerPadX * 2 - numberW - labelGap - labelW) / 2;
+        const startX =
+          cx +
+          cellInnerPadX +
+          (cellW - cellInnerPadX * 2 - numberW - labelGap - labelW) / 2;
         ctx.font = `bold 40px 'Noto Sans', sans-serif`;
         ctx.fillText(numberText, startX, textY);
         ctx.font = `500 32px 'Noto Sans', sans-serif`;
