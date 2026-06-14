@@ -120,6 +120,7 @@ export default function ToolProjectWorkspace() {
   const hydrateProjectFolder = useColorByNumberStore((state) => state.hydrateProjectFolder)
   const updateProject = useColorByNumberStore((state) => state.updateProject)
   const clearProjectFolder = useColorByNumberStore((state) => state.clearProjectFolder)
+  const removeAllProjects = useColorByNumberStore((state) => state.removeAllProjects)
   const globalCellSize = useColorByNumberStore((state) => state.globalCellSize)
   const globalShowNumbers = useColorByNumberStore((state) => state.globalShowNumbers)
   const globalTheme = useColorByNumberStore((state) => state.globalTheme)
@@ -136,9 +137,13 @@ export default function ToolProjectWorkspace() {
   const setActiveTab = useColorByNumberStore((state) => state.setWorkspaceActiveTab)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [isTrackerDismissed, setIsTrackerDismissed] = useState(false)
-  const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(
-    null
-  )
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string
+    message: string
+    confirmLabel?: string
+    onConfirm: () => void
+    onCancel?: () => void
+  } | null>(null)
   const previousConversionStatusRef = useRef(conversionJob.status)
   const prevProjectsStateRef = useRef<{ id: string; status: string }[]>([])
 
@@ -300,7 +305,12 @@ export default function ToolProjectWorkspace() {
         : (summary ? summary.fileCount === 0 : true)
       const targetTab = tab || (isProjectEmpty ? 'image-import' : null)
       const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
-      if (targetTab) {
+      if (targetTab === 'object-focus') {
+        const stepParam = params.get('step')
+        if (stepParam !== 'import' && stepParam !== 'convert') {
+          params.set('step', isProjectEmpty ? 'import' : 'convert')
+        }
+      } else if (targetTab) {
         params.delete('step')
       } else if (!params.has('step')) {
         params.set('step', 'convert')
@@ -363,7 +373,12 @@ export default function ToolProjectWorkspace() {
 
         // Rewrite URL to use slug (in case we opened by UUID)
         const finalSlug = toSlug(project.name)
-        if (finalTab) {
+        if (finalTab === 'object-focus') {
+          const stepParam = params.get('step')
+          if (stepParam !== 'import' && stepParam !== 'convert') {
+            params.set('step', projectFiles.some((file) => file.removeBackground) ? 'convert' : 'import')
+          }
+        } else if (finalTab) {
           params.delete('step')
         } else if (!params.has('step')) {
           params.set('step', 'convert')
@@ -447,6 +462,52 @@ export default function ToolProjectWorkspace() {
       }
     }
   }, [pathname, searchParams, access.isLoading, hasLoadedSummaries, summaries, projectFolder, openingId, openProject, setActiveTab, setShowProjectList])
+
+  useEffect(() => {
+    if (
+      showProjectList ||
+      openingId !== null ||
+      !projectFolder ||
+      activeTab !== 'image-import' ||
+      projects.length === 0 ||
+      confirmModal
+    ) {
+      return
+    }
+
+    const slug = toSlug(projectFolder.name)
+    const convertUrl = `${projectRoute(slug)}?step=convert`
+    const importUrl = `${projectRoute(slug)}/image-import`
+
+    setConfirmModal({
+      title: 'Clear imported images?',
+      message: `Going back to Image Import will remove all ${projects.length} imported image(s) and converted mosaic data from this project. This cannot be undone.`,
+      confirmLabel: 'Clear data',
+      onConfirm: () => {
+        setConfirmModal(null)
+        removeAllProjects()
+        setActiveTab('image-import')
+        useColorByNumberStore.getState().setWorkspaceStep(1)
+        navReplace(importUrl)
+      },
+      onCancel: () => {
+        setConfirmModal(null)
+        setActiveTab(null)
+        useColorByNumberStore.getState().setWorkspaceStep(1)
+        navReplace(convertUrl)
+      },
+    })
+  }, [
+    activeTab,
+    confirmModal,
+    navReplace,
+    openingId,
+    projectFolder,
+    projects.length,
+    removeAllProjects,
+    setActiveTab,
+    showProjectList,
+  ])
 
   useEffect(() => {
     setShowProjectList(!initialRouteProjectSlug)
@@ -915,18 +976,13 @@ export default function ToolProjectWorkspace() {
         access={access}
         activeTab={activeTab ?? undefined}
         onTabClick={(tab) => {
-          if (tab === 'image-import' && projects.length > 0) {
-            setActiveTab(null)
-            if (projectFolder) {
-              const currentHistoryState = typeof window !== 'undefined' ? window.history.state : null
-              navReplace(`${projectRoute(toSlug(projectFolder.name))}`, currentHistoryState)
-            }
-          } else {
-            setActiveTab(tab)
-            if (projectFolder) {
-              const currentHistoryState = typeof window !== 'undefined' ? window.history.state : null
-              navReplace(`${projectRoute(toSlug(projectFolder.name))}/${tab}`, currentHistoryState)
-            }
+          setActiveTab(tab)
+          if (projectFolder) {
+            const currentHistoryState = typeof window !== 'undefined' ? window.history.state : null
+            const tabUrl = tab === 'object-focus'
+              ? `${projectRoute(toSlug(projectFolder.name))}/${tab}?step=${projects.some((project) => project.removeBackground) ? 'convert' : 'import'}`
+              : `${projectRoute(toSlug(projectFolder.name))}/${tab}`
+            navReplace(tabUrl, currentHistoryState)
           }
         }}
       />}
@@ -958,8 +1014,9 @@ export default function ToolProjectWorkspace() {
         open={confirmModal !== null}
         title={confirmModal?.title ?? ''}
         message={confirmModal?.message ?? ''}
+        confirmLabel={confirmModal?.confirmLabel}
         onConfirm={confirmModal?.onConfirm ?? (() => {})}
-        onCancel={() => setConfirmModal(null)}
+        onCancel={confirmModal?.onCancel ?? (() => setConfirmModal(null))}
       />
     </div>
   )

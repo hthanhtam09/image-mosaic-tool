@@ -16,7 +16,7 @@ interface UseImageImportOptions {
   enabledPatterns: VisibilityMap
   globalGridType: ColorByNumberGridType | 'auto'
   autoCycleIndexRef: React.MutableRefObject<number>
-  onImportSuccess?: () => void
+  onImportSuccess?: (mode: 'standard' | 'object-focus') => void
 }
 
 const allPatterns: ColorByNumberGridType[] = [
@@ -114,7 +114,7 @@ export function useImageImport({
         }
         addProjects(importedList)
         toast.success(`${fileList.length} image${fileList.length > 1 ? 's' : ''} imported`)
-        onImportSuccessRef.current?.()
+        onImportSuccessRef.current?.('standard')
       } catch (err) {
         console.error('Failed to import images:', err)
         toast.error('Import failed', { description: 'Could not read image files.' })
@@ -167,7 +167,7 @@ export function useImageImport({
         setKeepImportScreen(false)
         setCurrentStep(1)
         toast.success(`${fileList.length} image${fileList.length > 1 ? 's' : ''} imported`)
-        onImportSuccessRef.current?.()
+        onImportSuccessRef.current?.('object-focus')
       } catch (err) {
         console.error('Failed to import transparent images:', err)
         toast.error('Import failed', { description: 'Could not read image files.' })

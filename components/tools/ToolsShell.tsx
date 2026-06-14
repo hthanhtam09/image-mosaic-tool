@@ -3,7 +3,7 @@
 import { MosaciLogoMark } from '@/components/MosaciLogo'
 import ToolUserHeader from '@/components/tools/ToolUserHeader'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { type CSSProperties, type ReactNode, useState } from 'react'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
 
@@ -98,6 +98,7 @@ function SidebarLink({ item, expanded, hovering }: { item: NavItem; expanded: bo
 
 export default function ToolsShell({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [hovering, setHovering] = useState(false)
 
   const projectFolder = useColorByNumberStore((state) => state.projectFolder)
@@ -105,6 +106,7 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
   const activeTab = useColorByNumberStore((state) => state.workspaceActiveTab)
   const workspaceStep = useColorByNumberStore((state) => state.workspaceStep)
   const projects = useColorByNumberStore((state) => state.projects)
+  const objectFocusStep = activeTab === 'object-focus' && searchParams.get('step') === 'convert' ? 'convert' : 'import'
 
   let activeStepId = 'import'
   // Folder import mode: when at PDF step with no converted projects (directImages flow)
@@ -154,6 +156,14 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
       router.replace(`${projectRoute(s)}?step=convert`)
     }
     // 'pdf' is current — no nav needed
+  }
+
+  const handleObjectFocusStepClick = (stepId: 'import' | 'convert') => {
+    if (!projectFolder) return
+    const s = toSlug(projectFolder.name)
+    useColorByNumberStore.getState().setWorkspaceActiveTab('object-focus')
+    useColorByNumberStore.getState().setWorkspaceStep(1)
+    router.replace(`${projectRoute(s)}/object-focus?step=${stepId}`)
   }
 
   // Only show steps up to and including the current step (progressive disclosure)
@@ -279,8 +289,33 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                     </svg>
                     <div className="flex items-center gap-1.5 text-sm">
-                      {activeTab && activeTab !== 'image-import' ? (
-                        // Non-pipeline tab (Object Focus, Before/After, Mark Practice): just show tab name
+                      {activeTab === 'object-focus' ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[var(--text-secondary)] tracking-wide">
+                            Object Focus
+                          </span>
+                          <span className="text-[var(--text-muted)] opacity-40 px-0.5">→</span>
+                          {objectFocusStep === 'import' ? (
+                            <span className="text-[var(--text-primary)] font-semibold tracking-wide">
+                              Import
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleObjectFocusStepClick('import')}
+                                className="tracking-wide text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+                              >
+                                Import
+                              </button>
+                              <span className="text-[var(--text-muted)] opacity-40 px-0.5">→</span>
+                              <span className="text-[var(--text-primary)] font-semibold tracking-wide">
+                                Convert
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      ) : activeTab && activeTab !== 'image-import' ? (
                         <span className="text-[var(--text-primary)] font-semibold tracking-wide">
                           {getTabLabel(activeTab)}
                         </span>

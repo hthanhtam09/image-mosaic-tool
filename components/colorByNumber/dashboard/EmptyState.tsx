@@ -113,6 +113,8 @@ const tabFeatureMap: Record<TabType, keyof ToolFeatureFlags> = {
   'mark-practice': 'markPractice',
 }
 
+const tabBadgeLabel = (tab: TabType) => tab === 'object-focus' ? 'Mark pattern' : null
+
 /** Self-contained sidebar that manages its own state. Only needs access prop. */
 export function StandaloneImportSidebar({
   access,
@@ -147,6 +149,7 @@ export function StandaloneImportSidebar({
             {visibleTabs.map((tab) => {
               const locked = lockedReason(tab.id)
               const isActive = activeTab === tab.id || (tab.id === 'image-import' && !activeTab)
+              const badge = tabBadgeLabel(tab.id)
               return (
                 <button
                   key={tab.id}
@@ -163,6 +166,11 @@ export function StandaloneImportSidebar({
                     style={{ opacity: isOpen ? 1 : 0 }}
                   >
                     <span className="truncate font-medium">{tab.name}</span>
+                    {badge && !locked && (
+                      <span className="ml-auto shrink-0 rounded-full border border-purple-400/30 bg-purple-400/10 px-2 py-0.5 text-[10px] font-semibold text-purple-300">
+                        {badge}
+                      </span>
+                    )}
                     {locked && (
                       <span className="ml-auto shrink-0 rounded-full border border-[var(--accent)]/30 px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
                         {locked}
@@ -217,6 +225,7 @@ export function ImportSidebar({
             {visibleTabs.map((tab) => {
               const isActive = effectiveTab === tab.id || (tab.id === 'image-import' && !effectiveTab)
               const locked = lockedReason(tab.id)
+              const badge = tabBadgeLabel(tab.id)
               return (
                 <button
                   key={tab.id}
@@ -239,6 +248,11 @@ export function ImportSidebar({
                     style={{ opacity: sidebarOpen ? 1 : 0 }}
                   >
                     <span className="truncate font-medium">{tab.name}</span>
+                    {badge && !locked && (
+                      <span className="ml-auto shrink-0 rounded-full border border-purple-400/30 bg-purple-400/10 px-2 py-0.5 text-[10px] font-semibold text-purple-300">
+                        {badge}
+                      </span>
+                    )}
                     {locked && (
                       <span className="ml-auto shrink-0 rounded-full border border-[var(--accent)]/30 px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
                         {locked}

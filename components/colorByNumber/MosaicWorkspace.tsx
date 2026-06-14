@@ -2,9 +2,9 @@
 
 import type { ColorByNumberGridType, PartialColorMode } from '@/lib/colorByNumber'
 import type { ToolAccess } from '@/lib/tools/access'
-import { useColorByNumberStore } from '@/store/useColorByNumberStore'
+import { useColorByNumberStore, type Project } from '@/store/useColorByNumberStore'
 import { useBookDesignStore } from '@/store/useBookDesignStore'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmModal from '@/components/ConfirmModal'
 import { useToolPatterns } from '@/components/ToolFlagsProvider'
@@ -62,6 +62,7 @@ export default function MosaicWorkspace({
   setActiveTab?: (tab: TabType | null) => void
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const {
     projects,
     convertAllIdleProjects,
@@ -130,6 +131,12 @@ export default function MosaicWorkspace({
   const [previewProjectId, setPreviewProjectId] = useState<string | null>(null)
   const currentStep = useColorByNumberStore((state) => state.workspaceStep)
   const setCurrentStep = useColorByNumberStore((state) => state.setWorkspaceStep)
+  const hasObjectFocusProjectsForRoute = projects.some((project) => project.removeBackground)
+  const objectFocusStepParam = activeTab === 'object-focus' ? searchParams.get('step') : null
+  const objectFocusStep =
+    activeTab === 'object-focus' && (objectFocusStepParam === 'import' || !hasObjectFocusProjectsForRoute)
+      ? 'import'
+      : 'convert'
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -141,7 +148,9 @@ export default function MosaicWorkspace({
       : `/studio/projects/${slug}`
 
     const url = new URL(window.location.href)
-    if (activeTab !== null) {
+    if (activeTab === 'object-focus') {
+      url.searchParams.set('step', objectFocusStep)
+    } else if (activeTab !== null) {
       url.searchParams.delete('step')
     } else {
       if (currentStep === 'design-config') {
@@ -160,7 +169,7 @@ export default function MosaicWorkspace({
     if (window.location.pathname + window.location.search + window.location.hash !== nextUrl) {
       router.replace(nextUrl)
     }
-  }, [currentStep, activeTab, projectName, projectFolder?.name, router])
+  }, [currentStep, activeTab, objectFocusStep, projectName, projectFolder?.name, router])
 
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false)
   const splitColorRef = useRef<HTMLDivElement>(null)
@@ -204,14 +213,25 @@ export default function MosaicWorkspace({
     enabledPatterns,
     globalGridType,
     autoCycleIndexRef,
-    onImportSuccess: useCallback(() => {
+    onImportSuccess: useCallback((mode: 'standard' | 'object-focus') => {
+      if (mode === 'object-focus') {
+        setActiveTab?.('object-focus')
+        setCurrentStep(1)
+        const folderName = projectName || projectFolder?.name
+        if (folderName) {
+          router.replace(`/studio/projects/${toSlug(folderName)}/object-focus?step=convert`)
+        }
+        return
+      }
+
       setActiveTab?.(null)
-      if (projectName) {
-        router.replace(`/studio/projects/${toSlug(projectName)}`)
+      const folderName = projectName || projectFolder?.name
+      if (folderName) {
+        router.replace(`/studio/projects/${toSlug(folderName)}`)
       }
       // Show Design Config right after first import so user can configure before converting
       setCurrentStep('design-config')
-    }, [projectName, setActiveTab, router])
+    }, [projectName, projectFolder?.name, setActiveTab, setCurrentStep, router])
   })
 
   const {
@@ -278,14 +298,37 @@ export default function MosaicWorkspace({
     handleGeneratePdf, handleNextToSetup,
   } = pdfHook
 
+  const objectFocusProjects = useMemo(
+    () =>
+      projects
+        .filter((project) => project.removeBackground)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })),
+    [projects]
+  )
+  const objectFocusSelectedIds = useMemo(
+    () => new Set(objectFocusProjects.filter((project) => selectedIds.has(project.id)).map((project) => project.id)),
+    [objectFocusProjects, selectedIds]
+  )
+
   const zipHook = useZipExport({
     access, requestPaidAccess,
     projects, globalTheme, globalShowNumbers,
     solutionNameList, paletteImages,
   })
   const { isZipping, zipProgress, handleDownloadAllImages } = zipHook
+  const objectZipHook = useZipExport({
+    access,
+    requestPaidAccess,
+    projects: objectFocusProjects,
+    globalTheme,
+    globalShowNumbers,
+    solutionNameList,
+    paletteImages: [],
+  })
+  const { isZipping: isObjectFocusZipping, zipProgress: objectFocusZipProgress, handleDownloadAllImages: handleDownloadObjectFocusImages } = objectZipHook
 
-  const isAnyActionRunning = isConverting || isPreparingStep2 || isGeneratingPdf || isZipping || baIsZipping
+  const isAnyActionRunning = isConverting || isPreparingStep2 || isGeneratingPdf || isZipping || isObjectFocusZipping || baIsZipping
 
   const handleConvertAll = useCallback(async () => {
     if (isConverting) return
@@ -339,13 +382,57 @@ export default function MosaicWorkspace({
     }
   }, [access, isConverting, projects, selectedIds, requestPaidAccess, setIsConverting])
 
+  const handleConvertObjectFocus = useCallback(async (onlySelected: boolean) => {
+    if (isConverting) return
+    const selected = new Set(selectedIds)
+    const toConvert = objectFocusProjects.filter((project) => {
+      const canConvert = project.status === 'idle' || project.status === 'error'
+      return canConvert && (!onlySelected || selected.has(project.id))
+    })
+    if (toConvert.length === 0) return
+    if (toConvert.length > access.maxConvertAtOnce) {
+      requestPaidAccess(`Your ${access.plan} workspace can convert ${access.maxConvertAtOnce} image(s) at once.`)
+      return
+    }
+
+    setIsConverting(true)
+    try {
+      const convertSingleProject = useColorByNumberStore.getState().convertSingleProject
+      const cpuCores = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4
+      const limit = Math.min(Math.max(cpuCores, 2), 3)
+      const queue = [...toConvert]
+
+      const runProcessor = async () => {
+        while (queue.length > 0) {
+          const project = queue.shift()
+          if (!project) break
+          try {
+            await convertSingleProject(project.id)
+          } catch (err) {
+            console.error(err)
+          }
+        }
+      }
+
+      await Promise.all(Array.from({ length: Math.min(limit, toConvert.length) }, runProcessor))
+    } finally {
+      setIsConverting(false)
+    }
+  }, [access, isConverting, objectFocusProjects, requestPaidAccess, selectedIds, setIsConverting])
+
   const visibleGridTypes = useMemo(() => {
     return GRID_TYPES.filter((type) => enabledPatterns[type.value] !== false)
   }, [enabledPatterns])
   const isFolderModeActive = directImages.length > 0
+  useEffect(() => {
+    if (activeTab === 'before-after' && beforeAfterJob && currentStep !== 1) {
+      setCurrentStep(1)
+    }
+  }, [activeTab, beforeAfterJob, currentStep, setCurrentStep])
+
   const shouldShowImportScreen =
     // Always show tab content when a tab is explicitly selected (overrides any step)
-    (activeTab !== null && activeTab !== 'image-import') ||
+    (activeTab !== null && activeTab !== 'image-import' && activeTab !== 'object-focus' && !(activeTab === 'before-after' && beforeAfterJob)) ||
     (activeTab === 'image-import' && projects.length === 0) ||
     // Show import screen when no tab selected and not on design-config step
     (activeTab === null && currentStep !== 'design-config' && (
@@ -355,11 +442,26 @@ export default function MosaicWorkspace({
 
   const idleCount = projects.filter((p) => p.status === 'idle').length
   const selectedIdleCount = projects.filter((p) => selectedIds.has(p.id) && (p.status === 'idle' || p.status === 'error')).length
+  const objectFocusIdleCount = objectFocusProjects.filter((p) => p.status === 'idle' || p.status === 'error').length
+  const selectedObjectFocusIdleCount = objectFocusProjects.filter((p) => selectedIds.has(p.id) && (p.status === 'idle' || p.status === 'error')).length
 
   return (
     <div id="workspace" className="h-full flex overflow-hidden">
       {/* Main content area */}
-      {shouldShowImportScreen ? (
+      {activeTab === 'object-focus' && objectFocusStep === 'import' ? (
+        <ObjectFocusImportWorkspace
+          objectCount={objectFocusProjects.length}
+          importProgress={importProgress}
+          isImporting={importIsConverting}
+          isAnyActionRunning={isAnyActionRunning}
+          onAdd={handleImportTransparentClick}
+          onViewObjects={() => {
+            if (!projectName && !projectFolder?.name) return
+            const folderName = projectName || projectFolder?.name
+            if (folderName) router.replace(`/studio/projects/${toSlug(folderName)}/object-focus?step=convert`)
+          }}
+        />
+      ) : shouldShowImportScreen ? (
         <div className="relative min-w-0 flex-1 overflow-hidden bg-[var(--bg-primary)] p-4 sm:p-6 lg:p-8">
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:32px_32px]" />
           <div className="relative z-10 flex h-full w-full items-center justify-center">
@@ -401,6 +503,49 @@ export default function MosaicWorkspace({
             />
           )}
         </div>
+      ) : activeTab === 'object-focus' ? (
+        <ObjectFocusWorkspace
+          projects={objectFocusProjects}
+          selectedIds={objectFocusSelectedIds}
+          idleCount={objectFocusIdleCount}
+          selectedIdleCount={selectedObjectFocusIdleCount}
+          isConverting={isConverting}
+          isZipping={isObjectFocusZipping}
+          isAnyActionRunning={isAnyActionRunning}
+          zipProgress={objectFocusZipProgress}
+          onAdd={handleImportTransparentClick}
+          onConvertAll={() => void handleConvertObjectFocus(false)}
+          onConvertSelected={() => void handleConvertObjectFocus(true)}
+          onDownloadAll={handleDownloadObjectFocusImages}
+          onToggleSelect={onToggleSelect}
+          onSelectAll={() => setSelectedIds((prev) => {
+            const next = new Set(prev)
+            const allSelected = objectFocusProjects.length > 0 && objectFocusProjects.every((project) => next.has(project.id))
+            if (allSelected) {
+              objectFocusProjects.forEach((project) => next.delete(project.id))
+            } else {
+              objectFocusProjects.forEach((project) => next.add(project.id))
+            }
+            return next
+          })}
+          onDeleteSelected={() => {
+            if (objectFocusSelectedIds.size === 0) return
+            if (!window.confirm(`Delete ${objectFocusSelectedIds.size} selected object image(s)? This cannot be undone.`)) return
+            objectFocusSelectedIds.forEach((id) => removeProject(id))
+            setSelectedIds((prev) => {
+              const next = new Set(prev)
+              objectFocusSelectedIds.forEach((id) => next.delete(id))
+              return next
+            })
+          }}
+          setPreviewProjectId={setPreviewProjectId}
+          updateProject={updateProject}
+          removeProject={removeProject}
+          onBackToImport={() => {
+            const folderName = projectName || projectFolder?.name
+            if (folderName) router.replace(`/studio/projects/${toSlug(folderName)}/object-focus?step=import`)
+          }}
+        />
       ) : (
         <div className="min-w-0 flex-1 flex flex-col p-8 overflow-hidden">
       {gateNotice && (
@@ -861,6 +1006,15 @@ export default function MosaicWorkspace({
         </div>
       )}
 
+      {activeTab === 'object-focus' && previewProjectId && (
+        <ProjectPreviewModal
+          projectId={previewProjectId}
+          projects={projects}
+          onClose={() => setPreviewProjectId(null)}
+          onNavigate={setPreviewProjectId}
+        />
+      )}
+
       {/* Hidden inputs always in DOM to support Toolbar "+ Add More" */}
       <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" multiple onChange={(e) => handleImageFileChange(e, projects.length)} />
       <input ref={transparentImageInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" multiple onChange={(e) => handleTransparentImageFileChange(e, projects.length, setCurrentStep)} />
@@ -875,18 +1029,387 @@ export default function MosaicWorkspace({
 
       {/* Blocking Download Progress Modal */}
       <DownloadProgressModal
-        isOpen={isGeneratingPdf || isZipping || baIsZipping}
-        type={isGeneratingPdf ? "pdf" : isZipping ? "zip" : baIsZipping ? "before-after-zip" : null}
+        isOpen={isGeneratingPdf || isZipping || isObjectFocusZipping || baIsZipping}
+        type={isGeneratingPdf ? "pdf" : (isZipping || isObjectFocusZipping) ? "zip" : baIsZipping ? "before-after-zip" : null}
         progress={
           isGeneratingPdf
             ? pdfProgress
             : isZipping
             ? zipProgress
+            : isObjectFocusZipping
+            ? objectFocusZipProgress
             : baIsZipping
             ? baProgress
             : { current: 0, total: 0 }
         }
       />
+    </div>
+  )
+}
+
+function ObjectFocusImportWorkspace({
+  objectCount,
+  importProgress,
+  isImporting,
+  isAnyActionRunning,
+  onAdd,
+  onViewObjects,
+}: {
+  objectCount: number
+  importProgress: { current: number; total: number } | null
+  isImporting: boolean
+  isAnyActionRunning: boolean
+  onAdd: () => void
+  onViewObjects: () => void
+}) {
+  const progressPercent = importProgress && importProgress.total > 0
+    ? Math.round((importProgress.current / importProgress.total) * 100)
+    : 0
+
+  return (
+    <div className="min-w-0 flex-1 overflow-hidden bg-[var(--bg-primary)] p-6 lg:p-8">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="shrink-0 border-b border-[var(--border-default)] pb-5">
+          <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-xs font-semibold text-purple-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-300" />
+            Object Focus Import
+          </div>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+            Import isolated-object source images
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--text-secondary)]">
+            This mode uses mark patterns and removes white backgrounds during conversion.
+          </p>
+        </div>
+
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <div className="w-full max-w-xl">
+            {isImporting ? (
+              <div className="rounded-xl border border-purple-500/20 bg-[var(--bg-secondary)] p-8 text-center">
+                <div className="mx-auto mb-5 h-12 w-12 rounded-full border-4 border-purple-400/20 border-t-purple-300 animate-spin" />
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Importing objects</p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {importProgress ? `Reading file ${importProgress.current} of ${importProgress.total}` : 'Preparing files'}
+                </p>
+                {importProgress && (
+                  <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full rounded-full bg-purple-300 transition-all" style={{ width: `${progressPercent}%` }} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onAdd}
+                disabled={isAnyActionRunning}
+                className="group w-full rounded-xl border-2 border-dashed border-purple-500/25 bg-[var(--bg-secondary)] p-12 text-center transition hover:border-purple-400/60 hover:bg-purple-500/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-xl bg-[var(--bg-primary)] text-purple-400 ring-1 ring-purple-500/20 transition group-hover:ring-purple-400/40">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                    <circle cx="12" cy="12" r="3.5" />
+                  </svg>
+                </div>
+                <p className="text-base font-semibold text-[var(--text-primary)]">Select object images</p>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">PNG or JPG files with white backgrounds work best.</p>
+              </button>
+            )}
+
+            {objectCount > 0 && !isImporting && (
+              <button
+                type="button"
+                onClick={onViewObjects}
+                disabled={isAnyActionRunning}
+                className="mt-4 h-11 w-full rounded-lg bg-purple-400 text-sm font-semibold text-black transition hover:bg-purple-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                View imported objects ({objectCount})
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ObjectFocusWorkspace({
+  projects,
+  selectedIds,
+  idleCount,
+  selectedIdleCount,
+  isConverting,
+  isZipping,
+  isAnyActionRunning,
+  zipProgress,
+  onAdd,
+  onConvertAll,
+  onConvertSelected,
+  onDownloadAll,
+  onToggleSelect,
+  onSelectAll,
+  onDeleteSelected,
+  setPreviewProjectId,
+  updateProject,
+  removeProject,
+  onBackToImport,
+}: {
+  projects: Project[]
+  selectedIds: Set<string>
+  idleCount: number
+  selectedIdleCount: number
+  isConverting: boolean
+  isZipping: boolean
+  isAnyActionRunning: boolean
+  zipProgress: { current: number; total: number }
+  onAdd: () => void
+  onConvertAll: () => void
+  onConvertSelected: () => void
+  onDownloadAll: () => void
+  onToggleSelect: (id: string) => void
+  onSelectAll: () => void
+  onDeleteSelected: () => void
+  setPreviewProjectId: (id: string | null) => void
+  updateProject: (id: string, updates: Partial<Project>) => void
+  removeProject: (id: string) => void
+  onBackToImport: () => void
+}) {
+  const selectedCount = selectedIds.size
+  const completedCount = projects.filter((project) => project.status === 'completed').length
+  const allSelected = projects.length > 0 && projects.every((project) => selectedIds.has(project.id))
+
+  return (
+    <div className="min-w-0 flex-1 overflow-hidden bg-[var(--bg-primary)] p-6 lg:p-8">
+      <div className="flex h-full min-h-0 flex-col gap-5">
+        <div className="shrink-0 border-b border-[var(--border-default)] pb-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-xs font-semibold text-purple-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-300" />
+                Object Focus
+              </div>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+                Isolated objects
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-[var(--text-secondary)]">
+                White backgrounds are removed during conversion and exports use transparent artwork without palette columns.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={onBackToImport}
+                disabled={isAnyActionRunning}
+                className="h-10 rounded-lg border border-[var(--border-default)] px-3 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-white/5 hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Back to import
+              </button>
+              {projects.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onSelectAll}
+                  disabled={isAnyActionRunning}
+                  className="h-10 rounded-lg border border-[var(--border-default)] px-3 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-white/5 hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {allSelected ? 'Deselect all' : 'Select all'}
+                </button>
+              )}
+              {selectedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={onDeleteSelected}
+                  disabled={isAnyActionRunning}
+                  className="h-10 rounded-lg border border-red-500/25 px-3 text-sm font-medium text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete selected ({selectedCount})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onAdd}
+                disabled={isAnyActionRunning}
+                className="h-10 rounded-lg border border-purple-500/25 bg-purple-500/10 px-4 text-sm font-semibold text-purple-200 transition hover:bg-purple-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add objects
+              </button>
+              {selectedCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={onConvertSelected}
+                  disabled={isAnyActionRunning || selectedIdleCount === 0}
+                  className="h-10 rounded-lg bg-purple-400 px-4 text-sm font-semibold text-black transition hover:bg-purple-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isConverting ? 'Converting...' : `Convert selected (${selectedIdleCount})`}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onConvertAll}
+                  disabled={isAnyActionRunning || idleCount === 0}
+                  className="h-10 rounded-lg bg-purple-400 px-4 text-sm font-semibold text-black transition hover:bg-purple-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isConverting ? 'Converting...' : `Convert objects (${idleCount})`}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onDownloadAll}
+                disabled={isAnyActionRunning || completedCount === 0}
+                className="h-10 rounded-lg border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-4 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isZipping ? `Preparing ${zipProgress.current}/${zipProgress.total}` : 'Download PNGs'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {projects.length === 0 ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={isAnyActionRunning}
+              className="group w-full max-w-xl rounded-xl border-2 border-dashed border-purple-500/25 bg-[var(--bg-secondary)] p-12 text-center transition hover:border-purple-400/60 hover:bg-purple-500/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-xl bg-[var(--bg-primary)] text-purple-400 ring-1 ring-purple-500/20 transition group-hover:ring-purple-400/40">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                  <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                  <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                  <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                  <circle cx="12" cy="12" r="3.5" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold text-[var(--text-primary)]">Select object images</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">PNG or JPG files with white backgrounds work best.</p>
+            </button>
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 pb-8">
+              {projects.map((project) => {
+                const isSelected = selectedIds.has(project.id)
+                const isProcessing = project.status === 'processing'
+                const isReady = project.status === 'completed'
+                const isError = project.status === 'error'
+
+                return (
+                  <article
+                    key={project.id}
+                    className={`overflow-hidden rounded-xl border bg-[var(--bg-secondary)] transition ${
+                      isSelected ? 'border-purple-400/70 shadow-lg shadow-purple-950/20' : 'border-[var(--border-default)] hover:border-purple-400/35'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onToggleSelect(project.id)}
+                      disabled={isAnyActionRunning}
+                      className="group block w-full text-left disabled:cursor-not-allowed"
+                    >
+                      <div className="relative aspect-square bg-[var(--bg-primary)]">
+                        <img
+                          src={project.thumbnailDataUrl}
+                          alt={project.name}
+                          className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+                        />
+                        <div className="absolute left-3 top-3">
+                          <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold ${
+                            isSelected
+                              ? 'border-purple-300 bg-purple-300 text-black'
+                              : 'border-white/30 bg-black/45 text-transparent'
+                          }`}>
+                            {isSelected && (
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </span>
+                        </div>
+                        <div className="absolute right-3 top-3">
+                          <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
+                            isReady
+                              ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+                              : isProcessing
+                                ? 'border-purple-400/25 bg-purple-400/10 text-purple-300'
+                                : isError
+                                  ? 'border-red-400/25 bg-red-400/10 text-red-300'
+                                  : 'border-amber-400/25 bg-amber-400/10 text-amber-300'
+                          }`}>
+                            {isReady ? 'Ready' : isProcessing ? 'Converting' : isError ? 'Error' : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+
+                    <div className="space-y-3 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]" title={project.name}>
+                          {project.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                          {isReady ? `${project.data?.cells.length ?? 0} cells` : 'Transparent export preset'}
+                        </p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <select
+                          value={project.gridType}
+                          disabled={isAnyActionRunning || isProcessing}
+                          onChange={(event) =>
+                            updateProject(project.id, {
+                              gridType: event.target.value as ColorByNumberGridType,
+                              status: 'idle',
+                            })
+                          }
+                          className="min-w-0 flex-1 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none"
+                        >
+                          <option value="square-mark">Square mark</option>
+                          <option value="hexagon-mark">Hexagon mark</option>
+                        </select>
+                        {isReady && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewProjectId(project.id)}
+                            disabled={isAnyActionRunning}
+                            className="rounded-lg border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-white/5 hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Preview
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void useColorByNumberStore.getState().convertSingleProject(project.id)}
+                          disabled={isAnyActionRunning || isProcessing || isReady}
+                          className="h-9 flex-1 rounded-lg bg-purple-400 text-xs font-bold text-black transition hover:bg-purple-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isProcessing ? 'Converting...' : isReady ? 'Converted' : 'Convert'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isAnyActionRunning) return
+                            if (window.confirm(`Delete "${project.name}"?`)) removeProject(project.id)
+                          }}
+                          disabled={isAnyActionRunning}
+                          className="h-9 rounded-lg border border-red-500/25 px-3 text-xs font-semibold text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
