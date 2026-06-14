@@ -1,6 +1,8 @@
 'use client'
 
 import { initialsOf, userDisplayName, userPlan } from '@/lib/auth/user'
+import { logoutSession } from '@/lib/auth/logout'
+import { PLAN, PLAN_PRICE_DISPLAY, BILLING_INTERVAL_LABEL } from '@/lib/plans'
 import AppHeader from '@/components/shared/AppHeader'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
@@ -18,11 +20,6 @@ type AccountUser = {
   billingInterval: string
 }
 
-const planPrice = {
-  Free: '$0',
-  Plus: '$19',
-  Pro: '$49',
-} as const
 
 export default function AccountPage() {
   const [account, setAccount] = useState<AccountUser | null>(null)
@@ -70,12 +67,12 @@ export default function AccountPage() {
   const logout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut().catch(() => {})
-    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    await logoutSession()
     window.location.assign('/login')
   }
 
   const initials = account ? initialsOf(account.name) : 'U'
-  const currentPrice = account ? planPrice[account.plan] : '$0'
+  const currentPrice = account ? (PLAN_PRICE_DISPLAY[account.plan] ?? '$0') : '$0'
 
   return (
     <>
@@ -197,7 +194,7 @@ export default function AccountPage() {
               <p className="font-mono text-3xl font-semibold">
                 {currentPrice}{' '}
                 <span className="font-sans text-base font-normal text-text-secondary">
-                  /{account.billingInterval === 'yearly' ? 'month, billed yearly' : 'month'}
+                  /{BILLING_INTERVAL_LABEL[account.billingInterval as keyof typeof BILLING_INTERVAL_LABEL] ?? 'month'}
                 </span>
               </p>
               <p className="mt-2 text-sm text-text-secondary">
@@ -215,7 +212,7 @@ export default function AccountPage() {
                 className="h-10 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg-primary transition hover:bg-accent-hover"
                 href="/pricing"
               >
-                {account.plan === 'Free' ? 'Upgrade' : 'Change plan'}
+                {account.plan === PLAN.FREE ? 'Upgrade' : 'Change plan'}
               </Link>
             </div>
           </div>

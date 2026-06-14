@@ -268,9 +268,12 @@ export const getPageLayout = (
   boxH: number,
 ): PageLayout => {
   const dims = getGridDimensions(data);
-  const scale = Math.min(boxW / dims.width, boxH / dims.height);
-  const offsetX = (boxW - dims.width * scale) / 2;
-  const offsetY = (boxH - dims.height * scale) / 2;
+  const visualBounds = getVisualGridBounds(data);
+  const scale = Math.min(boxW / visualBounds.width, boxH / visualBounds.height);
+  const offsetX =
+    (boxW - visualBounds.width * scale) / 2 - visualBounds.minX * scale;
+  const offsetY =
+    (boxH - visualBounds.height * scale) / 2 - visualBounds.minY * scale;
 
   return {
     scale,
@@ -1265,19 +1268,13 @@ export const exportToCanvas = (
   // 5. Position the grid flush against the KDP-safe box.
   const firstCell = getCellLayout(0, 0, data);
   const gridVisualTop = padY + CONTENT_SAFE_INSET + GRID_CLIP_PADDING;
-  const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
+  const gridVisualTopPos = gridVisualTop + gridLayout.offsetY;
+  const gridFirstRowCenterY = gridVisualTopPos + firstCell.cy * gridLayout.scale;
 
   // Swatch center in palette coordinate space is sTop + sSW/2
   const paletteFirstSwatchCenterY = layout ? layout.sTop + layout.sSW / 2 : 0;
   // Padding top 10px added as requested
   const paletteY = gridFirstRowCenterY - paletteFirstSwatchCenterY + 25;
-
-  // Grid Top is just gridY
-  // When palette is present, we align grid to padY + clip padding to sync with swatches.
-  // When palette is absent (transparent mode / tight crop), we center it vertically using offsetY.
-  const gridVisualTopPos = !needsPalette
-    ? gridVisualTop + gridLayout.offsetY
-    : gridVisualTop;
 
   const canvas = document.createElement("canvas");
   canvas.width = pageW;
@@ -1324,10 +1321,9 @@ export const exportToCanvas = (
     paletteWidth +
     (paletteWidth > 0 ? PALETTE_GAP : 0) +
     GRID_CLIP_PADDING +
-    (tightCrop ? -visualBounds.minX : 0);
+    gridLayout.offsetX;
 
-  const gridYOffset = tightCrop ? -visualBounds.minY : 0;
-  ctx.translate(gridStartX, gridVisualTopPos + gridYOffset);
+  ctx.translate(gridStartX, gridVisualTopPos);
   ctx.scale(gridLayout.scale, gridLayout.scale);
 
   const strokeColor = "#000000";

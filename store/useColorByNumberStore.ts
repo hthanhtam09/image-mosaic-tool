@@ -159,39 +159,9 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
   conversionJob: emptyConversionJob,
   toolProjectSummaries: [],
   hasLoadedToolProjectSummaries: false,
-  workspaceShowProjectList: typeof window !== 'undefined' ? !window.location.pathname.startsWith('/studio/projects/') : true,
-  workspaceActiveTab: typeof window !== 'undefined' ? (() => {
-    const p = window.location.pathname
-    const PROJECTS_ROUTE = '/studio/projects'
-    if (!p.startsWith(PROJECTS_ROUTE + '/')) return null
-    const subPath = p.slice(PROJECTS_ROUTE.length + 1)
-    const parts = subPath.split('/').map(decodeURIComponent)
-    const tabCandidate = parts[1] || null
-    const VALID_TABS = ['image-import', 'object-focus', 'before-after', 'mark-practice']
-    return VALID_TABS.includes(tabCandidate || '') ? tabCandidate : null
-  })() : null,
-  workspaceStep: typeof window !== 'undefined' ? (() => {
-    const params = new URLSearchParams(window.location.search)
-    const stepParam = params.get('step')
-    if (stepParam === 'design-config') return 'design-config'
-    if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') return 2
-    if (stepParam === 'pdf-progress' || stepParam === '3') return 3
-    if (stepParam === 'convert' || stepParam === '1') return 1
-    
-    // Check if the URL contains a tab like 'image-import'
-    const p = window.location.pathname
-    const PROJECTS_ROUTE = '/studio/projects'
-    if (p.startsWith(PROJECTS_ROUTE + '/')) {
-      const subPath = p.slice(PROJECTS_ROUTE.length + 1)
-      const parts = subPath.split('/').map(decodeURIComponent)
-      const tabCandidate = parts[1] || null
-      const VALID_TABS = ['image-import', 'object-focus', 'before-after', 'mark-practice']
-      if (VALID_TABS.includes(tabCandidate || '')) {
-        return 1
-      }
-    }
-    return 'design-config'
-  })() : 'design-config',
+  workspaceShowProjectList: true,
+  workspaceActiveTab: null,
+  workspaceStep: 'design-config',
 
   togglePaletteGlobal: () =>
     set((state) => ({ isPaletteVisible: !state.isPaletteVisible })),

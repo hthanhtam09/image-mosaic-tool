@@ -1,53 +1,25 @@
 import type { ReactNode } from "react";
+import {
+  LayoutGrid,
+  Users,
+  CreditCard,
+  TrendingUp,
+  Repeat2,
+  Settings,
+  Search,
+  Minus,
+  Plus,
+} from "lucide-react";
 import { cardClass, initialsOf, paymentStatusClasses, thClass, type NavKey, type PaymentRow } from "./data";
 
 export function NavIcon({ name, className = "h-4 w-4" }: { name: NavKey; className?: string }) {
   switch (name) {
-    case "overview":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="3" width="7" height="7" />
-          <rect x="14" y="3" width="7" height="7" />
-          <rect x="3" y="14" width="7" height="7" />
-          <rect x="14" y="14" width="7" height="7" />
-        </svg>
-      );
-    case "users":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="9" cy="8" r="4" />
-          <path d="M3 21a6 6 0 0 1 12 0" />
-          <path d="M16 3.5a4 4 0 0 1 0 7.5" />
-        </svg>
-      );
-    case "payments":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="2" y="5" width="20" height="14" rx="2" />
-          <path d="M2 10h20" />
-        </svg>
-      );
-    case "revenue":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 3v18h18" />
-          <path d="M7 14l4-4 3 3 5-6" />
-        </svg>
-      );
-    case "subscriptions":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-          <circle cx="12" cy="12" r="4" />
-        </svg>
-      );
-    case "settings":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" />
-        </svg>
-      );
+    case "overview":      return <LayoutGrid className={className} />;
+    case "users":         return <Users className={className} />;
+    case "payments":      return <CreditCard className={className} />;
+    case "revenue":       return <TrendingUp className={className} />;
+    case "subscriptions": return <Repeat2 className={className} />;
+    case "settings":      return <Settings className={className} />;
   }
 }
 
@@ -61,27 +33,27 @@ export function Toggle({ on, disabled, label, onChange }: { on: boolean; disable
       disabled={disabled}
       onClick={onChange}
       className={`relative h-6 w-11 shrink-0 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-40 ${
-        on ? "border-[var(--accent-primary)] bg-[var(--accent-primary)]/30" : "border-[var(--border-primary)] bg-[var(--bg-tertiary)]"
+        on ? "border-accent bg-accent/30" : "border-border-primary bg-bg-tertiary"
       }`}
     >
-      <span className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${on ? "left-[22px] bg-[var(--accent-primary)]" : "left-0.5 bg-[var(--text-secondary)]"}`} />
+      <span className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${on ? "left-[22px] bg-accent" : "left-0.5 bg-text-secondary"}`} />
     </button>
   );
 }
 
 export function Stepper({ value, max, disabled, onChange }: { value: number; max: number; disabled?: boolean; onChange: (v: number) => void }) {
-  const btn = "inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border-primary)] text-[var(--text-secondary)] transition hover:bg-white/5 hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40";
+  const btn = "inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-primary text-text-secondary transition hover:bg-white/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40";
   return (
     <div className="inline-flex items-center gap-2">
       <button type="button" className={btn} disabled={disabled || value <= 0} aria-label="Decrease" onClick={() => onChange(Math.max(0, value - 1))}>
-        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14" /></svg>
+        <Minus className="h-3.5 w-3.5" />
       </button>
       <span className="w-12 text-center font-mono text-sm tabular-nums">
         {value}
-        <span className="text-[var(--text-muted)]">/{max}</span>
+        <span className="text-text-muted">/{max}</span>
       </span>
       <button type="button" className={btn} disabled={disabled || value >= max} aria-label="Increase" onClick={() => onChange(Math.min(max, value + 1))}>
-        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
+        <Plus className="h-3.5 w-3.5" />
       </button>
     </div>
   );
@@ -89,7 +61,7 @@ export function Stepper({ value, max, disabled, onChange }: { value: number; max
 
 export function Avatar({ name, className = "h-8 w-8 text-xs" }: { name: string; className?: string }) {
   return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--accent-primary)] font-semibold text-[var(--bg-primary)] ${className}`}>
+    <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-accent font-semibold text-bg-primary ${className}`}>
       {initialsOf(name)}
     </span>
   );
@@ -98,9 +70,9 @@ export function Avatar({ name, className = "h-8 w-8 text-xs" }: { name: string; 
 export function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className={cardClass}>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">{label}</p>
       <p className="mt-3 font-mono text-3xl font-semibold">{value}</p>
-      {hint && <p className="mt-1 text-xs text-[var(--text-secondary)]">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-text-secondary">{hint}</p>}
     </div>
   );
 }
@@ -109,7 +81,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
   return (
     <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <p className="text-sm text-[var(--text-secondary)]">Workspace</p>
+        <p className="text-sm text-text-secondary">Workspace</p>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       </div>
       {children && <div className="flex flex-col gap-3 sm:flex-row sm:items-center">{children}</div>}
@@ -119,7 +91,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
 
 export function DateRange() {
   return (
-    <select className="h-10 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 text-sm outline-none focus:border-[var(--accent-primary)]">
+    <select className="h-10 rounded-lg border border-border-primary bg-bg-secondary px-3 text-sm outline-none focus:border-accent">
       <option>Last 30 days</option>
       <option>Last 7 days</option>
       <option>This year</option>
@@ -131,14 +103,11 @@ export function SearchInput({ value, onChange, placeholder }: { value: string; o
   return (
     <label className="relative block">
       <span className="sr-only">Search admin records</span>
-      <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="11" cy="11" r="7" />
-        <path d="M21 21l-4-4" />
-      </svg>
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] pl-10 pr-3 text-sm outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)] sm:w-64"
+        className="h-10 w-full rounded-lg border border-border-primary bg-bg-secondary pl-10 pr-3 text-sm outline-none placeholder:text-text-muted focus:border-accent sm:w-64"
         placeholder={placeholder}
       />
     </label>
@@ -246,7 +215,7 @@ export function DonutChart() {
           <div key={segment.label} className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-sm" style={{ background: segment.color }} />
             <span>{segment.label}</span>
-            <span className="ml-auto font-mono text-[var(--text-secondary)]">{segment.amount}</span>
+            <span className="ml-auto font-mono text-text-secondary">{segment.amount}</span>
           </div>
         ))}
       </div>
@@ -257,8 +226,8 @@ export function DonutChart() {
 export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
   return (
     <table className="w-full text-sm">
-      <thead className="text-[var(--text-secondary)]">
-        <tr className="border-b border-[var(--border-primary)]">
+      <thead className="text-text-secondary">
+        <tr className="border-b border-border-primary">
           <th className={thClass}>User</th>
           <th className={thClass}>Plan</th>
           <th className={thClass}>Amount</th>
@@ -266,7 +235,7 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
           <th className={thClass}>Date</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-[var(--border-primary)]">
+      <tbody className="divide-y divide-border-primary">
         {rows.map(([name, email, plan, amount, status, date]) => (
           <tr key={email + date}>
             <td className="px-5 py-4">
@@ -274,18 +243,18 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
                 <Avatar name={name} />
                 <div>
                   <p>{name}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{email}</p>
+                  <p className="text-xs text-text-secondary">{email}</p>
                 </div>
               </div>
             </td>
             <td className="px-5 py-4">
-              <span className="rounded-full bg-[var(--bg-tertiary)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">{plan}</span>
+              <span className="rounded-full bg-bg-tertiary px-2.5 py-1 text-xs text-text-secondary">{plan}</span>
             </td>
             <td className="px-5 py-4 font-mono">{amount}</td>
             <td className="px-5 py-4">
               <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${paymentStatusClasses[status]}`}>{status}</span>
             </td>
-            <td className="px-5 py-4 text-[var(--text-secondary)]">{date}</td>
+            <td className="px-5 py-4 text-text-secondary">{date}</td>
           </tr>
         ))}
       </tbody>

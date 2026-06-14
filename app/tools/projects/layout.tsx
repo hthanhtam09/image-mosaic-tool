@@ -2,13 +2,16 @@ import ToolFlagsProvider from '@/components/ToolFlagsProvider'
 import ToolProjectWorkspace from '@/components/tools/ToolProjectWorkspace'
 import ToolsShell from '@/components/tools/ToolsShell'
 import Toaster from '@/components/Toaster'
+import { Suspense } from 'react'
 
 export default function ProjectsLayout({ children }: { children: React.ReactNode }) {
   return (
     <ToolFlagsProvider>
-      <ToolsShell>
-        <ToolProjectWorkspace />
-      </ToolsShell>
+      <Suspense fallback={null}>
+        <ToolsShell>
+          <ToolProjectWorkspace />
+        </ToolsShell>
+      </Suspense>
       <Toaster />
     </ToolFlagsProvider>
   )

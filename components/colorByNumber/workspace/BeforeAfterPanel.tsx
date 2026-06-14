@@ -1,11 +1,9 @@
 'use client'
 
 import type { BeforeAfterTheme } from '@/lib/colorByNumber/beforeAfter'
-import type { ColorByNumberGridType } from '@/lib/colorByNumber'
+import type { ColorByNumberGridType, DirectImage } from '@/lib/colorByNumber'
 
 type BeforeAfterMarkGridType = Extract<ColorByNumberGridType, 'square-mark' | 'hexagon-mark'>
-
-type DirectImage = { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }
 
 type BeforeAfterJob = {
   name: string

@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Logo from "@/components/shared/Logo";
+import { useAdminLogin } from "@/hooks/api/useAdminLogin";
 
 function LoginForm() {
   const router = useRouter();
@@ -12,29 +13,19 @@ function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+
+  const { mutateAsync: login, isPending: loading } = useAdminLogin();
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (res.ok) {
-        router.replace(from.startsWith("/admin") ? from : "/admin");
-        router.refresh();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data?.error || "Invalid username or password");
-      }
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
+      await login({ username, password });
+      router.replace(from.startsWith("/admin") ? from : "/admin");
+      router.refresh();
+    } catch (err: any) {
+      const message = err?.response?.data?.error || "Invalid username or password";
+      setError(message);
     }
   };
 
@@ -71,7 +62,7 @@ function LoginForm() {
             />
           </label>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-error">{error}</p>}
 
           <button
             type="submit"

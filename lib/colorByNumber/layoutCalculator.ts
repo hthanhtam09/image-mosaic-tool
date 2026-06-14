@@ -343,8 +343,8 @@ export const getVisualGridBounds = (
   const { width, height, cellSize, gridType } = data;
   const dims = getGridDimensions(data);
 
-  // Default bleed for stroke width (1.5px is standard)
-  const STROKE_BLEED = 2; // px
+  // Include strokes and mark symbols that can extend slightly past edge cells.
+  const STROKE_BLEED = Math.max(2, cellSize * 0.08);
 
   let minX = -STROKE_BLEED;
   let minY = -STROKE_BLEED;

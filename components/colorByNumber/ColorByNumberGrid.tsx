@@ -15,7 +15,6 @@ import {
   getCellLayout,
   hitTestCell,
   getGridDimensions,
-  getVisualGridBounds,
   TRAPEZOID_SLANT_FACTOR,
 } from "@/lib/colorByNumber/layoutCalculator";
 import {
@@ -1988,7 +1987,6 @@ interface PageGridLayout {
   gridVisualTop: number;
   paletteVisualTop: number;
   gridVisualLeftOffset: number;
-  visualBounds: { width: number; height: number; minX: number; minY: number };
 }
 
 const PageGrid = ({
@@ -2040,12 +2038,8 @@ const PageGrid = ({
       ? paletteLayout.palColW + PALETTE_GAP
       : 0) +
     gridLayout.offsetX +
-    (layout.gridVisualLeftOffset || 0) +
-    (removeBackground ? -layout.visualBounds.minX * gridLayout.scale : 0);
-  const gridPageY =
-    gridVisualTop +
-    (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) +
-    (removeBackground ? -layout.visualBounds.minY * gridLayout.scale : 0);
+    (layout.gridVisualLeftOffset || 0);
+  const gridPageY = gridVisualTop;
   // Checker pattern ID for transparent background preview
   const checkerId = `checker-${colored ? "c" : "u"}`;
 
@@ -2288,8 +2282,6 @@ export default function ColorByNumberGrid({
     let gridVisualLeftOffset = 0;
     let gridVisualTopOffset = 0;
 
-    const visualBounds = getVisualGridBounds(data);
-
     // Keep a little extra air in Object Focus mode so the subject is not clipped.
     if (shouldUseTightCrop(data, activeProject?.removeBackground)) {
       const padRatio = 0.16;
@@ -2303,10 +2295,11 @@ export default function ColorByNumberGrid({
 
     const gridVisualTop =
       PAGE_PADDING_Y + CONTENT_SAFE_INSET + gridVisualTopOffset;
+    const gridVisualTopPos = gridVisualTop + gridLayout.offsetY;
 
     // Vertical positioning: align palette swatches with grid rows (matching export.ts)
     const firstCell = getCellLayout(0, 0, data);
-    const gridFirstRowCenterY = gridVisualTop + firstCell.cy * gridLayout.scale;
+    const gridFirstRowCenterY = gridVisualTopPos + firstCell.cy * gridLayout.scale;
     const paletteFirstSwatchCenterY = pLayout
       ? pLayout.sTop + pLayout.sSW / 2
       : 0;
@@ -2317,10 +2310,9 @@ export default function ColorByNumberGrid({
     return {
       gridLayout,
       paletteLayout: pLayout,
-      gridVisualTop,
+      gridVisualTop: gridVisualTopPos,
       paletteVisualTop,
       gridVisualLeftOffset,
-      visualBounds,
     };
   }, [data, showPalette, activeProject?.removeBackground]);
 
@@ -2436,9 +2428,7 @@ export default function ColorByNumberGrid({
         paletteLayout,
         gridVisualTop,
         gridVisualLeftOffset = 0,
-        visualBounds,
       } = pageLayout;
-      const removeBackground = activeProject?.removeBackground;
       const gridXOffset =
         getPagePaddingX(data) +
         CONTENT_SAFE_INSET_LEFT +
@@ -2446,12 +2436,8 @@ export default function ColorByNumberGrid({
           ? PALETTE_X_OFFSET + paletteLayout.palColW + PALETTE_GAP
           : 0) +
         gridLayout.offsetX +
-        gridVisualLeftOffset +
-        (removeBackground ? -visualBounds.minX * gridLayout.scale : 0);
-      const gridYOffset =
-        gridVisualTop +
-        (!paletteLayout || removeBackground ? gridLayout.offsetY : 0) +
-        (removeBackground ? -visualBounds.minY * gridLayout.scale : 0);
+        gridVisualLeftOffset;
+      const gridYOffset = gridVisualTop;
       const gridScale = gridLayout.scale;
 
       const cellX = (hitX - gridXOffset) / gridScale;

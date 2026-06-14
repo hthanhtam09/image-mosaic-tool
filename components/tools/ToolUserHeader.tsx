@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { initialsOf, userDisplayName, userPlan } from "@/lib/auth/user";
+import { logoutSession } from "@/lib/auth/logout";
+import { PLAN, PLAN_UPGRADE_CTA } from "@/lib/plans";
 import { createClient } from "@/utils/supabase/client";
 
 type ToolUser = {
@@ -86,7 +88,7 @@ export default function ToolUserHeader() {
   const logout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut().catch(() => {});
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    await logoutSession();
     window.location.assign("/login");
   };
 
@@ -139,7 +141,7 @@ export default function ToolUserHeader() {
             </div>
             <Link
               href={`/login?redirectTo=${encodeURIComponent(redirectTo)}`}
-              className="mb-1 block rounded-lg bg-[var(--accent)] px-3 py-2 text-center text-sm font-semibold text-[var(--bg-primary)] transition hover:bg-[var(--accent-hover)]"
+              className="mb-1 block rounded-lg bg-(--accent) px-3 py-2 text-center text-sm font-semibold text-(--bg-primary) transition hover:bg-(--accent-hover)"
             >
               Sign in
             </Link>
@@ -155,7 +157,7 @@ export default function ToolUserHeader() {
     );
   }
 
-  const isFreePlan = user.plan.toLowerCase() === "free";
+  const isFreePlan = user.plan === PLAN.FREE;
   const initials = initialsOf(user.name);
 
   return (
@@ -170,14 +172,14 @@ export default function ToolUserHeader() {
         aria-label="Open user menu"
         aria-expanded={open}
       >
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-sm font-semibold text-[var(--bg-primary)]">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-(--accent) text-sm font-semibold text-(--bg-primary)">
           {initials}
         </span>
         <span className="hidden min-w-0 flex-col items-start sm:flex">
           <span className="max-w-40 truncate text-sm font-semibold leading-4 text-(--text-primary)">
             {user.name}
           </span>
-          <span className="mt-1 inline-flex shrink-0 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2 py-0.5 text-[11px] font-semibold leading-none text-[var(--accent)]">
+          <span className="mt-1 inline-flex shrink-0 rounded-full border border-(--accent)/30 bg-(--accent)/10 px-2 py-0.5 text-[11px] font-semibold leading-none text-(--accent)">
             {user.plan}
           </span>
         </span>
@@ -201,9 +203,9 @@ export default function ToolUserHeader() {
           {isFreePlan && (
             <Link
               href="/pricing"
-              className="mb-1 block rounded-lg bg-[var(--accent)] px-3 py-2 text-center text-sm font-semibold text-[var(--bg-primary)] transition hover:bg-[var(--accent-hover)]"
+              className="mb-1 block rounded-lg bg-(--accent) px-3 py-2 text-center text-sm font-semibold text-(--bg-primary) transition hover:bg-(--accent-hover)"
             >
-              Upgrade to Plus
+              {PLAN_UPGRADE_CTA[PLAN.PLUS]}
             </Link>
           )}
 
@@ -216,14 +218,14 @@ export default function ToolUserHeader() {
           <button
             type="button"
             disabled
-            className="flex w-full cursor-not-allowed items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-[var(--text-muted)]"
+            className="flex w-full cursor-not-allowed items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-(--text-muted)"
           >
             <span>Theme</span>
             <span className="text-[10px] uppercase tracking-[0.14em]">
               Soon
             </span>
           </button>
-          <div className="my-1 h-px bg-[var(--border-primary)]" />
+          <div className="my-1 h-px bg-(--border-primary)" />
           <button
             type="button"
             onClick={() => void logout()}

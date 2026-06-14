@@ -1,55 +1,24 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, Fragment } from "react";
 import { match, tableCardClass, thClass, userStatusClasses, type AdminUser, type UserStatus } from "@/components/admin/data";
 import { Avatar, PageHeader, SearchInput, StatCard, Toggle } from "@/components/admin/ui";
 import { useFeatureFlags } from "@/components/admin/useFeatureFlags";
 import { toast } from "@/store/useToastStore";
 import { FEATURE_META, PATTERN_CATALOG, THEME_CATALOG } from "@/lib/featureFlags";
+import { useAdminUsers, useUpdateAdminUser } from "@/hooks/api/useAdminUsers";
 
 type OverrideValue = "enabled" | "disabled";
-
-// Client-side cache to keep user data between page mounts/transitions
-let cachedUsers: AdminUser[] | null = null;
 
 export default function UsersPage() {
   const { flags } = useFeatureFlags();
   const toolGlobal = flags.toolEnabled;
 
-  const [users, setUsers] = useState<AdminUser[]>(() => cachedUsers || []);
-  const [loading, setLoading] = useState(() => !cachedUsers);
-  const [error, setError] = useState<string | null>(null);
+  const { data: users = [], isLoading: loading, error } = useAdminUsers();
+  const { mutateAsync: updateUser } = useUpdateAdminUser();
+
   const [query, setQuery] = useState("");
-
-  // Track expanded user ID
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/admin/users")
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load users");
-        return r.json();
-      })
-      .then((data) => {
-        if (!alive) return;
-        
-        const hasChanged = JSON.stringify(data) !== JSON.stringify(cachedUsers);
-        if (hasChanged) {
-          cachedUsers = data;
-          setUsers(data);
-        }
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setError(err.message);
-        setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const toggleTool = async (id: string) => {
     const u = users.find((x) => x.id === id);
@@ -59,39 +28,13 @@ export default function UsersPage() {
     const nextToolConfig = (nextToolVal ? "enabled" : "disabled") as OverrideValue;
 
     try {
-      const res = await fetch("/api/admin/users", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: id,
-          toolEnabled: nextToolConfig,
-          status: u.status,
-          features: u.config?.features || {},
-          patterns: u.config?.patterns || {},
-          themes: u.config?.themes || {},
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update tool access");
-
-      setUsers((prev) => {
-        const next = prev.map((x) =>
-          x.id === id
-            ? {
-                ...x,
-                tool: nextToolVal,
-                config: {
-                  ...x.config,
-                  toolEnabled: nextToolConfig,
-                  features: x.config?.features || {},
-                  patterns: x.config?.patterns || {},
-                  themes: x.config?.themes || {},
-                },
-              }
-            : x
-        );
-        cachedUsers = next;
-        return next;
+      await updateUser({
+        userId: id,
+        toolEnabled: nextToolConfig,
+        status: u.status,
+        features: u.config?.features || {},
+        patterns: u.config?.patterns || {},
+        themes: u.config?.themes || {},
       });
       toast.success(`Tool access updated for ${u.name}`);
     } catch (err: any) {
@@ -106,32 +49,13 @@ export default function UsersPage() {
     const nextStatus = (u.status === "Suspended" ? "Active" : "Suspended") as UserStatus;
 
     try {
-      const res = await fetch("/api/admin/users", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: id,
-          toolEnabled: (u.config?.toolEnabled === "disabled" ? "disabled" : "enabled") as OverrideValue,
-          status: nextStatus,
-          features: u.config?.features || {},
-          patterns: u.config?.patterns || {},
-          themes: u.config?.themes || {},
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update status");
-
-      setUsers((prev) => {
-        const next = prev.map((x) =>
-          x.id === id
-            ? {
-                ...x,
-                status: nextStatus,
-              }
-            : x
-        );
-        cachedUsers = next;
-        return next;
+      await updateUser({
+        userId: id,
+        toolEnabled: (u.config?.toolEnabled === "disabled" ? "disabled" : "enabled") as OverrideValue,
+        status: nextStatus,
+        features: u.config?.features || {},
+        patterns: u.config?.patterns || {},
+        themes: u.config?.themes || {},
       });
       toast.success(`Status updated for ${u.name}`);
     } catch (err: any) {
@@ -152,49 +76,21 @@ export default function UsersPage() {
     const patternsOverride = { ...((u.config && u.config.patterns) || {}) };
     const themesOverride = { ...((u.config && u.config.themes) || {}) };
 
-    if (section === "features") {
-      featuresOverride[key] = val === "enabled";
-    } else if (section === "patterns") {
-      patternsOverride[key] = val === "enabled";
-    } else if (section === "themes") {
-      themesOverride[key] = val === "enabled";
-    }
+    if (section === "features") featuresOverride[key] = val === "enabled";
+    else if (section === "patterns") patternsOverride[key] = val === "enabled";
+    else if (section === "themes") themesOverride[key] = val === "enabled";
 
     const toolEnabled = (u.config?.toolEnabled === "disabled" ? "disabled" : "enabled") as OverrideValue;
 
-    setUsers((prev) => {
-      const next = prev.map((x) =>
-        x.id === userId
-          ? {
-              ...x,
-              config: {
-                toolEnabled,
-                features: featuresOverride,
-                patterns: patternsOverride,
-                themes: themesOverride,
-              },
-            }
-          : x
-      );
-      cachedUsers = next;
-      return next;
-    });
-
     try {
-      const res = await fetch("/api/admin/users", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          toolEnabled,
-          status: u.status,
-          features: featuresOverride,
-          patterns: patternsOverride,
-          themes: themesOverride,
-        }),
+      await updateUser({
+        userId,
+        toolEnabled,
+        status: u.status,
+        features: featuresOverride,
+        patterns: patternsOverride,
+        themes: themesOverride,
       });
-
-      if (!res.ok) throw new Error("Failed to save configuration");
       toast.success("Settings override updated");
     } catch (err: any) {
       toast.error(err.message || "Failed to save configuration");
@@ -203,9 +99,9 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center text-[var(--text-secondary)]">
+      <div className="flex h-96 items-center justify-center text-text-secondary">
         <div className="flex flex-col items-center gap-3">
-          <svg className="animate-spin h-8 w-8 text-[var(--accent)]" fill="none" viewBox="0 0 24 24">
+          <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
@@ -216,10 +112,10 @@ export default function UsersPage() {
 
   if (error) {
     return (
-      <div className="flex h-96 items-center justify-center text-red-400">
+      <div className="flex h-96 items-center justify-center text-error">
         <div className="text-center">
           <p className="font-semibold">Error Loading Users</p>
-          <p className="text-sm text-text-secondary mt-1">{error}</p>
+          <p className="text-sm text-text-secondary mt-1">{(error as Error).message}</p>
         </div>
       </div>
     );
@@ -272,7 +168,6 @@ export default function UsersPage() {
                 const isExpanded = expandedUserId === u.id;
                 return (
                   <Fragment key={u.id}>
-                    {/* Main Row */}
                     <tr className={`${isExpanded ? "bg-bg-primary/20" : ""} hover:bg-white/5 transition`}>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
@@ -303,7 +198,7 @@ export default function UsersPage() {
                           onClick={() => setExpandedUserId(isExpanded ? null : u.id)}
                           className={`mr-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition inline-flex items-center gap-1.5 ${
                             isExpanded
-                              ? "bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)] font-semibold"
+                              ? "bg-accent/10 border-accent text-accent font-semibold"
                               : "border-border-primary text-text-primary hover:bg-white/5"
                           }`}
                         >
@@ -332,7 +227,6 @@ export default function UsersPage() {
                       </td>
                     </tr>
 
-                    {/* Expandable Settings Row */}
                     {isExpanded && (
                       <tr className="bg-bg-primary/10 border-t border-b border-border-primary/50">
                         <td colSpan={7} className="px-6 py-5">
@@ -347,7 +241,6 @@ export default function UsersPage() {
                             </div>
 
                             <div className="grid gap-6 md:grid-cols-3">
-                              {/* 1. Tool Features */}
                               <div className="space-y-3">
                                 <h5 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                                   Tool Features
@@ -375,7 +268,6 @@ export default function UsersPage() {
                                 </div>
                               </div>
 
-                              {/* 2. Mosaic Patterns */}
                               <div className="space-y-3">
                                 <h5 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                                   Mosaic Patterns
@@ -400,7 +292,6 @@ export default function UsersPage() {
                                 </div>
                               </div>
 
-                              {/* 3. Color Themes */}
                               <div className="space-y-3">
                                 <h5 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                                   Color Themes
@@ -437,7 +328,7 @@ export default function UsersPage() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-text-secondary">No users match “{query}”.</td>
+                  <td colSpan={7} className="px-5 py-10 text-center text-text-secondary">No users match "{query}".</td>
                 </tr>
               )}
             </tbody>

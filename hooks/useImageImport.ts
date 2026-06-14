@@ -1,14 +1,12 @@
 'use client'
 
-import type { ColorByNumberGridType } from '@/lib/colorByNumber'
+import type { ColorByNumberGridType, DirectImage } from '@/lib/colorByNumber'
 import type { ToolAccess } from '@/lib/tools/access'
 import type { VisibilityMap } from '@/lib/featureFlags'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
 import { createThumbnail } from '@/lib/tools/localProjects'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from '@/store/useToastStore'
-
-type DirectImage = { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }
 
 interface UseImageImportOptions {
   access: ToolAccess

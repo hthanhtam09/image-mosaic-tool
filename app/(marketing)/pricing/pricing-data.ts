@@ -1,3 +1,8 @@
+/**
+ * Pricing page data — derives plan names, pricing, CTAs, and feature lists
+ * from lib/plans.ts so there is a single source of truth.
+ */
+import { PLAN, PLAN_PRICE_MONTHLY, PLAN_PRICE_YEARLY, PLAN_CTA, PLAN_DESC, PLAN_FEATURES } from "@/lib/plans";
 import type { PlanName } from "@/lib/auth/user";
 
 export interface Plan {
@@ -11,23 +16,30 @@ export interface Plan {
 }
 
 export const PLANS: Plan[] = [
-  { name: "Free", desc: "For trying things out", m: 0, y: 0, cta: "Start free", features: ["5 exports / month", "3 mosaic styles", "Watermark on exports"] },
   {
-    name: "Plus",
-    desc: "For active creators",
-    m: 19,
-    y: 15,
-    pop: true,
-    cta: "Get Plus",
-    features: ["Unlimited exports", "All 10 styles · no watermark", "PDF book export", "Before/After · Object Focus"],
+    name: PLAN.FREE,
+    desc: PLAN_DESC[PLAN.FREE],
+    m: PLAN_PRICE_MONTHLY[PLAN.FREE],
+    y: PLAN_PRICE_YEARLY[PLAN.FREE],
+    cta: PLAN_CTA[PLAN.FREE],
+    features: PLAN_FEATURES[PLAN.FREE],
   },
   {
-    name: "Pro",
-    desc: "For teams & volume",
-    m: 49,
-    y: 39,
-    cta: "Get Pro",
-    features: ["Everything in Plus", "Bulk folder upload", "Priority rendering", "Commercial license"],
+    name: PLAN.PLUS,
+    desc: PLAN_DESC[PLAN.PLUS],
+    m: PLAN_PRICE_MONTHLY[PLAN.PLUS],
+    y: PLAN_PRICE_YEARLY[PLAN.PLUS],
+    pop: true,
+    cta: PLAN_CTA[PLAN.PLUS],
+    features: PLAN_FEATURES[PLAN.PLUS],
+  },
+  {
+    name: PLAN.PRO,
+    desc: PLAN_DESC[PLAN.PRO],
+    m: PLAN_PRICE_MONTHLY[PLAN.PRO],
+    y: PLAN_PRICE_YEARLY[PLAN.PRO],
+    cta: PLAN_CTA[PLAN.PRO],
+    features: PLAN_FEATURES[PLAN.PRO],
   },
 ];
 

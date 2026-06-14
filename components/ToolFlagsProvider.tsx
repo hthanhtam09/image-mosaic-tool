@@ -1,8 +1,10 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { LockKeyhole } from "lucide-react";
 import { DEFAULT_FLAGS, type FeatureFlags, type ToolFeatureFlags, type VisibilityMap, resolveVisibility } from "@/lib/featureFlags";
 import { useToolAccess } from "@/components/tools/useToolAccess";
+import { useFeatureFlags } from "@/hooks/api/useFeatureFlags";
 
 const FlagsContext = createContext<FeatureFlags>(DEFAULT_FLAGS);
 
@@ -45,49 +47,39 @@ export function useToolThemes(): Record<string, boolean> {
 
 function GateScreen({ title, message }: { title: string; message: string }) {
   return (
-    <main className="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-[var(--bg-primary)] px-6 text-center text-[var(--text-primary)]">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="11" width="18" height="11" rx="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
+    <main className="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-bg-primary px-6 text-center text-text-primary">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border-primary bg-bg-secondary text-text-secondary">
+        <LockKeyhole size={24} strokeWidth={2} />
       </div>
       <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-      <p className="max-w-sm text-sm text-[var(--text-secondary)]">{message}</p>
+      <p className="max-w-sm text-sm text-text-secondary">{message}</p>
+    </main>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <main className="flex h-screen w-screen items-center justify-center bg-bg-primary">
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr',
+        gap: 5, width: 44, height: 44,
+        borderRadius: 11, border: '1px solid rgba(192,205,227,0.25)',
+        background: 'rgba(192,205,227,0.10)', padding: 7,
+      }}>
+        <style>{`@keyframes mosaic-pop{0%,100%{transform:scale(1);filter:brightness(1)}30%{transform:scale(1.35) translateY(-2px);filter:brightness(1.4)}60%{transform:scale(1);filter:brightness(1)}}`}</style>
+        {([['0s',1],['0.2s',0.5],['0.4s',0.5],['0.6s',1]] as [string,number][]).map(([delay, opacity]) => (
+          <i key={delay} style={{ display:'block', borderRadius:3, background:'#c0cde3', opacity, animation:`mosaic-pop 1.6s ease-in-out ${delay} infinite` }} />
+        ))}
+      </div>
     </main>
   );
 }
 
 export default function ToolFlagsProvider({ children }: { children: ReactNode }) {
-  const [flags, setFlags] = useState<FeatureFlags | null>(null);
+  const { data: flags, isLoading } = useFeatureFlags();
 
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/feature-flags")
-      .then((r) => r.json())
-      .then((data: FeatureFlags) => alive && setFlags(data))
-      .catch(() => alive && setFlags(DEFAULT_FLAGS));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  if (flags === null) {
-    return (
-      <main className="flex h-screen w-screen items-center justify-center bg-[var(--bg-primary)]">
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr',
-          gap: 5, width: 44, height: 44,
-          borderRadius: 11, border: '1px solid rgba(192,205,227,0.25)',
-          background: 'rgba(192,205,227,0.10)', padding: 7,
-        }}>
-          <style>{`@keyframes mosaic-pop{0%,100%{transform:scale(1);filter:brightness(1)}30%{transform:scale(1.35) translateY(-2px);filter:brightness(1.4)}60%{transform:scale(1);filter:brightness(1)}}`}</style>
-          {([['0s',1],['0.2s',0.5],['0.4s',0.5],['0.6s',1]] as [string,number][]).map(([delay, opacity]) => (
-            <i key={delay} style={{ display:'block', borderRadius:3, background:'#c0cde3', opacity, animation:`mosaic-pop 1.6s ease-in-out ${delay} infinite` }} />
-          ))}
-        </div>
-      </main>
-    );
+  if (isLoading || !flags) {
+    return <LoadingScreen />;
   }
 
   if (!flags.toolEnabled) {

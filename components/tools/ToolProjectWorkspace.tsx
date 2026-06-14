@@ -95,6 +95,18 @@ function getProjectAndTabFromUrl(): { projectSlug: string | null; tab: TabType |
   return { projectSlug, tab }
 }
 
+function getProjectAndTabFromPath(pathname: string | null): { projectSlug: string | null; tab: TabType | null } {
+  if (!pathname || !pathname.startsWith(PROJECTS_ROUTE + '/')) {
+    return { projectSlug: null, tab: null }
+  }
+  const subPath = pathname.slice(PROJECTS_ROUTE.length + 1)
+  const parts = subPath.split('/').map(decodeURIComponent)
+  const projectSlug = parts[0] || null
+  const tabCandidate = parts[1] || null
+  const tab = (VALID_TABS as readonly string[]).includes(tabCandidate || '') ? (tabCandidate as TabType) : null
+  return { projectSlug, tab }
+}
+
 export default function ToolProjectWorkspace() {
   const router = useRouter()
   const pathname = usePathname()
@@ -108,8 +120,8 @@ export default function ToolProjectWorkspace() {
     router.push(url)
   }, [router])
 
-  const [initialUrlInfo] = useState(() => getProjectAndTabFromUrl())
-  const [initialRouteProjectSlug] = useState(() => initialUrlInfo.projectSlug)
+  const initialUrlInfo = useMemo(() => getProjectAndTabFromPath(pathname), [pathname])
+  const initialRouteProjectSlug = initialUrlInfo.projectSlug
   const access = useToolAccess()
   const projectFolder = useColorByNumberStore((state) => state.projectFolder)
   const projects = useColorByNumberStore((state) => state.projects)

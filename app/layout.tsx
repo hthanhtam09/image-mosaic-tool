@@ -1,4 +1,5 @@
 import PageLoader from '@/components/PageLoader'
+import QueryProvider from '@/components/QueryProvider'
 import type { Metadata } from "next";
 import "./globals.css";
 
@@ -13,6 +14,10 @@ export const metadata: Metadata = {
   description:
     "Upload, pick a mosaic style, export a print-ready PDF coloring book. Built for KDP creators.",
   applicationName: "Mosaci",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/favicon.ico",
+  },
   openGraph: {
     type: "website",
     siteName: "Mosaci",
@@ -37,8 +42,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <PageLoader />
-        {children}
+        <QueryProvider>
+          <PageLoader />
+          {children}
+        </QueryProvider>
       </body>
     </html>
   );

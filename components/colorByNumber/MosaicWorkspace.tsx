@@ -30,6 +30,7 @@ import PdfSetupStep from "./dashboard/PdfSetupStep";
 import ProjectGrid from "./dashboard/ProjectGrid";
 import DownloadProgressModal from "./dashboard/DownloadProgressModal";
 import BookDesignConfigStep from "./dashboard/BookDesignConfigStep";
+import { StepContainer } from "./dashboard/StepContainer";
 
 const SPLIT_COLOR_MODES: {
   value: PartialColorMode;
@@ -149,6 +150,10 @@ export default function MosaicWorkspace({
   const setCurrentStep = useColorByNumberStore(
     (state) => state.setWorkspaceStep,
   );
+  const designConfigCacheKey = projectFolder?.id ?? projectName ?? "default";
+  const [cachedDesignConfigKey, setCachedDesignConfigKey] = useState<
+    string | null
+  >(null);
   const hasObjectFocusProjectsForRoute = projects.some(
     (project) => project.removeBackground,
   );
@@ -159,6 +164,12 @@ export default function MosaicWorkspace({
     (objectFocusStepParam === "import" || !hasObjectFocusProjectsForRoute)
       ? "import"
       : "convert";
+
+  useEffect(() => {
+    if (activeTab === null && currentStep === "design-config") {
+      setCachedDesignConfigKey(designConfigCacheKey);
+    }
+  }, [activeTab, currentStep, designConfigCacheKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -759,7 +770,7 @@ export default function MosaicWorkspace({
           }}
         />
       ) : (
-        <div className="min-w-0 flex-1 flex flex-col p-8 overflow-hidden">
+        <div className="min-w-0 flex-1 flex flex-col p-8 overflow-hidden relative">
           {gateNotice && (
             <div className="mb-4 flex items-start justify-between gap-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3 text-sm text-(--text-primary)">
               <div>
@@ -1392,7 +1403,8 @@ export default function MosaicWorkspace({
           )}
 
           {/* Step design-config: Book Design Config (appears after import, before convert) */}
-          {currentStep === "design-config" && (
+          {/* Keep component mounted but hidden to cache state and prevent re-renders when switching steps */}
+          <StepContainer isActive={currentStep === "design-config"}>
             <BookDesignConfigStep
               projectCount={projects.length + directImages.length}
               firstImageUrl={
@@ -1401,7 +1413,7 @@ export default function MosaicWorkspace({
                 directImages[0]?.uncolorUrl
               }
             />
-          )}
+          </StepContainer>
 
           {/* Step 3: PDF Progress */}
           {currentStep === 3 && (

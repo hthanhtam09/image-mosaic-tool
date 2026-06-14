@@ -1,6 +1,6 @@
 'use client'
 
-import type { ColorByNumberGridType } from '@/lib/colorByNumber'
+import type { ColorByNumberGridType, DirectImage } from '@/lib/colorByNumber'
 import type { BeforeAfterTheme } from '@/lib/colorByNumber/beforeAfter'
 import { exportBeforeAfterToCanvas } from '@/lib/colorByNumber/beforeAfter'
 import { exportToCanvas } from '@/lib/colorByNumber/export'
@@ -14,8 +14,6 @@ import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 
 type BeforeAfterMarkGridType = Extract<ColorByNumberGridType, 'square-mark' | 'hexagon-mark'>
-
-type DirectImage = { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }
 
 type BeforeAfterJob = {
   name: string

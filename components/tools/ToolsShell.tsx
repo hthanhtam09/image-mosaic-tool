@@ -4,14 +4,15 @@ import { MosaciLogoMark } from '@/components/MosaciLogo'
 import ToolUserHeader from '@/components/tools/ToolUserHeader'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { type CSSProperties, type ReactNode, useState } from 'react'
+import { type ReactNode, useState } from 'react'
+import { LayoutGrid } from 'lucide-react'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
 
 const PROJECTS_ROUTE = '/studio/projects'
 const projectRoute = (slug: string) => `${PROJECTS_ROUTE}/${encodeURIComponent(slug)}`
 
 function toSlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]+/g, '-').replace(/^-|-$/g, '')
+  return name.toLowerCase().replace(/[^a-z0-9À-ɏ]+/g, '-').replace(/^-|-$/g, '')
 }
 
 function getTabLabel(tab: string | null): string {
@@ -32,40 +33,12 @@ type NavItem = {
   active?: boolean
 }
 
-const toolTheme = {
-  '--accent': '#c0cde3',
-  '--accent-primary': '#c0cde3',
-  '--accent-hover': '#d4deee',
-  '--accent-secondary': 'rgba(192, 205, 227, 0.15)',
-  '--accent-muted': 'rgba(192, 205, 227, 0.15)',
-  '--color-accent': '#c0cde3',
-  '--color-accent-hover': '#d4deee',
-  '--bg-primary': '#121212',
-  '--bg-secondary': '#1a1a1a',
-  '--bg-tertiary': '#242424',
-  '--bg-elevated': '#1a1a1a',
-  '--bg-card': '#1a1a1a',
-  '--border-primary': '#262626',
-  '--border-default': '#262626',
-  '--border-subtle': 'rgba(255, 255, 255, 0.06)',
-  '--text-primary': '#ffffff',
-  '--text-secondary': '#9ba3b0',
-  '--text-muted': '#5a5f68',
-} as CSSProperties
-
 const primaryNav: NavItem[] = [
   {
     label: 'Workspace',
     href: '/studio/projects',
     active: true,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden>
-        <rect x="3" y="3" width="8" height="8" rx="2" />
-        <rect x="13" y="3" width="8" height="8" rx="2" />
-        <rect x="3" y="13" width="8" height="8" rx="2" />
-        <rect x="13" y="13" width="8" height="8" rx="2" />
-      </svg>
-    ),
+    icon: <LayoutGrid className="h-4.5 w-4.5" strokeWidth={1.75} aria-hidden />,
   },
 ]
 
@@ -78,12 +51,12 @@ function SidebarLink({ item, expanded, hovering }: { item: NavItem; expanded: bo
       aria-current={item.active ? 'page' : undefined}
       className={`relative flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-sm font-medium transition-all duration-150 ${
         item.active
-          ? 'bg-white/[0.08] text-[var(--text-primary)]'
-          : 'text-[var(--text-secondary)] hover:bg-white/[0.06] hover:text-[var(--text-primary)]'
+          ? 'bg-white/8 text-text-primary'
+          : 'text-text-secondary hover:bg-white/6 hover:text-text-primary'
       }`}
     >
       {item.active && (
-        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-[var(--accent)]" />
+        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-accent" />
       )}
       <span className="shrink-0">{item.icon}</span>
       <span
@@ -114,7 +87,6 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
   const isFolderMode = projects.length === 0 && (workspaceStep === 2 || workspaceStep === 3)
 
   if (activeTab !== null) {
-    // Show the specific tab name as the current "step" label
     activeStepId = activeTab
   } else if (workspaceStep === 'design-config') {
     activeStepId = 'design'
@@ -124,7 +96,6 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
     activeStepId = 'pdf'
   }
 
-  // All possible steps for each mode
   const allSteps = isFolderMode
     ? [
         { id: 'import', label: 'Import images' },
@@ -137,7 +108,6 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
         { id: 'pdf', label: 'PDF' },
       ]
 
-  // Navigation handlers for each step (to navigate back)
   const handleStepClick = (stepId: string) => {
     if (!projectFolder) return
     const s = toSlug(projectFolder.name)
@@ -196,24 +166,14 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
     }
   }
 
-  const tabLabel = getTabLabel(activeTab)
-
-  const slug = projectFolder ? toSlug(projectFolder.name) : ''
-  const projectBaseUrl = projectFolder ? projectRoute(slug) : ''
-
-  // stepsToRender removed, steps progress rendered in breadcrumbs instead.
-
   const sidebarWidth = hovering ? 220 : 56
 
   return (
-    <div
-      className="h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]"
-      style={toolTheme}
-    >
+    <div className="h-screen w-screen overflow-hidden bg-bg-primary text-text-primary">
       {/* Logo */}
       <Link
         href="/"
-        className="fixed left-0 top-0 z-50 flex h-14 w-14 shrink-0 items-center justify-center border-b border-r border-[var(--border-primary)] bg-[var(--bg-secondary)]"
+        className="fixed left-0 top-0 z-50 flex h-14 w-14 shrink-0 items-center justify-center border-b border-r border-border-primary bg-bg-secondary"
         title="Back to Mosaci home"
       >
         <MosaciLogoMark size="sm" />
@@ -221,12 +181,11 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
 
       {/* Sidebar */}
       <aside
-        className="fixed inset-y-0 left-0 top-14 z-40 flex flex-col border-r border-[var(--border-primary)] bg-[var(--bg-secondary)] transition-[width] duration-200 ease-out overflow-hidden"
+        className="fixed inset-y-0 left-0 top-14 z-40 flex flex-col border-r border-border-primary bg-bg-secondary transition-[width] duration-200 ease-out overflow-hidden"
         style={{ width: sidebarWidth }}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
       >
-        {/* Nav items */}
         <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3" aria-label="Tools navigation">
           {primaryNav.map((item) => (
             <SidebarLink key={item.label} item={item} expanded={false} hovering={hovering} />
@@ -239,17 +198,17 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
         className="flex h-screen min-w-0 flex-col transition-[padding-left] duration-200 ease-out"
         style={{ paddingLeft: 56 }}
       >
-        <header className="relative z-30 flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-primary)] bg-[var(--bg-secondary)] px-4">
-          <nav aria-label="Breadcrumb" className="flex items-center text-sm font-medium text-[var(--text-secondary)]">
+        <header className="relative z-30 flex h-14 shrink-0 items-center justify-between border-b border-border-primary bg-bg-secondary px-4">
+          <nav aria-label="Breadcrumb" className="flex items-center text-sm font-medium text-text-secondary">
             <ol className="inline-flex items-center space-x-1 md:space-x-1.5">
               <li className="inline-flex items-center">
                 {showProjectList ? (
-                  <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">Studio</span>
+                  <span className="text-text-primary font-semibold text-sm tracking-wide">Studio</span>
                 ) : (
                   <a
                     href={PROJECTS_ROUTE}
                     onClick={handleStudioClick}
-                    className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
+                    className="hover:text-text-primary transition-colors text-sm text-text-secondary tracking-wide"
                   >
                     Studio
                   </a>
@@ -259,7 +218,7 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
                 <>
                   <li className="flex items-center">
                     <svg
-                      className="mx-1 h-3.5 w-3.5 text-[var(--text-muted)] opacity-60 md:mx-1.5"
+                      className="mx-1 h-3.5 w-3.5 text-text-muted opacity-60 md:mx-1.5"
                       aria-hidden="true"
                       fill="none"
                       stroke="currentColor"
@@ -273,14 +232,14 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
                         : `${projectRoute(toSlug(projectFolder.name))}?step=convert`
                       }
                       onClick={handleProjectClick}
-                      className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
+                      className="hover:text-text-primary transition-colors text-sm text-text-secondary tracking-wide"
                     >
                       {projectFolder.name}
                     </a>
                   </li>
                   <li className="flex items-center">
                     <svg
-                      className="mx-1 h-3.5 w-3.5 text-[var(--text-muted)] opacity-60 md:mx-1.5"
+                      className="mx-1 h-3.5 w-3.5 text-text-muted opacity-60 md:mx-1.5"
                       aria-hidden="true"
                       fill="none"
                       stroke="currentColor"
@@ -291,50 +250,43 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
                     <div className="flex items-center gap-1.5 text-sm">
                       {activeTab === 'object-focus' ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[var(--text-secondary)] tracking-wide">
-                            Object Focus
-                          </span>
-                          <span className="text-[var(--text-muted)] opacity-40 px-0.5">→</span>
+                          <span className="text-text-secondary tracking-wide">Object Focus</span>
+                          <span className="text-text-muted opacity-40 px-0.5">→</span>
                           {objectFocusStep === 'import' ? (
-                            <span className="text-[var(--text-primary)] font-semibold tracking-wide">
-                              Import
-                            </span>
+                            <span className="text-text-primary font-semibold tracking-wide">Import</span>
                           ) : (
                             <>
                               <button
                                 type="button"
                                 onClick={() => handleObjectFocusStepClick('import')}
-                                className="tracking-wide text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+                                className="tracking-wide text-text-secondary transition-colors hover:text-text-primary cursor-pointer"
                               >
                                 Import
                               </button>
-                              <span className="text-[var(--text-muted)] opacity-40 px-0.5">→</span>
-                              <span className="text-[var(--text-primary)] font-semibold tracking-wide">
-                                Convert
-                              </span>
+                              <span className="text-text-muted opacity-40 px-0.5">→</span>
+                              <span className="text-text-primary font-semibold tracking-wide">Convert</span>
                             </>
                           )}
                         </div>
                       ) : activeTab && activeTab !== 'image-import' ? (
-                        <span className="text-[var(--text-primary)] font-semibold tracking-wide">
+                        <span className="text-text-primary font-semibold tracking-wide">
                           {getTabLabel(activeTab)}
                         </span>
                       ) : (
-                        // Pipeline steps: show only up to the current step, past steps are clickable
                         visibleSteps.map((step, idx) => {
                           const isCurrent = idx === visibleSteps.length - 1
                           return (
                             <div key={step.id} className="flex items-center gap-1.5">
-                              {idx > 0 && <span className="text-[var(--text-muted)] opacity-40 px-0.5">→</span>}
+                              {idx > 0 && <span className="text-text-muted opacity-40 px-0.5">→</span>}
                               {isCurrent ? (
-                                <span className="text-[var(--text-primary)] font-semibold tracking-wide">
+                                <span className="text-text-primary font-semibold tracking-wide">
                                   {step.label}
                                 </span>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={() => handleStepClick(step.id)}
-                                  className="tracking-wide text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+                                  className="tracking-wide text-text-secondary transition-colors hover:text-text-primary cursor-pointer"
                                 >
                                   {step.label}
                                 </button>
@@ -352,7 +304,7 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
           <ToolUserHeader />
         </header>
 
-        <main className="relative min-h-0 flex-1 overflow-hidden bg-[var(--bg-primary)]">{children}</main>
+        <main className="relative min-h-0 flex-1 overflow-hidden bg-bg-primary">{children}</main>
       </div>
     </div>
   )

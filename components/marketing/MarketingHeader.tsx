@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 
 import MosaciLogo from '@/components/MosaciLogo'
 import { initialsOf, userDisplayName, userPlan } from '@/lib/auth/user'
+import { logoutSession } from '@/lib/auth/logout'
+import { PLAN, PLAN_UPGRADE_CTA } from '@/lib/plans'
 import { createClient } from '@/utils/supabase/client'
 
 const navLink = 'rounded-lg px-3.5 py-2 text-[15px] text-text-secondary transition-colors hover:text-text-primary'
@@ -77,7 +79,7 @@ function UserMenu() {
     }
     const supabase = createClient()
     await supabase.auth.signOut().catch(() => {})
-    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    await logoutSession()
     window.location.reload()
   }
 
@@ -103,7 +105,7 @@ function UserMenu() {
     )
   }
 
-  const isFreePlan = user.plan.toLowerCase() === 'free'
+  const isFreePlan = user.plan === PLAN.FREE
   const signInHref = pathname ? `/login?redirectTo=${encodeURIComponent(pathname)}` : '/login'
 
   return (
@@ -143,7 +145,7 @@ function UserMenu() {
                 href="/pricing"
                 className="mb-1 block rounded-lg bg-accent px-3 py-2 text-center text-sm font-semibold text-bg-primary transition hover:bg-accent-hover"
               >
-                Upgrade to Plus
+                {PLAN_UPGRADE_CTA[PLAN.PLUS]}
               </Link>
             )}
 

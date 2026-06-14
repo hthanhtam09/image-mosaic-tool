@@ -8,13 +8,12 @@ import {
 } from '@/lib/colorByNumber/canvasHelpers'
 import { getThemeById } from '@/lib/colorByNumber/themes'
 import { generateBookPdf, parseCSV, type PDFCsvRow } from '@/lib/colorByNumber/pdfExport'
+import type { DirectImage } from '@/lib/colorByNumber'
 import type { ToolAccess } from '@/lib/tools/access'
 import type { Project } from '@/store/useColorByNumberStore'
 import { useCallback, useRef, useState } from 'react'
 import { toast } from '@/store/useToastStore'
 import { useBookDesignStore } from '@/store/useBookDesignStore'
-
-type DirectImage = { name: string; colorUrl: string; uncolorUrl: string; paletteUrl?: string }
 
 interface UsePdfExportOptions {
   access: ToolAccess

@@ -6,7 +6,7 @@
  * Previews are rendered using the actual high-res PDF canvas exporters for perfect fidelity.
  */
 
-import { useCallback, useRef, useState, useEffect, useMemo } from 'react'
+import { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import { useBookDesignStore, type BadgeStyle, type ColoringDisplayMode } from '@/store/useBookDesignStore'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
 import { THEMES, getThemeById } from '@/lib/colorByNumber/themes'
@@ -83,7 +83,11 @@ function sampleColorsFromImage(dataUrl: string, count = 12): Promise<string[]> {
   })
 }
 
-// ─── Hook: sample colors from a thumbnail data URL ────────────────────────────
+// ─── Hook: sample colors from a thumbnail data URL with caching ────────────────
+// Global cache for color sampling to survive component remounts
+const colorSamplingCache = new Map<string, { colors: string[], timestamp: number }>()
+const COLOR_CACHE_TTL = 60 * 60 * 1000 // 1 hour
+
 function useSampledColors(imageUrl: string | undefined) {
   const [colors, setColors] = useState<string[]>(FALLBACK_SWATCHES.map(s => s.color))
   const [ready, setReady] = useState(false)
@@ -97,10 +101,29 @@ function useSampledColors(imageUrl: string | undefined) {
         setReady(true)
         return
       }
+
+      // Check cache first
+      const cached = colorSamplingCache.get(imageUrl)
+      if (cached && Date.now() - cached.timestamp < COLOR_CACHE_TTL) {
+        setColors(cached.colors)
+        setReady(true)
+        return
+      }
+
       setReady(false)
       sampleColorsFromImage(imageUrl, 12).then(c => {
         if (!cancelled) {
+          // Store in cache
+          colorSamplingCache.set(imageUrl, { colors: c, timestamp: Date.now() })
           setColors(c)
+          setReady(true)
+        }
+      }).catch(err => {
+        console.error('Failed to sample colors:', err)
+        if (!cancelled) {
+          const fallback = FALLBACK_SWATCHES.map(s => s.color)
+          colorSamplingCache.set(imageUrl, { colors: fallback, timestamp: Date.now() })
+          setColors(fallback)
           setReady(true)
         }
       })
@@ -192,6 +215,8 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: () =
     </label>
   )
 }
+
+export default memo(BookDesignConfigStep)
 
 // ─── Palette Page – REAL Page Preview ─────────────────────────────────────────
 function PalettePreview({
@@ -519,7 +544,7 @@ function ColoredPreview({
   )
 }
 
-export default function BookDesignConfigStep({
+function BookDesignConfigStep({
   projectCount = 0,
   firstImageUrl,
 }: {
@@ -538,7 +563,14 @@ export default function BookDesignConfigStep({
     showColoredNumbers, toggleColoredNumbers,
   } = useBookDesignStore()
 
-  const { projects, setGlobalTheme, setGlobalGridType, globalCellSize, setGlobalCellSize } = useColorByNumberStore()
+  const setGlobalTheme = useColorByNumberStore((s) => s.setGlobalTheme)
+  const setGlobalGridType = useColorByNumberStore((s) => s.setGlobalGridType)
+  const globalCellSize = useColorByNumberStore((s) => s.globalCellSize)
+  const setGlobalCellSize = useColorByNumberStore((s) => s.setGlobalCellSize)
+  const firstProjectId = useColorByNumberStore((s) => s.projects[0]?.id)
+  const firstProjectFile = useColorByNumberStore((s) => s.projects[0]?.originalFile)
+  const firstProjectUseDithering = useColorByNumberStore((s) => s.projects[0]?.useDithering ?? true)
+  const firstProjectRemoveBg = useColorByNumberStore((s) => s.projects[0]?.removeBackground ?? false)
 
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
 
@@ -566,33 +598,17 @@ export default function BookDesignConfigStep({
     e.target.value = ''
   }, [setCustomFont])
 
-  // Find the first completed/converted project
-  const firstConvertedProject = useMemo(() => {
-    return projects.find((p) => p.data && p.data.cells.length > 0)
-  }, [projects])
-
   // Sample real colors from the first imported image using real quantizer (pre-conversion fallback)
   const { colors: sampledColors, ready: colorsReady } = useSampledColors(firstImageUrl)
 
-  // Extract unique colors from project cells if converted
+  // Keep preview colors tied to imported image/settings, not conversion status updates.
   const previewColors = useMemo(() => {
-    if (firstConvertedProject && firstConvertedProject.data) {
-      const uniqueColors = Array.from(new Set(firstConvertedProject.data.cells.map(c => c.color)))
-      if (uniqueColors.length > 0) return uniqueColors
-    }
     return sampledColors
-  }, [firstConvertedProject, sampledColors])
-
-  // Stable primitives from projects[0] — used as useEffect deps to avoid re-triggering on unrelated store updates
-  const firstProject = projects[0]
-  const firstProjectId = firstProject?.id
-  const firstProjectFile = firstProject?.originalFile
-  const firstProjectUseDithering = firstProject?.useDithering ?? true
-  const firstProjectRemoveBg = firstProject?.removeBackground ?? false
+  }, [sampledColors])
 
   const [realConvertedData, setRealConvertedData] = useState<ColorByNumberData | null>(null)
   const [isConvertingPreview, setIsConvertingPreview] = useState(() => {
-    return projects.length > 0 && !!projects[0]?.originalFile
+    return !!firstProjectFile
   })
   const [gridPatternTab, setGridPatternTab] = useState<'regular' | 'mark'>(() =>
     (coloringPattern === 'square-mark' || coloringPattern === 'hexagon-mark') ? 'mark' : 'regular'
@@ -673,9 +689,6 @@ export default function BookDesignConfigStep({
     if (realConvertedData) {
       return realConvertedData
     }
-    if (firstConvertedProject && firstConvertedProject.data) {
-      return firstConvertedProject.data
-    }
 
     // Dynamically adjust number of grid columns & rows based on cell size so that dragging the slider changes the density of cells in real-time
     const isMarkGrid = coloringPattern === "square-mark" || coloringPattern === "hexagon-mark"
@@ -688,7 +701,7 @@ export default function BookDesignConfigStep({
     const mockWidth = Math.max(5, Math.round(baseWidth / globalCellSize))
     const mockHeight = Math.max(5, Math.round(baseHeight / globalCellSize))
     return createMockProjectData(coloringPattern, previewColors, mockWidth, mockHeight, globalCellSize)
-  }, [realConvertedData, firstConvertedProject, coloringPattern, previewColors, globalCellSize])
+  }, [realConvertedData, coloringPattern, previewColors, globalCellSize])
 
   const badgeBgInputRef = useRef<HTMLInputElement>(null)
 
