@@ -5,7 +5,7 @@ import {
   useActiveProject,
   type Project,
 } from "@/store/useColorByNumberStore";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import {
   canvasToDpiPngDataUrl,
   exportDotCodeMagnifierToCanvas,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/colorByNumber";
 import { getThemeById } from "@/lib/colorByNumber/themes";
 import { shouldShowCodes, shouldUseTightCrop } from "@/lib/colorByNumber/objectFocus";
+import { usePanZoom } from "@/hooks/usePanZoom";
 
 interface ProjectPreviewModalProps {
   projectId: string;
@@ -34,6 +35,22 @@ interface PreviewSet {
   colorUrl: string;
 }
 
+// Fit 3 cards (340px each, 32px gap, 80px side padding) in the container
+const CONTENT_W = 3 * 340 + 2 * 32 + 80 * 2; // 1164
+const CONTENT_H = 440 + 80; // cards + top/bottom padding
+
+const getFitZoom = (w: number, h: number) =>
+  Math.min((w - 80) / CONTENT_W, (h - 80) / CONTENT_H, 0.85);
+
+const getFitOffset = (w: number, h: number) => {
+  const fitZoom = getFitZoom(w, h);
+  return {
+    zoom: fitZoom,
+    x: (w - CONTENT_W * fitZoom) / 2,
+    y: (h - CONTENT_H * fitZoom) / 2,
+  };
+};
+
 export default function ProjectPreviewModal({
   projectId,
   projects,
@@ -43,6 +60,7 @@ export default function ProjectPreviewModal({
   const { setActiveProject, setZoom, setPan, removeProject, globalShowNumbers, globalCellSize, globalTheme } =
     useColorByNumberStore();
 
+  // Build sorted navigable list
   const navigable = projects
     .filter((p) => p.status === "completed")
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
@@ -50,8 +68,22 @@ export default function ProjectPreviewModal({
   const hasPrev = idx > 0;
   const hasNext = idx < navigable.length - 1;
 
-  const goNext = useCallback(() => { if (hasNext) onNavigate(navigable[idx + 1].id); }, [hasNext, idx, navigable, onNavigate]);
-  const goPrev = useCallback(() => { if (hasPrev) onNavigate(navigable[idx - 1].id); }, [hasPrev, idx, navigable, onNavigate]);
+  // Keep a ref to the current navigable list + index so keyboard/button handlers
+  // never hold stale closures — we read from the ref at call-time instead.
+  const navRef = useRef({ navigable, idx, hasPrev, hasNext, onNavigate });
+  useLayoutEffect(() => {
+    navRef.current = { navigable, idx, hasPrev, hasNext, onNavigate };
+  });
+
+  const goNext = useCallback(() => {
+    const { hasNext, navigable, idx, onNavigate } = navRef.current;
+    if (hasNext) onNavigate(navigable[idx + 1].id);
+  }, []);
+
+  const goPrev = useCallback(() => {
+    const { hasPrev, navigable, idx, onNavigate } = navRef.current;
+    if (hasPrev) onNavigate(navigable[idx - 1].id);
+  }, []);
 
   useEffect(() => {
     setActiveProject(projectId);
@@ -66,20 +98,24 @@ export default function ProjectPreviewModal({
 
   useEffect(() => {
     if (!activeProject) {
-      setOriginUrl("");
-      return;
+      const t = setTimeout(() => setOriginUrl(""), 0);
+      return () => clearTimeout(t);
     }
     if (activeProject.originalFile) {
       const url = URL.createObjectURL(activeProject.originalFile);
-      setOriginUrl(url);
+      let revoked = false;
+      const t = setTimeout(() => setOriginUrl(url), 0);
       return () => {
-        URL.revokeObjectURL(url);
+        clearTimeout(t);
+        if (!revoked) { revoked = true; URL.revokeObjectURL(url); }
       };
-    } else {
-      setOriginUrl(activeProject.thumbnailDataUrl || "");
     }
+    const fallback = activeProject.thumbnailDataUrl || "";
+    const t = setTimeout(() => setOriginUrl(fallback), 0);
+    return () => clearTimeout(t);
   }, [activeProject?.id, activeProject?.originalFile, activeProject?.thumbnailDataUrl]);
 
+  // Keyboard navigation — reads from ref so always current
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -92,122 +128,48 @@ export default function ProjectPreviewModal({
 
   const [previews, setPreviews] = useState<PreviewSet | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // ── Unified canvas state (zoom and drag) ──
-  const [viewState, setViewState] = useState({ zoom: 0.75, x: 0, y: 0 });
-  const vsRef = useRef({ zoom: 0.75, x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [tempHand, setTempHand] = useState(false);
-  const dragRef = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null);
-  const previewContainerRef = useRef<HTMLDivElement>(null);
+  // ── Pan/zoom via shared hook ──────────────────────────────────────────────
+  const {
+    viewState,
+    isDragging,
+    containerRef: previewContainerRef,
+    zoomBy,
+    zoomFit,
+    pointerHandlers,
+  } = usePanZoom({
+    initialZoom: 0.75,
+    minZoom: 0.15,
+    maxZoom: 5,
+    wheelFactor: 1.08,
+    getInitialOffset: getFitOffset,
+  });
 
-  const commitView = useCallback((v: { zoom: number; x: number; y: number }) => {
-    vsRef.current = v;
-    setViewState(v);
-  }, []);
-
-  const zoomFit = useCallback(() => {
-    const el = previewContainerRef.current;
-    if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
-    const contentW = 1084; // 3 * 340 + 2 * 32
-    const contentH = 440;
-    const fitZoom = Math.min((width - 80) / contentW, (height - 120) / contentH, 0.85);
-    const x = (width - contentW * fitZoom) / 2;
-    const y = (height - contentH * fitZoom) / 2;
-    commitView({ zoom: fitZoom, x, y });
-  }, [commitView]);
-
-  // Initial fit & clear previews on project switch
+  // Reset view & previews whenever the project changes
   useEffect(() => {
-    setPreviews(null);
-    const timer = setTimeout(zoomFit, 50);
+    const timer = setTimeout(() => {
+      setPreviews(null);
+      zoomFit();
+    }, 0);
     return () => clearTimeout(timer);
   }, [projectId, zoomFit]);
 
-  // Handle container resize
+  // Refit on container resize
   useEffect(() => {
     const el = previewContainerRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => {
-      zoomFit();
-    });
+    const observer = new ResizeObserver(zoomFit);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [zoomFit]);
+  }, [previewContainerRef, zoomFit]);
 
-  // Native wheel → zoom toward cursor
-  useEffect(() => {
-    const el = previewContainerRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      const { zoom: z, x, y } = vsRef.current;
-      const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
-      const newZoom = Math.min(Math.max(z * factor, 0.15), 5);
-      commitView({
-        zoom: newZoom,
-        x: cx - (cx - x) * (newZoom / z),
-        y: cy - (cy - y) * (newZoom / z),
-      });
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [commitView]);
-
-  // Space drag tempHand listener
+  // Space → temporary hand (already always-grab here, kept for parity)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !e.repeat) {
-        e.preventDefault();
-        setTempHand(true);
-      }
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") setTempHand(false);
+      if (e.code === "Space" && !e.repeat) e.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, []);
-
-  const zoomBy = useCallback((factor: number) => {
-    const el = previewContainerRef.current;
-    if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
-    const cx = width / 2;
-    const cy = height / 2;
-    const { zoom: z, x, y } = vsRef.current;
-    const newZoom = Math.min(Math.max(z * factor, 0.15), 5);
-    commitView({ zoom: newZoom, x: cx - (cx - x) * (newZoom / z), y: cy - (cy - y) * (newZoom / z) });
-  }, [commitView]);
-
-  // Pointer drag
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { mx: e.clientX, my: e.clientY, ox: vsRef.current.x, oy: vsRef.current.y };
-    setIsDragging(true);
-  }, []);
-
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.mx;
-    const dy = e.clientY - dragRef.current.my;
-    const v = { ...vsRef.current, x: dragRef.current.ox + dx, y: dragRef.current.oy + dy };
-    vsRef.current = v;
-    setViewState(v);
-  }, []);
-
-  const onPointerUp = useCallback(() => {
-    dragRef.current = null;
-    setIsDragging(false);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   useEffect(() => {
@@ -299,8 +261,6 @@ export default function ProjectPreviewModal({
     }
   };
 
-  // Zoom handlers migrated to unified canvas methods: zoomBy, zoomFit
-
   const panels: { label: string; url: string | undefined; key: string }[] = [
     { key: "origin", label: "Original", url: originUrl || previews?.originUrl },
     { key: "uncolor", label: "Uncolored", url: previews?.uncolorUrl },
@@ -313,7 +273,6 @@ export default function ProjectPreviewModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        ref={containerRef}
         className="relative flex flex-col bg-[var(--bg-secondary)] rounded-2xl border border-[var(--border-subtle)] shadow-2xl overflow-hidden"
         style={{ width: "min(96vw, 1400px)", height: "min(92vh, 900px)" }}
       >
@@ -327,7 +286,7 @@ export default function ProjectPreviewModal({
             </p>
           </div>
 
-          {/* Zoom */}
+          {/* Zoom controls */}
           <div className="flex items-center bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] overflow-hidden shrink-0">
             <button onClick={() => zoomBy(1 / 1.2)} className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors text-base">−</button>
             <button onClick={zoomFit} className="px-2 text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors min-w-[52px] text-center">
@@ -342,24 +301,31 @@ export default function ProjectPreviewModal({
           </button>
         </div>
 
-        {/* ── 3-panel preview (Zoomable & Draggable Canvas) ── */}
+        {/* ── 3-panel preview (Zoomable & Draggable) ── */}
         <div
           ref={previewContainerRef}
           className="flex-1 min-h-0 overflow-hidden relative select-none bg-[var(--bg-primary)]"
-          style={{ cursor: isDragging ? "grabbing" : "grab" }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
+          style={{ cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
+          {...pointerHandlers}
         >
-          {/* Prev / Next overlays */}
+          {/* Prev / Next overlays — stop both pointer and click so drag doesn't start */}
           {hasPrev && (
-            <button onClick={goPrev} className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg active:scale-95" title="Previous (←)">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); goPrev(); }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg active:scale-95"
+              title="Previous (←)"
+            >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
             </button>
           )}
           {hasNext && (
-            <button onClick={goNext} className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg active:scale-95" title="Next (→)">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); goNext(); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg active:scale-95"
+              title="Next (→)"
+            >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
             </button>
           )}
@@ -413,11 +379,19 @@ export default function ProjectPreviewModal({
 
           {navigable.length > 1 && (
             <div className="flex items-center gap-1">
-              <button onClick={goPrev} disabled={!hasPrev} className="w-7 h-7 flex items-center justify-center rounded border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+              <button
+                onClick={goPrev}
+                disabled={!hasPrev}
+                className="w-7 h-7 flex items-center justify-center rounded border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
               </button>
               <span className="text-xs text-[var(--text-muted)] px-2 tabular-nums">{idx + 1} / {navigable.length}</span>
-              <button onClick={goNext} disabled={!hasNext} className="w-7 h-7 flex items-center justify-center rounded border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+              <button
+                onClick={goNext}
+                disabled={!hasNext}
+                className="w-7 h-7 flex items-center justify-center rounded border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
               </button>
             </div>

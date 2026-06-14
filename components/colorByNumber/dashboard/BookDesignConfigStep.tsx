@@ -15,7 +15,9 @@ import { quantizeImage } from '@/lib/quantize'
 import { rgbToHex } from '@/lib/utils'
 import { getHexColorName } from '@/lib/palette'
 import { exportPaletteToCanvas, exportToCanvas } from '@/lib/colorByNumber/export'
+import { shouldShowCodes, shouldUseTightCrop } from '@/lib/colorByNumber/objectFocus'
 import { imageToColorByNumber } from '@/lib/colorByNumber/imageToColorByNumber'
+import { usePanZoom } from '@/hooks/usePanZoom'
 
 // ─── Grid types ──────────────────────────────────────────────────────────────
 const GRID_TYPES_REGULAR: { value: ColorByNumberGridType | 'auto'; label: string }[] = [
@@ -34,9 +36,6 @@ const GRID_TYPES_MARK: { value: ColorByNumberGridType; label: string; desc: stri
   { value: 'square-mark',  label: 'Square Mark',  desc: 'Codes 1–5 by tone' },
   { value: 'hexagon-mark', label: 'Hexagon Mark', desc: 'Codes ./1–5 by tone' },
 ]
-
-// Canvas interaction tool
-type CanvasTool = 'select' | 'hand'
 
 // ─── Fallback swatches if no image is available ───────────────────────────────
 const FALLBACK_SWATCHES = [
@@ -90,16 +89,23 @@ function useSampledColors(imageUrl: string | undefined) {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    if (!imageUrl) {
-      setColors(FALLBACK_SWATCHES.map(s => s.color))
-      setReady(true)
-      return
-    }
-    setReady(false)
-    sampleColorsFromImage(imageUrl, 12).then(c => {
-      setColors(c)
-      setReady(true)
-    })
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      if (!imageUrl) {
+        setColors(FALLBACK_SWATCHES.map(s => s.color))
+        setReady(true)
+        return
+      }
+      setReady(false)
+      sampleColorsFromImage(imageUrl, 12).then(c => {
+        if (!cancelled) {
+          setColors(c)
+          setReady(true)
+        }
+      })
+    }, 0)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [imageUrl])
 
   return { colors, ready }
@@ -231,8 +237,8 @@ function PalettePreview({
 
   useEffect(() => {
     if (!badgeBgImageUrl) {
-      setLoadedBadgeBgImg(null)
-      return
+      const t = setTimeout(() => setLoadedBadgeBgImg(null), 0)
+      return () => clearTimeout(t)
     }
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -251,13 +257,14 @@ function PalettePreview({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Render palette page using high-res canvas exporter
+    // Render palette page using the same options as the actual export
     const pageCanvas = exportPaletteToCanvas(data, {
       bgColor: bg,
-      themeColor: fg,
+      themeColor: bg,
       pageNumber: 1,
+      transparentBg: true,
+      removeBgColorCells: true,
       badgeBgImage: loadedBadgeBgImg,
-      forPreview: true, // show all actual colors, no 23-color snap/merge
     })
 
     // Downsample using canvas image smoothing to make preview very crisp and clear
@@ -271,7 +278,7 @@ function PalettePreview({
     ctx.imageSmoothingQuality = 'high'
     ctx.clearRect(0, 0, targetW, targetH)
     ctx.drawImage(pageCanvas, 0, 0, targetW, targetH)
-  }, [data, bg, fg, badgeStyle, showWaterdropIcon, showColorInput, badgeBgImageUrl, loadedBadgeBgImg, customFontName, fontLoadedTrigger])
+  }, [data, bg, badgeStyle, showWaterdropIcon, showColorInput, badgeBgImageUrl, loadedBadgeBgImg, customFontName, fontLoadedTrigger])
 
   if (isConverting) {
     return (
@@ -326,6 +333,7 @@ function ColoringPreview({
   const customFontName = useBookDesignStore((s) => s.customFontName)
   const [fontLoadedTrigger, setFontLoadedTrigger] = useState(0)
   const removeBg = useColorByNumberStore((s) => s.projects[0]?.removeBackground ?? false)
+  const partialColorMode = useColorByNumberStore((s) => s.projects[0]?.partialColorMode ?? 'none')
 
   useEffect(() => {
     const handler = () => setFontLoadedTrigger((p) => p + 1)
@@ -339,19 +347,19 @@ function ColoringPreview({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Render coloring page using high-res canvas exporter (uncolored page preview)
-    const isMark = data.gridType === 'square-mark' || data.gridType === 'hexagon-mark'
+    // Render uncolored page using the same options as the actual ZIP/PDF export
     const pageCanvas = exportToCanvas(
       data,
       {}, // empty filled map so it is completely uncolored
       {
-        showCodes: true,
-        colored: false, // uncolored page preview
-        showPalette: displayMode === 'side-by-side' && !isMark,
+        showCodes: shouldShowCodes(data, removeBg, true),
+        colored: false,
+        showPalette: removeBg ? false : displayMode === 'side-by-side',
         showMagnifier: false,
+        partialColorMode,
         bgColor: bg,
         transparentBg: removeBg,
-        tightCrop: removeBg && !isMark,
+        tightCrop: shouldUseTightCrop(data, removeBg),
         removeBgColorCells: true,
       }
     )
@@ -359,15 +367,15 @@ function ColoringPreview({
     // Downsample using canvas image smoothing to make preview very crisp and clear
     const targetW = 1200
     const targetH = Math.round(1200 * (11 / 8.5)) // 1553
-    
+
     canvas.width = targetW
     canvas.height = targetH
-    
+
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
     ctx.clearRect(0, 0, targetW, targetH)
     ctx.drawImage(pageCanvas, 0, 0, targetW, targetH)
-  }, [data, bg, displayMode, badgeStyle, customFontName, fontLoadedTrigger, removeBg])
+  }, [data, bg, displayMode, badgeStyle, customFontName, fontLoadedTrigger, removeBg, partialColorMode])
 
   if (isConverting) {
     return (
@@ -421,6 +429,7 @@ function ColoredPreview({
   const customFontName = useBookDesignStore((s) => s.customFontName)
   const [fontLoadedTrigger, setFontLoadedTrigger] = useState(0)
   const removeBg = useColorByNumberStore((s) => s.projects[0]?.removeBackground ?? false)
+  const partialColorMode = useColorByNumberStore((s) => s.projects[0]?.partialColorMode ?? 'none')
 
   useEffect(() => {
     const handler = () => setFontLoadedTrigger((p) => p + 1)
@@ -428,11 +437,11 @@ function ColoredPreview({
     return () => window.removeEventListener('custom-font-loaded', handler)
   }, [])
 
-  // Build a fully-filled map: all cell codes set to true
+  // Build a fully-filled map keyed by "x,y" to match FilledMap format
   const allFilledMap = useMemo(() => {
     const m: Record<string, boolean> = {}
     for (const cell of data.cells) {
-      if (cell.code) m[cell.code] = true
+      if (cell.code) m[`${cell.x},${cell.y}`] = true
     }
     return m
   }, [data])
@@ -443,19 +452,19 @@ function ColoredPreview({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Render fully colored page
-    const isMark = data.gridType === 'square-mark' || data.gridType === 'hexagon-mark'
+    // Render fully colored page using the same options as the actual ZIP/PDF export
     const pageCanvas = exportToCanvas(
       data,
       allFilledMap,
       {
-        showCodes,
+        showCodes: shouldShowCodes(data, removeBg, showCodes),
         colored: true,
         showPalette: false,
         showMagnifier: false,
+        partialColorMode,
         bgColor: bg,
         transparentBg: removeBg,
-        tightCrop: removeBg && !isMark,
+        tightCrop: shouldUseTightCrop(data, removeBg),
         removeBgColorCells: true,
       }
     )
@@ -468,7 +477,7 @@ function ColoredPreview({
     ctx.imageSmoothingQuality = 'high'
     ctx.clearRect(0, 0, targetW, targetH)
     ctx.drawImage(pageCanvas, 0, 0, targetW, targetH)
-  }, [data, bg, allFilledMap, badgeStyle, customFontName, fontLoadedTrigger, showCodes, removeBg])
+  }, [data, bg, allFilledMap, badgeStyle, customFontName, fontLoadedTrigger, showCodes, removeBg, partialColorMode])
 
   if (isConverting) {
     return (
@@ -589,134 +598,49 @@ export default function BookDesignConfigStep({
     (coloringPattern === 'square-mark' || coloringPattern === 'hexagon-mark') ? 'mark' : 'regular'
   )
 
-  // ── Figma-like canvas state ──────────────────────────────────────────────────
-  const [tool, setTool] = useState<CanvasTool>('hand')
-  const [isDragging, setIsDragging] = useState(false)
-  const [tempHand, setTempHand] = useState(false) // Space held
-  const [viewState, setViewState] = useState({ zoom: 0.82, x: 0, y: 0 })
-  const vsRef = useRef({ zoom: 0.82, x: 0, y: 0 }) // kept in sync for non-render paths
-  const dragRef = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null)
-  const previewContainerRef = useRef<HTMLDivElement>(null)
+  // ── Figma-like canvas state (shared hook) ────────────────────────────────────
+  const {
+    viewState,
+    isDragging,
+    containerRef: previewContainerRef,
+    zoomBy,
+    zoomFit,
+    pointerHandlers: { onPointerDown, onPointerMove, onPointerUp },
+  } = usePanZoom({
+    initialZoom: 0.82,
+    minZoom: 0.1,
+    maxZoom: 8,
+    wheelFactor: 1.08,
+    getInitialOffset: (w) => ({ x: w * (1 - 0.82) / 2, y: 48 }),
+  })
 
-  const commitView = useCallback((v: { zoom: number; x: number; y: number }) => {
-    vsRef.current = v
-    setViewState(v)
-  }, [])
-
-  // Native wheel → zoom toward cursor
-  useEffect(() => {
-    const el = previewContainerRef.current
-    if (!el) return
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      const rect = el.getBoundingClientRect()
-      const cx = e.clientX - rect.left
-      const cy = e.clientY - rect.top
-      const { zoom, x, y } = vsRef.current
-      const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08
-      const newZoom = Math.min(Math.max(zoom * factor, 0.1), 8)
-      commitView({
-        zoom: newZoom,
-        x: cx - (cx - x) * (newZoom / zoom),
-        y: cy - (cy - y) * (newZoom / zoom),
-      })
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [commitView])
-
-  // Initialise offset so grid is centred
-  useEffect(() => {
-    const el = previewContainerRef.current
-    if (!el) return
-    const { width, height } = el.getBoundingClientRect()
-    // estimate content width = containerWidth (grid fills 100% at zoom=1)
-    // place top-left so it's centred
-    const initX = width * (1 - vsRef.current.zoom) / 2
-    const initY = 48 // leave room for zoom bar label + top padding
-    commitView({ ...vsRef.current, x: initX, y: initY })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Keyboard shortcuts: Space / Digit0
+  // Keyboard shortcuts: Space (prevent scroll) / Ctrl+0 (fit)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); setTempHand(true) }
+      if (e.code === 'Space' && !e.repeat) e.preventDefault()
       if ((e.ctrlKey || e.metaKey) && e.code === 'Digit0') {
         e.preventDefault()
-        const el = previewContainerRef.current
-        if (!el) return
-        const { width } = el.getBoundingClientRect()
-        const fitZoom = 0.82
-        commitView({ zoom: fitZoom, x: width * (1 - fitZoom) / 2, y: 48 })
+        zoomFit()
       }
     }
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') setTempHand(false)
-    }
     window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-    }
-  }, [commitView])
-
-  const isHandActive = true
-
-  // Toolbar zoom helpers (zoom toward container centre)
-  const zoomBy = useCallback((factor: number) => {
-    const el = previewContainerRef.current
-    if (!el) return
-    const { width, height } = el.getBoundingClientRect()
-    const cx = width / 2; const cy = height / 2
-    const { zoom, x, y } = vsRef.current
-    const newZoom = Math.min(Math.max(zoom * factor, 0.1), 8)
-    commitView({ zoom: newZoom, x: cx - (cx - x) * (newZoom / zoom), y: cy - (cy - y) * (newZoom / zoom) })
-  }, [commitView])
-
-  const zoomFit = useCallback(() => {
-    const el = previewContainerRef.current
-    if (!el) return
-    const { width } = el.getBoundingClientRect()
-    const fitZoom = 0.82
-    commitView({ zoom: fitZoom, x: width * (1 - fitZoom) / 2, y: 48 })
-  }, [commitView])
-
-  // Mouse drag handlers
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isHandActive) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    dragRef.current = { mx: e.clientX, my: e.clientY, ox: vsRef.current.x, oy: vsRef.current.y }
-    setIsDragging(true)
-  }, [isHandActive])
-
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return
-    const dx = e.clientX - dragRef.current.mx
-    const dy = e.clientY - dragRef.current.my
-    const v = { ...vsRef.current, x: dragRef.current.ox + dx, y: dragRef.current.oy + dy }
-    vsRef.current = v
-    setViewState(v)
-  }, [])
-
-  const onPointerUp = useCallback(() => {
-    dragRef.current = null
-    setIsDragging(false)
-  }, [])
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [zoomFit])
 
   useEffect(() => {
     if (!firstProjectId || !firstProjectFile) {
-      setRealConvertedData(null)
-      setIsConvertingPreview(false)
-      return
+      const t = setTimeout(() => {
+        setRealConvertedData(null)
+        setIsConvertingPreview(false)
+      }, 0)
+      return () => clearTimeout(t)
     }
-
-    setIsConvertingPreview(true)
 
     let active = true
     const timer = setTimeout(() => {
+      if (!active) return
+      setIsConvertingPreview(true)
       const isMark = coloringPattern === 'square-mark' || coloringPattern === 'hexagon-mark'
       imageToColorByNumber(firstProjectFile, {
         gridType: coloringPattern === 'auto' ? 'standard' : coloringPattern,
@@ -826,7 +750,7 @@ export default function BookDesignConfigStep({
         <div
           ref={previewContainerRef}
           className="flex-1 min-w-0 overflow-hidden relative select-none"
-          style={{ cursor: isHandActive ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+          style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

@@ -389,7 +389,7 @@ export const calculatePaletteLayout = (
   const rawCodeToFixedIndex = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
-    if (options?.removeBgColorCells && options?.bgColor) {
+    if (options?.removeBgColorCells && options?.bgColor && !isMarkGridType(data.gridType)) {
       const fixedIndex =
         cell.fixedPaletteIndex !== undefined
           ? cell.fixedPaletteIndex
@@ -1700,7 +1700,7 @@ export const exportPaletteToCanvas = (
   const rawCodeToFixedIndex = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
-    if (options?.removeBgColorCells && options?.bgColor) {
+    if (options?.removeBgColorCells && options?.bgColor && !isMarkGridType(data.gridType)) {
       const fixedIndex =
         cell.fixedPaletteIndex !== undefined
           ? cell.fixedPaletteIndex

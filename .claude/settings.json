@@ -9,7 +9,9 @@
       "Bash(sed -i '' \"s|/tools/projects|/studio/projects|g\" /Users/sincosweb/Desktop/Sin/Code/image-mosaic-tool/components/marketing/MarketingHeader.tsx)",
       "Bash(sed -i '' \"s|/tools/projects|/studio/projects|g\" /Users/sincosweb/Desktop/Sin/Code/image-mosaic-tool/components/marketing/MarketingFooter.tsx)",
       "Bash(sed -i '' \"s|/tools/projects|/studio/projects|g\" /Users/sincosweb/Desktop/Sin/Code/image-mosaic-tool/components/marketing/home/Hero.tsx)",
-      "Bash(sed -i '' \"s|/tools/projects|/studio/projects|g\" /Users/sincosweb/Desktop/Sin/Code/image-mosaic-tool/components/marketing/home/FinalCta.tsx)"
+      "Bash(sed -i '' \"s|/tools/projects|/studio/projects|g\" /Users/sincosweb/Desktop/Sin/Code/image-mosaic-tool/components/marketing/home/FinalCta.tsx)",
+      "Bash(pnpm lint *)",
+      "Bash(git stash *)"
     ],
     "additionalDirectories": [
       "/Users/sincosweb/Desktop/Sin/Code/image-mosaic-tool/app/studio/projects/[slug]"
