@@ -6,34 +6,34 @@
  * Previews are rendered using the actual high-res PDF canvas exporters for perfect fidelity.
  */
 
-import { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
-import { useBookDesignStore, type BadgeStyle, type ColoringDisplayMode } from '@/store/useBookDesignStore'
-import { useColorByNumberStore } from '@/store/useColorByNumberStore'
+import { usePanZoom } from '@/hooks/usePanZoom'
+import type { ColorByNumberCell, ColorByNumberData, ColorByNumberGridType } from '@/lib/colorByNumber'
+import { exportPaletteToCanvas, exportToCanvas } from '@/lib/colorByNumber/export'
+import { imageToColorByNumber } from '@/lib/colorByNumber/imageToColorByNumber'
+import { shouldShowCodes, shouldUseTightCrop } from '@/lib/colorByNumber/objectFocus'
 import { THEMES, getThemeById } from '@/lib/colorByNumber/themes'
-import type { ColorByNumberGridType, ColorByNumberData, ColorByNumberCell } from '@/lib/colorByNumber'
+import { getHexColorName } from '@/lib/palette'
 import { quantizeImage } from '@/lib/quantize'
 import { rgbToHex } from '@/lib/utils'
-import { getHexColorName } from '@/lib/palette'
-import { exportPaletteToCanvas, exportToCanvas } from '@/lib/colorByNumber/export'
-import { shouldShowCodes, shouldUseTightCrop } from '@/lib/colorByNumber/objectFocus'
-import { imageToColorByNumber } from '@/lib/colorByNumber/imageToColorByNumber'
-import { usePanZoom } from '@/hooks/usePanZoom'
+import { useBookDesignStore, type BadgeStyle, type ColoringDisplayMode } from '@/store/useBookDesignStore'
+import { useColorByNumberStore } from '@/store/useColorByNumberStore'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // ─── Grid types ──────────────────────────────────────────────────────────────
 const GRID_TYPES_REGULAR: { value: ColorByNumberGridType | 'auto'; label: string }[] = [
-  { value: 'auto',       label: 'Auto cycle' },
-  { value: 'standard',   label: 'Square'     },
-  { value: 'honeycomb',  label: 'Circle'     },
-  { value: 'diamond',    label: 'Diamond'    },
-  { value: 'pentagon',   label: 'Hexagon'    },
-  { value: 'puzzle',     label: 'Puzzle'     },
-  { value: 'islamic',    label: 'Islamic'    },
+  { value: 'auto', label: 'Auto cycle' },
+  { value: 'standard', label: 'Square' },
+  { value: 'honeycomb', label: 'Circle' },
+  { value: 'diamond', label: 'Diamond' },
+  { value: 'pentagon', label: 'Hexagon' },
+  { value: 'puzzle', label: 'Puzzle' },
+  { value: 'islamic', label: 'Islamic' },
   { value: 'fish-scale', label: 'Fish Scale' },
-  { value: 'trapezoid',  label: 'Trapezoid'  },
+  { value: 'trapezoid', label: 'Trapezoid' },
 ]
 
 const GRID_TYPES_MARK: { value: ColorByNumberGridType; label: string; desc: string }[] = [
-  { value: 'square-mark',  label: 'Square Mark',  desc: 'Codes 1–5 by tone' },
+  { value: 'square-mark', label: 'Square Mark', desc: 'Codes 1–5 by tone' },
   { value: 'hexagon-mark', label: 'Hexagon Mark', desc: 'Codes ./1–5 by tone' },
 ]
 
@@ -59,7 +59,10 @@ function sampleColorsFromImage(dataUrl: string, count = 12): Promise<string[]> {
       canvas.width = SIZE
       canvas.height = SIZE
       const ctx = canvas.getContext('2d')
-      if (!ctx) { resolve(FALLBACK_SWATCHES.map(s => s.color)); return }
+      if (!ctx) {
+        resolve(FALLBACK_SWATCHES.map((s) => s.color))
+        return
+      }
 
       ctx.drawImage(img, 0, 0, SIZE, SIZE)
       const imageData = ctx.getImageData(0, 0, SIZE, SIZE)
@@ -74,22 +77,22 @@ function sampleColorsFromImage(dataUrl: string, count = 12): Promise<string[]> {
         }
         resolve(hex)
       } catch (err) {
-        console.error("Quantization failed in preview:", err)
-        resolve(FALLBACK_SWATCHES.map(s => s.color))
+        console.error('Quantization failed in preview:', err)
+        resolve(FALLBACK_SWATCHES.map((s) => s.color))
       }
     }
-    img.onerror = () => resolve(FALLBACK_SWATCHES.map(s => s.color))
+    img.onerror = () => resolve(FALLBACK_SWATCHES.map((s) => s.color))
     img.src = dataUrl
   })
 }
 
 // ─── Hook: sample colors from a thumbnail data URL with caching ────────────────
 // Global cache for color sampling to survive component remounts
-const colorSamplingCache = new Map<string, { colors: string[], timestamp: number }>()
+const colorSamplingCache = new Map<string, { colors: string[]; timestamp: number }>()
 const COLOR_CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
 function useSampledColors(imageUrl: string | undefined) {
-  const [colors, setColors] = useState<string[]>(FALLBACK_SWATCHES.map(s => s.color))
+  const [colors, setColors] = useState<string[]>(FALLBACK_SWATCHES.map((s) => s.color))
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -97,7 +100,7 @@ function useSampledColors(imageUrl: string | undefined) {
     const timer = setTimeout(() => {
       if (cancelled) return
       if (!imageUrl) {
-        setColors(FALLBACK_SWATCHES.map(s => s.color))
+        setColors(FALLBACK_SWATCHES.map((s) => s.color))
         setReady(true)
         return
       }
@@ -111,24 +114,29 @@ function useSampledColors(imageUrl: string | undefined) {
       }
 
       setReady(false)
-      sampleColorsFromImage(imageUrl, 12).then(c => {
-        if (!cancelled) {
-          // Store in cache
-          colorSamplingCache.set(imageUrl, { colors: c, timestamp: Date.now() })
-          setColors(c)
-          setReady(true)
-        }
-      }).catch(err => {
-        console.error('Failed to sample colors:', err)
-        if (!cancelled) {
-          const fallback = FALLBACK_SWATCHES.map(s => s.color)
-          colorSamplingCache.set(imageUrl, { colors: fallback, timestamp: Date.now() })
-          setColors(fallback)
-          setReady(true)
-        }
-      })
+      sampleColorsFromImage(imageUrl, 12)
+        .then((c) => {
+          if (!cancelled) {
+            // Store in cache
+            colorSamplingCache.set(imageUrl, { colors: c, timestamp: Date.now() })
+            setColors(c)
+            setReady(true)
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to sample colors:', err)
+          if (!cancelled) {
+            const fallback = FALLBACK_SWATCHES.map((s) => s.color)
+            colorSamplingCache.set(imageUrl, { colors: fallback, timestamp: Date.now() })
+            setColors(fallback)
+            setReady(true)
+          }
+        })
     }, 0)
-    return () => { cancelled = true; clearTimeout(timer) }
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [imageUrl])
 
   return { colors, ready }
@@ -143,7 +151,7 @@ const createMockProjectData = (
   colors: string[],
   width = 24,
   height = 30,
-  cellSize = 30,
+  cellSize = 30
 ): ColorByNumberData => {
   const resolvedType = gridType === 'auto' ? 'standard' : gridType
   const isMarkGrid = resolvedType === 'square-mark' || resolvedType === 'hexagon-mark'
@@ -295,15 +303,25 @@ function PalettePreview({
     // Downsample using canvas image smoothing to make preview very crisp and clear
     const targetW = 1200
     const targetH = Math.round(1200 * (11 / 8.5)) // 1553
-    
+
     canvas.width = targetW
     canvas.height = targetH
-    
+
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
     ctx.clearRect(0, 0, targetW, targetH)
     ctx.drawImage(pageCanvas, 0, 0, targetW, targetH)
-  }, [data, bg, badgeStyle, showWaterdropIcon, showColorInput, badgeBgImageUrl, loadedBadgeBgImg, customFontName, fontLoadedTrigger])
+  }, [
+    data,
+    bg,
+    badgeStyle,
+    showWaterdropIcon,
+    showColorInput,
+    badgeBgImageUrl,
+    loadedBadgeBgImg,
+    customFontName,
+    fontLoadedTrigger,
+  ])
 
   if (isConverting) {
     return (
@@ -316,7 +334,11 @@ function PalettePreview({
         {/* Main Swatches grid */}
         <div className="grid grid-cols-4 gap-5 w-full px-6 my-auto">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="aspect-square rounded-xl bg-white/10 animate-pulse flex items-center justify-center" style={{ animationDelay: `${i * 40}ms` }}>
+            <div
+              key={i}
+              className="aspect-square rounded-xl bg-white/10 animate-pulse flex items-center justify-center"
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
               <div className="w-5 h-5 rounded-full bg-white/5" />
             </div>
           ))}
@@ -332,7 +354,10 @@ function PalettePreview({
 
   return (
     <div className="w-full aspect-[8.5/11] rounded-2xl overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border border-white/10 bg-white transition-all duration-300 hover:scale-[1.01] hover:shadow-[0_30px_70px_-10px_rgba(0,0,0,0.6)]">
-      <canvas ref={canvasRef} className={`w-full h-full object-contain transition-opacity duration-300 ${isConverting ? 'opacity-40' : 'opacity-100'}`} />
+      <canvas
+        ref={canvasRef}
+        className={`w-full h-full object-contain transition-opacity duration-300 ${isConverting ? 'opacity-40' : 'opacity-100'}`}
+      />
     </div>
   )
 }
@@ -413,7 +438,11 @@ function ColoringPreview({
         <div className="w-full flex-1 max-h-[60%] border border-white/5 bg-white/[0.02] rounded-2xl relative overflow-hidden my-auto flex items-center justify-center">
           <div className="absolute inset-0 grid grid-cols-12 gap-1.5 p-4 opacity-[0.08]">
             {Array.from({ length: 108 }).map((_, i) => (
-              <div key={i} className="aspect-square bg-white rounded-sm animate-pulse" style={{ animationDelay: `${(i % 12 + Math.floor(i / 12)) * 30}ms` }} />
+              <div
+                key={i}
+                className="aspect-square bg-white rounded-sm animate-pulse"
+                style={{ animationDelay: `${((i % 12) + Math.floor(i / 12)) * 30}ms` }}
+              />
             ))}
           </div>
           <div className="z-10 flex flex-col items-center gap-3">
@@ -429,7 +458,10 @@ function ColoringPreview({
 
   return (
     <div className="w-full aspect-[8.5/11] rounded-2xl overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border border-white/10 bg-white transition-all duration-300 hover:scale-[1.01] hover:shadow-[0_30px_70px_-10px_rgba(0,0,0,0.6)]">
-      <canvas ref={canvasRef} className={`w-full h-full object-contain transition-opacity duration-300 ${isConverting ? 'opacity-40' : 'opacity-100'}`} />
+      <canvas
+        ref={canvasRef}
+        className={`w-full h-full object-contain transition-opacity duration-300 ${isConverting ? 'opacity-40' : 'opacity-100'}`}
+      />
     </div>
   )
 }
@@ -478,21 +510,17 @@ function ColoredPreview({
     if (!ctx) return
 
     // Render fully colored page using the same options as the actual ZIP/PDF export
-    const pageCanvas = exportToCanvas(
-      data,
-      allFilledMap,
-      {
-        showCodes: shouldShowCodes(data, removeBg, showCodes),
-        colored: true,
-        showPalette: false,
-        showMagnifier: false,
-        partialColorMode,
-        bgColor: bg,
-        transparentBg: removeBg,
-        tightCrop: shouldUseTightCrop(data, removeBg),
-        removeBgColorCells: true,
-      }
-    )
+    const pageCanvas = exportToCanvas(data, allFilledMap, {
+      showCodes: shouldShowCodes(data, removeBg, showCodes),
+      colored: true,
+      showPalette: false,
+      showMagnifier: false,
+      partialColorMode,
+      bgColor: bg,
+      transparentBg: removeBg,
+      tightCrop: shouldUseTightCrop(data, removeBg),
+      removeBgColorCells: true,
+    })
 
     const targetW = 1200
     const targetH = Math.round(1200 * (11 / 8.5))
@@ -516,13 +544,23 @@ function ColoredPreview({
           <div className="absolute inset-0 grid grid-cols-12 gap-1.5 p-4 opacity-[0.15]">
             {Array.from({ length: 108 }).map((_, i) => {
               const colorClasses = [
-                'bg-red-500/20', 'bg-blue-500/20', 'bg-green-500/20',
-                'bg-yellow-500/20', 'bg-purple-500/20', 'bg-pink-500/20',
-                'bg-indigo-500/20', 'bg-teal-500/20', 'bg-orange-500/20'
+                'bg-red-500/20',
+                'bg-blue-500/20',
+                'bg-green-500/20',
+                'bg-yellow-500/20',
+                'bg-purple-500/20',
+                'bg-pink-500/20',
+                'bg-indigo-500/20',
+                'bg-teal-500/20',
+                'bg-orange-500/20',
               ]
               const bgClass = colorClasses[i % colorClasses.length]
               return (
-                <div key={i} className={`aspect-square rounded-sm animate-pulse ${bgClass}`} style={{ animationDelay: `${(i % 12 + Math.floor(i / 12)) * 30}ms` }} />
+                <div
+                  key={i}
+                  className={`aspect-square rounded-sm animate-pulse ${bgClass}`}
+                  style={{ animationDelay: `${((i % 12) + Math.floor(i / 12)) * 30}ms` }}
+                />
               )
             })}
           </div>
@@ -539,28 +577,32 @@ function ColoredPreview({
 
   return (
     <div className="w-full aspect-[8.5/11] rounded-2xl overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border border-white/10 bg-white transition-all duration-300 hover:scale-[1.01] hover:shadow-[0_30px_70px_-10px_rgba(0,0,0,0.6)]">
-      <canvas ref={canvasRef} className={`w-full h-full object-contain transition-opacity duration-300 ${isConverting ? 'opacity-40' : 'opacity-100'}`} />
+      <canvas
+        ref={canvasRef}
+        className={`w-full h-full object-contain transition-opacity duration-300 ${isConverting ? 'opacity-40' : 'opacity-100'}`}
+      />
     </div>
   )
 }
 
-function BookDesignConfigStep({
-  projectCount = 0,
-  firstImageUrl,
-}: {
-  projectCount?: number
-  firstImageUrl?: string
-}) {
+function BookDesignConfigStep({ projectCount = 0, firstImageUrl }: { projectCount?: number; firstImageUrl?: string }) {
   const {
-    badgeStyle, setBadgeStyle,
-    showWaterdropIcon, toggleWaterdropIcon,
-    showColorInput, toggleColorInput,
-    badgeBgImageUrl, setBadgeBgImage,
-    coloringTheme, setColoringTheme,
-    coloringPattern, setColoringPattern,
+    badgeStyle,
+    setBadgeStyle,
+    showWaterdropIcon,
+    toggleWaterdropIcon,
+    showColorInput,
+    toggleColorInput,
+    badgeBgImageUrl,
+    setBadgeBgImage,
+    coloringTheme,
+    setColoringTheme,
+    coloringPattern,
+    setColoringPattern,
     customFontName,
     setCustomFont,
-    showColoredNumbers, toggleColoredNumbers,
+    showColoredNumbers,
+    toggleColoredNumbers,
   } = useBookDesignStore()
 
   const setGlobalTheme = useColorByNumberStore((s) => s.setGlobalTheme)
@@ -582,21 +624,24 @@ function BookDesignConfigStep({
 
   const fontInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFontUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      const base64Data = result.split(',')[1]
-      const extension = file.name.split('.').pop() || 'ttf'
-      const fontName = file.name.replace(/\.[^/.]+$/, "")
-      setCustomFont(fontName, base64Data, extension)
-    }
-    reader.readAsDataURL(file)
-    e.target.value = ''
-  }, [setCustomFont])
+  const handleFontUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        const base64Data = result.split(',')[1]
+        const extension = file.name.split('.').pop() || 'ttf'
+        const fontName = file.name.replace(/\.[^/.]+$/, '')
+        setCustomFont(fontName, base64Data, extension)
+      }
+      reader.readAsDataURL(file)
+      e.target.value = ''
+    },
+    [setCustomFont]
+  )
 
   // Sample real colors from the first imported image using real quantizer (pre-conversion fallback)
   const { colors: sampledColors, ready: colorsReady } = useSampledColors(firstImageUrl)
@@ -611,7 +656,7 @@ function BookDesignConfigStep({
     return !!firstProjectFile
   })
   const [gridPatternTab, setGridPatternTab] = useState<'regular' | 'mark'>(() =>
-    (coloringPattern === 'square-mark' || coloringPattern === 'hexagon-mark') ? 'mark' : 'regular'
+    coloringPattern === 'square-mark' || coloringPattern === 'hexagon-mark' ? 'mark' : 'regular'
   )
 
   // ── Figma-like canvas state (shared hook) ────────────────────────────────────
@@ -627,7 +672,7 @@ function BookDesignConfigStep({
     minZoom: 0.1,
     maxZoom: 8,
     wheelFactor: 1.08,
-    getInitialOffset: (w) => ({ x: w * (1 - 0.82) / 2, y: 48 }),
+    getInitialOffset: (w) => ({ x: (w * (1 - 0.82)) / 2, y: 48 }),
   })
 
   // Keyboard shortcuts: Space (prevent scroll) / Ctrl+0 (fit)
@@ -663,26 +708,34 @@ function BookDesignConfigStep({
         cellSize: globalCellSize,
         useDithering: firstProjectUseDithering,
         removeWhiteBackground: firstProjectRemoveBg || isMark,
-      }).then((data) => {
-        if (active) {
-          setRealConvertedData(data)
-          setIsConvertingPreview(false)
-        }
-      }).catch((err) => {
-        console.error("Preview conversion failed:", err)
-        if (active) {
-          setRealConvertedData(null)
-          setIsConvertingPreview(false)
-        }
       })
+        .then((data) => {
+          if (active) {
+            setRealConvertedData(data)
+            setIsConvertingPreview(false)
+          }
+        })
+        .catch((err) => {
+          console.error('Preview conversion failed:', err)
+          if (active) {
+            setRealConvertedData(null)
+            setIsConvertingPreview(false)
+          }
+        })
     }, 250)
 
     return () => {
       active = false
       clearTimeout(timer)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firstProjectId, firstProjectFile, coloringPattern, globalCellSize, firstProjectUseDithering, firstProjectRemoveBg])
+  }, [
+    firstProjectId,
+    firstProjectFile,
+    coloringPattern,
+    globalCellSize,
+    firstProjectUseDithering,
+    firstProjectRemoveBg,
+  ])
 
   // Determine active project data to pass to exporters
   const activeData = useMemo(() => {
@@ -691,13 +744,13 @@ function BookDesignConfigStep({
     }
 
     // Dynamically adjust number of grid columns & rows based on cell size so that dragging the slider changes the density of cells in real-time
-    const isMarkGrid = coloringPattern === "square-mark" || coloringPattern === "hexagon-mark"
+    const isMarkGrid = coloringPattern === 'square-mark' || coloringPattern === 'hexagon-mark'
     const targetAspect = isMarkGrid ? 7.8 / 10.2 : 7.0 / 10.2
-    
+
     // The convert tool uses maxWidth=1800 for cell density calculations (imageToColorByNumber default)
     const baseWidth = 1800
     const baseHeight = Math.round(baseWidth / targetAspect)
-    
+
     const mockWidth = Math.max(5, Math.round(baseWidth / globalCellSize))
     const mockHeight = Math.max(5, Math.round(baseHeight / globalCellSize))
     return createMockProjectData(coloringPattern, previewColors, mockWidth, mockHeight, globalCellSize)
@@ -705,23 +758,29 @@ function BookDesignConfigStep({
 
   const badgeBgInputRef = useRef<HTMLInputElement>(null)
 
-  const handleBadgeBgChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const url = URL.createObjectURL(file)
-    setBadgeBgImage(file, url)
-    e.target.value = ''
-  }, [setBadgeBgImage])
+  const handleBadgeBgChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      const url = URL.createObjectURL(file)
+      setBadgeBgImage(file, url)
+      e.target.value = ''
+    },
+    [setBadgeBgImage]
+  )
 
   const removeBadgeBg = useCallback(() => {
     if (badgeBgImageUrl) URL.revokeObjectURL(badgeBgImageUrl)
     setBadgeBgImage(null, null)
   }, [badgeBgImageUrl, setBadgeBgImage])
 
-  const badgeStyles: { value: BadgeStyle; label: string; desc: string }[] = useMemo(() => [
-    { value: 'letter', label: 'A–Z', desc: 'Letters only' },
-    { value: 'mixed',  label: 'A1…', desc: 'Letter + number (Recommended)' },
-  ], [])
+  const badgeStyles: { value: BadgeStyle; label: string; desc: string }[] = useMemo(
+    () => [
+      { value: 'letter', label: 'A–Z', desc: 'Letters only' },
+      { value: 'mixed', label: 'A1…', desc: 'Letter + number (Recommended)' },
+    ],
+    []
+  )
 
   const handleThemeChange = (themeId: string) => {
     setColoringTheme(themeId)
@@ -743,7 +802,7 @@ function BookDesignConfigStep({
       {/* Settings toggle button — always visible */}
       <button
         type="button"
-        onClick={() => setShowSettings(p => !p)}
+        onClick={() => setShowSettings((p) => !p)}
         className={`absolute top-4 right-4 z-30 flex items-center gap-2 rounded-xl border px-5 py-2.5 text-xs font-bold transition-all duration-200 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-md ${
           showSettings
             ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)] ring-1 ring-[var(--accent)]/30'
@@ -751,8 +810,8 @@ function BookDesignConfigStep({
         }`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
         {showSettings ? 'Hide Settings' : 'Settings'}
       </button>
@@ -773,7 +832,8 @@ function BookDesignConfigStep({
           <div
             style={{
               position: 'absolute',
-              left: 0, top: 0,
+              left: 0,
+              top: 0,
               transform: `translate(${viewState.x}px, ${viewState.y}px) scale(${viewState.zoom})`,
               transformOrigin: '0 0',
               width: '100%',
@@ -830,11 +890,20 @@ function BookDesignConfigStep({
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--accent)]/20 text-[var(--accent)]"
             >
               {/* Hand icon */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 11V6a2 2 0 0 0-4 0v5"/>
-                <path d="M14 10V4a2 2 0 0 0-4 0v6"/>
-                <path d="M10 10.5V6a2 2 0 0 0-4 0v8"/>
-                <path d="M6 14a2 2 0 0 0-2 2c0 2.8 1.5 5 4 6h4a5 5 0 0 0 5-5v-3a2 2 0 0 0-4 0v0"/>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 11V6a2 2 0 0 0-4 0v5" />
+                <path d="M14 10V4a2 2 0 0 0-4 0v6" />
+                <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+                <path d="M6 14a2 2 0 0 0-2 2c0 2.8 1.5 5 4 6h4a5 5 0 0 0 5-5v-3a2 2 0 0 0-4 0v0" />
               </svg>
             </div>
 
@@ -849,7 +918,7 @@ function BookDesignConfigStep({
               className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/8 transition-all active:scale-95"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="5" y1="12" x2="19" y2="12"/>
+                <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
             </button>
 
@@ -871,8 +940,8 @@ function BookDesignConfigStep({
               className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/8 transition-all active:scale-95"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
             </button>
           </div>
@@ -888,15 +957,27 @@ function BookDesignConfigStep({
           {/* Conversion loading overlay - blocks all settings interaction */}
           {isConvertingPreview && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 backdrop-blur-sm pointer-events-auto">
-              <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2">
-                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              <svg
+                className="animate-spin"
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="2.2"
+              >
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               </svg>
               <span className="text-xs font-bold text-white/80">Converting preview…</span>
-              <span className="text-[10px] text-white/40 text-center max-w-[180px]">Please wait while the grid is being regenerated</span>
+              <span className="text-[10px] text-white/40 text-center max-w-[180px]">
+                Please wait while the grid is being regenerated
+              </span>
             </div>
           )}
 
-          <div className={`w-[340px] h-full custom-scrollbar p-5 flex flex-col gap-6 pt-16 relative ${isConvertingPreview ? 'overflow-hidden pointer-events-none select-none' : 'overflow-y-auto'}`}>
+          <div
+            className={`w-[340px] h-full custom-scrollbar p-5 flex flex-col gap-6 pt-16 relative ${isConvertingPreview ? 'overflow-hidden pointer-events-none select-none' : 'overflow-y-auto'}`}
+          >
             {/* Settings Header with Reset Button */}
             <div className="flex items-center justify-between pb-2 border-b border-white/8">
               <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">Book Settings</span>
@@ -912,11 +993,13 @@ function BookDesignConfigStep({
                 Reset to Defaults
               </button>
             </div>
-            
+
             {/* Palette Configuration Card */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 flex flex-col gap-5">
-              <h3 className="text-xs font-black uppercase tracking-widest text-[var(--accent)]">1. Palette Page Design</h3>
-              
+              <h3 className="text-xs font-black uppercase tracking-widest text-[var(--accent)]">
+                1. Palette Page Design
+              </h3>
+
               {/* Badge Label Style */}
               <div className="flex flex-col gap-2.5">
                 <label className="text-xs font-bold text-white/60">Badge Label Style</label>
@@ -927,9 +1010,10 @@ function BookDesignConfigStep({
                       type="button"
                       onClick={() => setBadgeStyle(s.value)}
                       className={`relative flex flex-col items-center gap-1 rounded-xl border py-3 px-2 transition-all duration-200
-                        ${badgeStyle === s.value
-                          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                          : 'border-white/8 bg-white/[0.01] text-white/50 hover:border-white/20 hover:text-white/80'
+                        ${
+                          badgeStyle === s.value
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                            : 'border-white/8 bg-white/[0.01] text-white/50 hover:border-white/20 hover:text-white/80'
                         }`}
                     >
                       {s.value === 'mixed' && (
@@ -938,7 +1022,9 @@ function BookDesignConfigStep({
                         </span>
                       )}
                       <span className="text-lg font-black tracking-tight">{s.label}</span>
-                      <span className="text-[9px] font-medium opacity-70">{s.value === 'letter' ? 'Letters only' : 'Letter + number'}</span>
+                      <span className="text-[9px] font-medium opacity-70">
+                        {s.value === 'letter' ? 'Letters only' : 'Letter + number'}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -989,9 +1075,9 @@ function BookDesignConfigStep({
                       hover:border-[var(--accent)]/40 hover:bg-white/[0.02] active:scale-[0.99] transition-all duration-200 text-white/45 hover:text-white/70"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
                     </svg>
                     <span className="text-[11px] font-semibold">Upload Badge Background</span>
                   </button>
@@ -1008,7 +1094,9 @@ function BookDesignConfigStep({
 
             {/* Coloring Configuration Card */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 flex flex-col gap-5">
-              <h3 className="text-xs font-black uppercase tracking-widest text-[var(--accent)]">2. Coloring Page Design</h3>
+              <h3 className="text-xs font-black uppercase tracking-widest text-[var(--accent)]">
+                2. Coloring Page Design
+              </h3>
 
               {/* Theme */}
               <div className="flex flex-col gap-2.5">
@@ -1022,29 +1110,39 @@ function BookDesignConfigStep({
                         type="button"
                         onClick={() => handleThemeChange(t.id)}
                         className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition-all duration-200
-                          ${isSelected
-                            ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]/40 bg-white/[0.02]'
-                            : 'border-white/8 hover:border-white/20'
+                          ${
+                            isSelected
+                              ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]/40 bg-white/[0.02]'
+                              : 'border-white/8 hover:border-white/20'
                           }`}
                       >
                         <span
                           className="shrink-0 w-5 h-5 rounded-md border border-white/15 shadow-inner"
                           style={{ backgroundColor: t.backgroundColor }}
                         />
-                        <span className={`text-[11px] font-semibold transition-colors ${isSelected ? 'text-white' : 'text-white/50'}`}>
+                        <span
+                          className={`text-[11px] font-semibold transition-colors ${isSelected ? 'text-white' : 'text-white/50'}`}
+                        >
                           {t.name}
                         </span>
                         {isSelected && (
                           <span className="ml-auto text-[var(--accent)]">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
-                              <polyline points="20 6 9 17 4 12"/>
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
                             </svg>
                           </span>
                         )}
                       </button>
                     )
                   })}
-                  
+
                   {/* Custom Background Color Picker */}
                   <div className="col-span-2 mt-1">
                     <label className="flex items-center gap-3 rounded-xl border border-white/8 px-2.5 py-2 hover:border-white/20 cursor-pointer bg-white/[0.01] transition-all duration-200">
@@ -1061,9 +1159,7 @@ function BookDesignConfigStep({
                         </span>
                       </div>
                       {coloringTheme.startsWith('#') && (
-                        <span className="ml-auto text-[var(--accent)] text-xs font-bold">
-                          Selected
-                        </span>
+                        <span className="ml-auto text-[var(--accent)] text-xs font-bold">Selected</span>
                       )}
                     </label>
                   </div>
@@ -1108,9 +1204,10 @@ function BookDesignConfigStep({
                         type="button"
                         onClick={() => handlePatternChange(g.value)}
                         className={`flex items-center justify-center rounded-xl border px-2.5 py-2 transition-all duration-200
-                          ${coloringPattern === g.value
-                            ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                            : 'border-white/8 bg-white/[0.01] text-white/50 hover:border-white/20 hover:text-white/80'
+                          ${
+                            coloringPattern === g.value
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                              : 'border-white/8 bg-white/[0.01] text-white/50 hover:border-white/20 hover:text-white/80'
                           }`}
                       >
                         <span className="text-[11px] font-semibold">{g.label}</span>
@@ -1125,19 +1222,25 @@ function BookDesignConfigStep({
                         type="button"
                         onClick={() => handlePatternChange(g.value)}
                         className={`flex items-center justify-between rounded-xl border px-3 py-2.5 transition-all duration-200
-                          ${coloringPattern === g.value
-                            ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                            : 'border-white/8 bg-white/[0.01] text-white/50 hover:border-white/20 hover:text-white/80'
+                          ${
+                            coloringPattern === g.value
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                              : 'border-white/8 bg-white/[0.01] text-white/50 hover:border-white/20 hover:text-white/80'
                           }`}
                       >
                         <span className="text-[11px] font-bold">{g.label}</span>
-                        <span className={`text-[9px] font-mono ${
-                          coloringPattern === g.value ? 'text-[var(--accent)]/70' : 'text-white/30'
-                        }`}>{g.desc}</span>
+                        <span
+                          className={`text-[9px] font-mono ${
+                            coloringPattern === g.value ? 'text-[var(--accent)]/70' : 'text-white/30'
+                          }`}
+                        >
+                          {g.desc}
+                        </span>
                       </button>
                     ))}
                     <p className="text-[9px] text-white/30 leading-tight">
-                      Mark grids use tone-based codes (1–5) instead of colors. Requires an imported image for accurate results.
+                      Mark grids use tone-based codes (1–5) instead of colors. Requires an imported image for accurate
+                      results.
                     </p>
                   </div>
                 )}
@@ -1145,7 +1248,11 @@ function BookDesignConfigStep({
 
               {/* Show Numbers on Colored Page */}
               <div className="flex flex-col gap-3 border-t border-white/6 pt-4">
-                <Toggle checked={showColoredNumbers} onChange={toggleColoredNumbers} label="Show Numbers on Colored Page" />
+                <Toggle
+                  checked={showColoredNumbers}
+                  onChange={toggleColoredNumbers}
+                  label="Show Numbers on Colored Page"
+                />
               </div>
 
               {/* Cell Size Slider */}
@@ -1159,7 +1266,16 @@ function BookDesignConfigStep({
                       className="text-white/40 hover:text-white transition-colors focus:outline-none p-0.5 rounded-full hover:bg-white/5"
                       title="Show cell size details"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <circle cx="12" cy="12" r="10" />
                         <line x1="12" y1="16" x2="12" y2="12" />
                         <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -1168,8 +1284,16 @@ function BookDesignConfigStep({
                   </div>
                   <div className="flex items-center gap-2">
                     {isConvertingPreview && (
-                      <svg className="animate-spin shrink-0" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3">
-                        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                      <svg
+                        className="animate-spin shrink-0"
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--accent)"
+                        strokeWidth="3"
+                      >
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                       </svg>
                     )}
                     <span className="text-xs font-mono font-bold text-[var(--accent)]">{globalCellSize}px</span>
@@ -1192,26 +1316,26 @@ function BookDesignConfigStep({
                   }`}
                 />
                 <span className="text-[9px] text-white/40 leading-tight">
-                  {isConvertingPreview ? 'Re-converting grid, please wait…' : 'Adjusting size will require re-conversion of standard grid items.'}
+                  {isConvertingPreview
+                    ? 'Re-converting grid, please wait…'
+                    : 'Adjusting size will require re-conversion of standard grid items.'}
                 </span>
               </div>
             </div>
 
             {/* Typography Configuration Card */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 flex flex-col gap-5">
-              <h3 className="text-xs font-black uppercase tracking-widest text-[var(--accent)]">3. Typography Settings</h3>
+              <h3 className="text-xs font-black uppercase tracking-widest text-[var(--accent)]">
+                3. Typography Settings
+              </h3>
               <div className="flex flex-col gap-3">
                 <label className="text-xs font-bold text-white/60">Custom Book Font</label>
-                
+
                 {customFontName ? (
                   <div className="flex flex-col gap-2 bg-white/5 p-3 rounded-xl border border-white/8">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-white truncate max-w-[150px]">
-                        {customFontName}
-                      </span>
-                      <span className="text-[9px] uppercase font-bold text-[var(--accent)] tracking-wider">
-                        Loaded
-                      </span>
+                      <span className="text-[11px] font-bold text-white truncate max-w-[150px]">{customFontName}</span>
+                      <span className="text-[9px] uppercase font-bold text-[var(--accent)] tracking-wider">Loaded</span>
                     </div>
                     <button
                       type="button"
@@ -1229,14 +1353,21 @@ function BookDesignConfigStep({
                       className="w-full border border-dashed border-white/12 rounded-xl py-4 flex flex-col items-center justify-center gap-1.5
                         hover:border-[var(--accent)]/40 hover:bg-white/[0.02] active:scale-[0.99] transition-all duration-200 text-white/45 hover:text-white/70"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                        <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                      >
+                        <path d="M4 7V4h16v3M9 20h6M12 4v16" />
                       </svg>
                       <span className="text-[11px] font-semibold">Upload Custom Font (.ttf, .otf, .woff)</span>
                     </button>
                   </div>
                 )}
-                
+
                 <input
                   ref={fontInputRef}
                   type="file"
@@ -1265,8 +1396,8 @@ function BookDesignConfigStep({
             <div
               className="absolute inset-0 opacity-5 pointer-events-none"
               style={{
-                backgroundImage: "radial-gradient(var(--text-primary) 1px, transparent 1px)",
-                backgroundSize: "16px 16px",
+                backgroundImage: 'radial-gradient(var(--text-primary) 1px, transparent 1px)',
+                backgroundSize: '16px 16px',
               }}
             />
 
@@ -1280,7 +1411,16 @@ function BookDesignConfigStep({
                   onClick={() => setIsInfoModalOpen(false)}
                   className="text-white/40 hover:text-white transition-colors focus:outline-none p-1 rounded-full hover:bg-white/5"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -1301,29 +1441,29 @@ function BookDesignConfigStep({
                   <tbody className="divide-y divide-white/5 text-white/80">
                     {[
                       {
-                        difficulty: "Easy",
-                        range: "28–36 px",
+                        difficulty: 'Easy',
+                        range: '28–36 px',
                         recommend: 29,
-                        desc: "Large cells, fewer details, quick and relaxing to complete.",
-                        bestFor: "Kids, beginners, casual users",
-                        colorClass: "text-emerald-400",
+                        desc: 'Large cells, fewer details, quick and relaxing to complete.',
+                        bestFor: 'Kids, beginners, casual users',
+                        colorClass: 'text-emerald-400',
                         isRecommended: true,
                       },
                       {
-                        difficulty: "Medium",
-                        range: "20–28 px",
+                        difficulty: 'Medium',
+                        range: '20–28 px',
                         recommend: 24,
-                        desc: "Balanced detail and challenge. Most images look great at this level.",
-                        bestFor: "Most users",
-                        colorClass: "text-sky-400",
+                        desc: 'Balanced detail and challenge. Most images look great at this level.',
+                        bestFor: 'Most users',
+                        colorClass: 'text-sky-400',
                       },
                       {
-                        difficulty: "Hard",
-                        range: "12–20 px",
+                        difficulty: 'Hard',
+                        range: '12–20 px',
                         recommend: 16,
-                        desc: "Smaller cells with more detail and complexity.",
-                        bestFor: "Experienced users",
-                        colorClass: "text-amber-400",
+                        desc: 'Smaller cells with more detail and complexity.',
+                        bestFor: 'Experienced users',
+                        colorClass: 'text-amber-400',
                       },
                     ].map((row) => (
                       <tr
@@ -1333,9 +1473,7 @@ function BookDesignConfigStep({
                           setIsInfoModalOpen(false)
                         }}
                         className={`transition-colors cursor-pointer ${
-                          row.isRecommended
-                            ? 'bg-emerald-500/10 hover:bg-emerald-500/20'
-                            : 'hover:bg-white/5'
+                          row.isRecommended ? 'bg-emerald-500/10 hover:bg-emerald-500/20' : 'hover:bg-white/5'
                         }`}
                       >
                         <td className="p-3">
