@@ -260,6 +260,8 @@ export function usePdfExport({
     }
 
     await new Promise((resolve) => setTimeout(resolve, 600))
+    const useColorByNumberStore = (await import('@/store/useColorByNumberStore')).useColorByNumberStore
+    useColorByNumberStore.getState().setWorkspaceActiveTab(null)
     setCurrentStep(2)
     setIsPreparingStep2(false)
   }, [access, directImages, globalShowNumbers, globalTheme, projects, requestPaidAccess, setCurrentStep, setPaletteImages, setSolutionCollagePages, solutionNameList])

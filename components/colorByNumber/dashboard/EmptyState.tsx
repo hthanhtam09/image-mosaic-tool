@@ -14,7 +14,7 @@ import React, { type ReactNode, useEffect, useState } from 'react'
 
 type BeforeAfterMarkGridType = Extract<ColorByNumberGridType, 'square-mark' | 'hexagon-mark'>
 
-export type TabType = 'image-import' | 'object-focus' | 'batch-upload' | 'before-after' | 'mark-practice'
+export type TabType = 'image-import' | 'object-focus' | 'before-after' | 'mark-practice'
 
 export const tabs: Array<{ id: TabType; name: string; icon: ReactNode; color: string }> = [
   {
@@ -63,26 +63,6 @@ export const tabs: Array<{ id: TabType; name: string; icon: ReactNode; color: st
     color: '#a855f7',
   },
   {
-    id: 'batch-upload',
-    name: 'Batch Upload',
-    icon: (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z" />
-        <path d="M12 13v4M10 15l2-2 2 2" />
-      </svg>
-    ),
-    color: '#3b82f6',
-  },
-  {
     id: 'before-after',
     name: 'Before / After',
     icon: (
@@ -129,7 +109,6 @@ export const tabs: Array<{ id: TabType; name: string; icon: ReactNode; color: st
 const tabFeatureMap: Record<TabType, keyof ToolFeatureFlags> = {
   'image-import': 'standardImport',
   'object-focus': 'objectFocus',
-  'batch-upload': 'folderUpload',
   'before-after': 'beforeAfter',
   'mark-practice': 'markPractice',
 }
@@ -152,7 +131,6 @@ export function StandaloneImportSidebar({
   const lockedReason = (tab: TabType): string | null => {
     if (tab === 'image-import') return null
     if (tab === 'object-focus' && !access.canUsePremiumPresets) return 'Pro'
-    if (tab === 'batch-upload' && !access.canUseFolderUpload) return 'Pro'
     if (tab === 'before-after' && !access.canUseBeforeAfter) return 'Pro'
     if (tab === 'mark-practice' && !access.canUseMarkPractice) return 'Pro'
     return null
@@ -301,7 +279,6 @@ export function ImportSidebar({
 const tabFeature: Record<TabType, keyof ToolFeatureFlags> = {
   'image-import': 'standardImport',
   'object-focus': 'objectFocus',
-  'batch-upload': 'folderUpload',
   'before-after': 'beforeAfter',
   'mark-practice': 'markPractice',
 }
@@ -368,7 +345,11 @@ export default function EmptyState({
   const [activeTab, setActiveTab] = useState<TabType>(controlledTab ?? 'image-import')
 
   useEffect(() => {
-    if (controlledTab) setActiveTab(controlledTab)
+    if (controlledTab) {
+      setActiveTab(controlledTab)
+    } else {
+      setActiveTab('image-import')
+    }
   }, [controlledTab])
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [markPracticeGridType, setMarkPracticeGridType] = useState<MarkPracticeGridType>('hexagon-mark')
@@ -379,7 +360,6 @@ export default function EmptyState({
   const lockedReason = (tab: TabType): string | null => {
     if (tab === 'image-import') return null
     if (tab === 'object-focus' && !access.canUsePremiumPresets) return 'Pro'
-    if (tab === 'batch-upload' && !access.canUseFolderUpload) return 'Pro'
     if (tab === 'before-after' && !access.canUseBeforeAfter) return 'Pro'
     if (tab === 'mark-practice' && !access.canUseMarkPractice) return 'Pro'
     return null
@@ -463,7 +443,8 @@ export default function EmptyState({
       )
     }
 
-    if (importProgress && (effectiveTab === 'image-import' || effectiveTab === 'object-focus')) {
+    if (importProgress || isProcessingFolder) {
+      const isFolder = isProcessingFolder
       return (
         <div className="mx-auto flex w-full max-w-md flex-col items-center gap-5 p-8 rounded-2xl border border-white/10 bg-[var(--bg-secondary)] shadow-lg animate-in fade-in slide-in-from-bottom-2">
           <div className="relative flex items-center justify-center w-14 h-14 mb-2">
@@ -473,15 +454,23 @@ export default function EmptyState({
             </svg>
           </div>
           <div className="text-center">
-            <p className="text-sm font-semibold text-white">Importing Images...</p>
-            <p className="mt-1 text-xs text-white/50">Reading file {importProgress.current} of {importProgress.total}</p>
+            <p className="text-sm font-semibold text-white">
+              {isFolder ? 'Processing Folder...' : 'Importing Images...'}
+            </p>
+            {importProgress ? (
+              <p className="mt-1 text-xs text-white/50">Reading file {importProgress.current} of {importProgress.total}</p>
+            ) : (
+              <p className="mt-1 text-xs text-white/50">Please wait while files are being processed...</p>
+            )}
           </div>
-          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-[var(--accent)] transition-all duration-300 rounded-full"
-              style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
-            />
-          </div>
+          {importProgress && (
+            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-[var(--accent)] transition-all duration-300 rounded-full"
+                style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+          )}
         </div>
       )
     }
@@ -493,31 +482,81 @@ export default function EmptyState({
     switch (effectiveTab) {
       case 'image-import':
         return (
-          <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
-            {/* Big drop zone */}
+          <div className="mx-auto flex w-full max-w-xl flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
+            {/* Individual image import */}
             <button
               onClick={handleImportClick}
-              className="group relative w-full rounded-2xl border-2 border-dashed border-[var(--border-primary)] bg-[var(--bg-secondary)] p-14 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--accent)]/[0.03]"
+              className="group relative w-full rounded-2xl border-2 border-dashed border-[var(--border-primary)] bg-[var(--bg-secondary)] px-8 py-10 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--accent)]/[0.03]"
             >
-              {/* Upload arrow */}
-              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-primary)] text-[var(--text-muted)] ring-1 ring-[var(--border-primary)] transition-all group-hover:text-[var(--accent)] group-hover:ring-[var(--accent)]/40">
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--bg-primary)] text-[var(--text-muted)] ring-1 ring-[var(--border-primary)] transition-all group-hover:text-[var(--accent)] group-hover:ring-[var(--accent)]/40">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </div>
-              <p className="text-base font-semibold text-[var(--text-primary)]">Drop images here</p>
-              <p className="mt-1.5 text-sm text-[var(--text-secondary)]">or click to browse your files</p>
-              <p className="mt-3 text-xs text-[var(--text-muted)]">PNG · JPG · Multiple files supported</p>
+              <p className="text-base font-semibold text-[var(--text-primary)]">Select Images</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">PNG · JPG · Multiple files supported</p>
             </button>
-            {/* Primary CTA */}
-            <button
-              onClick={handleImportClick}
-              className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-semibold text-[var(--bg-primary)] transition-colors hover:bg-[var(--accent-hover)]"
-            >
-              Select Images
-            </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-[var(--border-primary)]" />
+              <span className="text-xs font-medium text-[var(--text-muted)]">or import a folder structure</span>
+              <div className="h-px flex-1 bg-[var(--border-primary)]" />
+            </div>
+
+            {/* Folder (batch) import */}
+            <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Expected folder structure</p>
+              <div className="space-y-1 font-mono text-sm mb-4">
+                <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span className="text-[var(--text-primary)] font-semibold">my-project/</span>
+                  <span className="text-[10px] text-[var(--text-muted)]">← select this</span>
+                </div>
+                {[
+                  { label: 'color/', ready: uploadedFolders.color, required: true, dot: 'bg-green-500' },
+                  { label: 'uncolor/', ready: uploadedFolders.uncolor, required: true, dot: 'bg-blue-500' },
+                  { label: 'palette/', ready: uploadedFolders.palette, required: false, dot: 'bg-pink-500' },
+                  { label: 'solutions_collage/', ready: uploadedFolders.solutionsCollage, required: false, dot: 'bg-cyan-500' },
+                ].map(({ label, ready, required, dot }) => (
+                  <div key={label} className="flex items-center gap-2 pl-5">
+                    <span className="text-[var(--text-muted)]">└─</span>
+                    <span className={`${ready ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>{label}</span>
+                    {required && !ready && <span className="text-[10px] text-[var(--text-muted)]">required</span>}
+                    {!required && <span className="text-[10px] text-[var(--text-muted)]">optional</span>}
+                    {ready && <span className={`ml-auto h-2 w-2 rounded-full ${dot}`} />}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => dirInputRef.current?.click()}
+                  disabled={isProcessingFolder}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2.5 text-sm font-semibold text-blue-300 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
+                >
+                  {isProcessingFolder ? (
+                    <><div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />Scanning…</>
+                  ) : (
+                    <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Select Root Folder</>
+                  )}
+                </button>
+                {uploadedFolders.color && uploadedFolders.uncolor && (
+                  <button
+                    onClick={handleNextToSetup}
+                    disabled={isPreparingStep2 || isProcessingFolder}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50 animate-in fade-in slide-in-from-right-2"
+                  >
+                    {isPreparingStep2 ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    ) : (
+                      <>Continue <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg></>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )
       case 'object-focus':
@@ -555,63 +594,7 @@ export default function EmptyState({
             </button>
           </div>
         )
-      case 'batch-upload':
-        return (
-          <div className="mx-auto flex w-full max-w-lg flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">
-            {/* Folder structure diagram */}
-            <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-5">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Expected folder structure</p>
-              <div className="space-y-1 font-mono text-sm">
-                <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                  <span className="text-[var(--text-primary)] font-semibold">my-project/</span>
-                  <span className="text-[10px] text-[var(--text-muted)]">← select this</span>
-                </div>
-                {[
-                  { label: 'color/', ready: uploadedFolders.color, required: true, dot: 'bg-green-500' },
-                  { label: 'uncolor/', ready: uploadedFolders.uncolor, required: true, dot: 'bg-blue-500' },
-                  { label: 'palette/', ready: uploadedFolders.palette, required: false, dot: 'bg-pink-500' },
-                  { label: 'solutions_collage/', ready: uploadedFolders.solutionsCollage, required: false, dot: 'bg-cyan-500' },
-                ].map(({ label, ready, required, dot }) => (
-                  <div key={label} className="flex items-center gap-2 pl-5">
-                    <span className="text-[var(--text-muted)]">└─</span>
-                    <span className={`${ready ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>{label}</span>
-                    {required && !ready && <span className="text-[10px] text-[var(--text-muted)]">required</span>}
-                    {!required && <span className="text-[10px] text-[var(--text-muted)]">optional</span>}
-                    {ready && <span className={`ml-auto h-2 w-2 rounded-full ${dot}`} />}
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Actions */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => dirInputRef.current?.click()}
-                disabled={isProcessingFolder}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 py-3 text-sm font-semibold text-blue-300 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
-              >
-                {isProcessingFolder ? (
-                  <><div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />Scanning…</>
-                ) : (
-                  <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Select Root Folder</>
-                )}
-              </button>
-              {uploadedFolders.color && uploadedFolders.uncolor && (
-                <button
-                  onClick={handleNextToSetup}
-                  disabled={isPreparingStep2 || isProcessingFolder}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50 animate-in fade-in slide-in-from-right-2"
-                >
-                  {isPreparingStep2 ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  ) : (
-                    <>Continue <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg></>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-        )
+
       case 'before-after':
         return (
           <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-4 outline-none border-none">

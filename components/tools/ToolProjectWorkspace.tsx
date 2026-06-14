@@ -19,7 +19,7 @@ import {
 } from '@/lib/tools/localProjects'
 import type { ConversionJob } from '@/store/useColorByNumberStore'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmModal from '../ConfirmModal'
 import PageLoader from '../PageLoader'
@@ -77,20 +77,9 @@ const conversionPercent = (job: Pick<ConversionJob, 'total' | 'completed' | 'fai
   return Math.min(100, Math.round(((job.completed + job.failed) / job.total) * 100))
 }
 
-// Update URL without going through Next.js router (no re-render, instant)
-function navReplace(url: string, state: unknown = null) {
-  if (typeof window !== 'undefined') {
-    window.history.replaceState(state, '', url)
-  }
-}
+// Router functions are now defined inside ToolProjectWorkspace using next/navigation useRouter
 
-function navPush(url: string, state: unknown = null) {
-  if (typeof window !== 'undefined') {
-    window.history.pushState(state, '', url)
-  }
-}
-
-const VALID_TABS = ['image-import', 'object-focus', 'batch-upload', 'before-after', 'mark-practice'] as const
+const VALID_TABS = ['image-import', 'object-focus', 'before-after', 'mark-practice'] as const
 
 function getProjectAndTabFromUrl(): { projectSlug: string | null; tab: TabType | null } {
   if (typeof window === 'undefined') return { projectSlug: null, tab: null }
@@ -107,7 +96,18 @@ function getProjectAndTabFromUrl(): { projectSlug: string | null; tab: TabType |
 }
 
 export default function ToolProjectWorkspace() {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const navReplace = useCallback((url: string, _state?: unknown) => {
+    router.replace(url)
+  }, [router])
+
+  const navPush = useCallback((url: string, _state?: unknown) => {
+    router.push(url)
+  }, [router])
+
   const [initialUrlInfo] = useState(() => getProjectAndTabFromUrl())
   const [initialRouteProjectSlug] = useState(() => initialUrlInfo.projectSlug)
   const access = useToolAccess()
@@ -303,7 +303,7 @@ export default function ToolProjectWorkspace() {
       if (targetTab) {
         params.delete('step')
       } else if (!params.has('step')) {
-        params.set('step', 'design-config')
+        params.set('step', 'convert')
       }
       const search = params.toString() ? `?${params.toString()}` : ''
       const nextUrl = targetTab 
@@ -338,20 +338,27 @@ export default function ToolProjectWorkspace() {
           project.settings
         )
         
-        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
-        const stepParam = params.get('step')
-        let nextStep: 1 | 'design-config' | 2 | 3 = 'design-config'
-        if (stepParam === 'design-config') nextStep = 'design-config'
-        else if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') nextStep = 2
-        else if (stepParam === 'pdf-progress' || stepParam === '3') nextStep = 3
-        else if (stepParam === 'convert' || stepParam === '1') nextStep = 1
-        useColorByNumberStore.getState().setWorkspaceStep(nextStep)
-        
         const projectFiles = project.files ?? []
         let finalTab = targetTab
         if (!finalTab && projectFiles.length === 0) {
           finalTab = 'image-import'
         }
+        
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+        const stepParam = params.get('step')
+        let nextStep: 1 | 'design-config' | 2 | 3 = 1
+        if (finalTab) {
+          nextStep = 1
+        } else if (stepParam === 'design-config') {
+          nextStep = 'design-config'
+        } else if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') {
+          nextStep = 2
+        } else if (stepParam === 'pdf-progress' || stepParam === '3') {
+          nextStep = 3
+        } else if (stepParam === 'convert' || stepParam === '1') {
+          nextStep = 1
+        }
+        useColorByNumberStore.getState().setWorkspaceStep(nextStep)
         setActiveTab(finalTab)
 
         // Rewrite URL to use slug (in case we opened by UUID)
@@ -359,7 +366,7 @@ export default function ToolProjectWorkspace() {
         if (finalTab) {
           params.delete('step')
         } else if (!params.has('step')) {
-          params.set('step', 'design-config')
+          params.set('step', 'convert')
         }
         const finalSearch = params.toString() ? `?${params.toString()}` : ''
         const finalUrl = finalTab 
@@ -401,75 +408,68 @@ export default function ToolProjectWorkspace() {
     }
   }, [setActiveTab, setShowProjectList])
 
+  // Synchronize state with URL pathname and search parameters reactively
   useEffect(() => {
     if (access.isLoading || !hasLoadedSummaries) return
 
-    const handlePopState = () => {
-      const { projectSlug, tab } = getProjectAndTabFromUrl()
-      const params = new URLSearchParams(window.location.search)
-      const stepParam = params.get('step')
-      let nextStep: 1 | 'design-config' | 2 | 3 = 'design-config'
-      if (stepParam === 'design-config') nextStep = 'design-config'
-      else if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') nextStep = 2
-      else if (stepParam === 'pdf-progress' || stepParam === '3') nextStep = 3
-      else if (stepParam === 'convert' || stepParam === '1') nextStep = 1
-      useColorByNumberStore.getState().setWorkspaceStep(nextStep)
-
-      if (!projectSlug) {
-        setShowProjectList(true)
-        setActiveTab(null)
-      } else {
-        const found = summaries.find((s) => toSlug(s.name) === projectSlug || s.id === projectSlug)
-        if (found) {
-          openProject(found.id, toSlug(found.name), tab, 'skip')
-        } else {
-          setShowProjectList(true)
-          setActiveTab(null)
-          navReplace(PROJECTS_ROUTE)
-        }
-      }
+    const { projectSlug, tab } = getProjectAndTabFromUrl()
+    const params = new URLSearchParams(searchParams ? searchParams.toString() : '')
+    const stepParam = params.get('step')
+    let nextStep: 1 | 'design-config' | 2 | 3 | null = null
+    if (stepParam === 'design-config') {
+      nextStep = 'design-config'
+    } else if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') {
+      nextStep = 2
+    } else if (stepParam === 'pdf-progress' || stepParam === '3') {
+      nextStep = 3
+    } else if (stepParam === 'convert' || stepParam === '1') {
+      nextStep = 1
     }
 
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [access.isLoading, hasLoadedSummaries, summaries, openProject, setActiveTab, setShowProjectList])
+    if (!projectSlug) {
+      setShowProjectList(true)
+      setActiveTab(null)
+    } else {
+      const found = summaries.find((s) => toSlug(s.name) === projectSlug || s.id === projectSlug)
+      if (found) {
+        if (openingId !== found.id && (!projectFolder || projectFolder.id !== found.id)) {
+          openProject(found.id, toSlug(found.name), tab, 'skip')
+        } else if (projectFolder && projectFolder.id === found.id) {
+          setActiveTab(tab)
+          if (!tab && nextStep !== null) {
+            useColorByNumberStore.getState().setWorkspaceStep(nextStep)
+          }
+          setShowProjectList(false)
+        }
+      } else {
+        setShowProjectList(true)
+        setActiveTab(null)
+      }
+    }
+  }, [pathname, searchParams, access.isLoading, hasLoadedSummaries, summaries, projectFolder, openingId, openProject, setActiveTab, setShowProjectList])
 
   useEffect(() => {
     setShowProjectList(!initialRouteProjectSlug)
     setActiveTab(initialUrlInfo.tab)
   }, [setShowProjectList, setActiveTab, initialRouteProjectSlug, initialUrlInfo.tab])
 
-  // Restore project from URL slug or redirect guest to their single project — runs once after access + summaries are ready
+  // Redirect guest or legacy UUID URLs once summaries are loaded
   const didRestoreRef = useRef(false)
   useEffect(() => {
     if (access.isLoading || !hasLoadedSummaries || didRestoreRef.current) return
     didRestoreRef.current = true
     const legacyId = searchParams.get(PROJECT_QUERY_KEY) ?? searchParams.get('p')
     if (legacyId) {
-      // Legacy UUID query param — find matching project by ID
       const found = summaries.find((s) => s.id === legacyId)
       if (found) navReplace(projectRoute(toSlug(found.name)))
       return
     }
     const slug = initialRouteProjectSlug
-    if (slug) {
-      // Find project by matching slug of its name or its ID, then open by UUID
-      let found = summaries.find((s) => toSlug(s.name) === slug || s.id === slug)
-      if (!found && access.isGuest && summaries.length > 0) {
-        found = summaries[0]
-      }
-      if (!found) {
-        // Slug not found — go back to list
-        setShowProjectList(true)
-        navReplace(PROJECTS_ROUTE)
-        return
-      }
-      const t = setTimeout(() => openProject(found.id, toSlug(found.name), initialUrlInfo.tab), 0)
-      return () => clearTimeout(t)
-    } else {
-      setShowProjectList(true)
+    if (!slug && access.isGuest && summaries.length > 0) {
+      const found = summaries[0]
+      navReplace(projectRoute(toSlug(found.name)))
     }
-  }, [access.isLoading, access.canUseRecentProjects, access.isGuest, hasLoadedSummaries, summaries, openProject, setShowProjectList, initialRouteProjectSlug, initialUrlInfo.tab, searchParams])
+  }, [access.isLoading, access.isGuest, hasLoadedSummaries, summaries, initialRouteProjectSlug, searchParams, navReplace])
 
   const createProject = async () => {
     if (displayedSummaries.length >= access.maxSavedProjects) {
@@ -915,7 +915,6 @@ export default function ToolProjectWorkspace() {
         access={access}
         activeTab={activeTab ?? undefined}
         onTabClick={(tab) => {
-          useColorByNumberStore.getState().setWorkspaceStep(1)
           if (tab === 'image-import' && projects.length > 0) {
             setActiveTab(null)
             if (projectFolder) {

@@ -177,8 +177,21 @@ self.onmessage = (e: MessageEvent) => {
     initialPalette.push({ r: 255, g: 255, b: 255 });
   }
 
+  // Preliminary pass to get palette frequency weights
+  const paletteWeights = new Float64Array(initialPalette.length);
+  const preliminaryBlocks = createMosaicBlocks(
+    enhancedImageData,
+    initialPalette,
+    cellSize,
+    false,
+    true,
+  );
+  for (const block of preliminaryBlocks) {
+    paletteWeights[block.paletteIndex]++;
+  }
+
   // 1b. Agglomerative merge to target color count
-  const dynamicPalette = agglomerativeMerge(initialPalette, maxColors);
+  const dynamicPalette = agglomerativeMerge(initialPalette, maxColors, paletteWeights);
 
   // 2. Create mosaic blocks
   let rawBlocks = createMosaicBlocks(
@@ -190,7 +203,7 @@ self.onmessage = (e: MessageEvent) => {
   );
 
   // 2b. Filter minor colors
-  rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
+  rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 3);
 
   // 2c. Remove background if requested
   if (removeWhiteBackground) {

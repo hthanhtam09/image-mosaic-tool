@@ -215,7 +215,7 @@ export const generateMarkPracticeImages = (
 ): MarkPracticeImage[] => {
   const codes = gridType === "hexagon-mark" ? HEXAGON_MARK_CODES : SQUARE_MARK_CODES;
   const cellSize = 120;
-  const gap = gridType === "hexagon-mark" ? 0 : 14;
+  const gap = 0;
   const marginX = 70;
   const marginY = 42;
   const width =

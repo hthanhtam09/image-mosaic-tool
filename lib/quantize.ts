@@ -8,7 +8,7 @@ export const quantizeImage = (
   const pointContainer = utils.PointContainer.fromImageData(imageData);
   const palette = buildPaletteSync([pointContainer], {
     colors: colorCount,
-    colorDistanceFormula: "manhattan",
+    colorDistanceFormula: "euclidean",
     paletteQuantization: "wuquant",
   });
 

@@ -92,14 +92,123 @@ export default function ProjectPreviewModal({
 
   const [previews, setPreviews] = useState<PreviewSet | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  // zoom: fraction of natural size, null = fit
-  const [zoom, setZoomLocal] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // ── Unified canvas state (zoom and drag) ──
+  const [viewState, setViewState] = useState({ zoom: 0.75, x: 0, y: 0 });
+  const vsRef = useRef({ zoom: 0.75, x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [tempHand, setTempHand] = useState(false);
+  const dragRef = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+
+  const commitView = useCallback((v: { zoom: number; x: number; y: number }) => {
+    vsRef.current = v;
+    setViewState(v);
+  }, []);
+
+  const zoomFit = useCallback(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const contentW = 1084; // 3 * 340 + 2 * 32
+    const contentH = 440;
+    const fitZoom = Math.min((width - 80) / contentW, (height - 120) / contentH, 0.85);
+    const x = (width - contentW * fitZoom) / 2;
+    const y = (height - contentH * fitZoom) / 2;
+    commitView({ zoom: fitZoom, x, y });
+  }, [commitView]);
+
+  // Initial fit & clear previews on project switch
   useEffect(() => {
-    setZoomLocal(null);
     setPreviews(null);
-  }, [projectId]);
+    const timer = setTimeout(zoomFit, 50);
+    return () => clearTimeout(timer);
+  }, [projectId, zoomFit]);
+
+  // Handle container resize
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      zoomFit();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [zoomFit]);
+
+  // Native wheel → zoom toward cursor
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const { zoom: z, x, y } = vsRef.current;
+      const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+      const newZoom = Math.min(Math.max(z * factor, 0.15), 5);
+      commitView({
+        zoom: newZoom,
+        x: cx - (cx - x) * (newZoom / z),
+        y: cy - (cy - y) * (newZoom / z),
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [commitView]);
+
+  // Space drag tempHand listener
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        setTempHand(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") setTempHand(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
+  const zoomBy = useCallback((factor: number) => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const cx = width / 2;
+    const cy = height / 2;
+    const { zoom: z, x, y } = vsRef.current;
+    const newZoom = Math.min(Math.max(z * factor, 0.15), 5);
+    commitView({ zoom: newZoom, x: cx - (cx - x) * (newZoom / z), y: cy - (cy - y) * (newZoom / z) });
+  }, [commitView]);
+
+  // Pointer drag
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { mx: e.clientX, my: e.clientY, ox: vsRef.current.x, oy: vsRef.current.y };
+    setIsDragging(true);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.mx;
+    const dy = e.clientY - dragRef.current.my;
+    const v = { ...vsRef.current, x: dragRef.current.ox + dx, y: dragRef.current.oy + dy };
+    vsRef.current = v;
+    setViewState(v);
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    dragRef.current = null;
+    setIsDragging(false);
+  }, []);
 
   useEffect(() => {
     if (!activeProject?.data) return;
@@ -190,18 +299,7 @@ export default function ProjectPreviewModal({
     }
   };
 
-  const zoomSteps = [0.25, 0.5, 0.75, 1, 1.5, 2];
-  const currentZoomStep = zoom ?? 0;
-  const zoomIn = () => {
-    const next = zoomSteps.find((z) => z > (zoom ?? 0.75));
-    if (next) setZoomLocal(next);
-  };
-  const zoomOut = () => {
-    const prev = [...zoomSteps].reverse().find((z) => z < (zoom ?? 0.75));
-    if (prev) setZoomLocal(prev);
-    else setZoomLocal(null);
-  };
-  const resetZoom = () => setZoomLocal(null);
+  // Zoom handlers migrated to unified canvas methods: zoomBy, zoomFit
 
   const panels: { label: string; url: string | undefined; key: string }[] = [
     { key: "origin", label: "Original", url: originUrl || previews?.originUrl },
@@ -231,11 +329,11 @@ export default function ProjectPreviewModal({
 
           {/* Zoom */}
           <div className="flex items-center bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] overflow-hidden shrink-0">
-            <button onClick={zoomOut} disabled={zoom === null} className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 text-base">−</button>
-            <button onClick={resetZoom} className="px-2 text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors min-w-[52px] text-center">
-              {zoom ? `${Math.round(zoom * 100)}%` : "Fit"}
+            <button onClick={() => zoomBy(1 / 1.2)} className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors text-base">−</button>
+            <button onClick={zoomFit} className="px-2 text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors min-w-[52px] text-center">
+              {Math.round(viewState.zoom * 100)}%
             </button>
-            <button onClick={zoomIn} disabled={currentZoomStep >= 2} className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors disabled:opacity-30 text-base">+</button>
+            <button onClick={() => zoomBy(1.2)} className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors text-base">+</button>
           </div>
 
           {/* Close */}
@@ -244,49 +342,60 @@ export default function ProjectPreviewModal({
           </button>
         </div>
 
-        {/* ── 3-panel preview ── */}
-        <div className="flex-1 min-h-0 relative">
+        {/* ── 3-panel preview (Zoomable & Draggable Canvas) ── */}
+        <div
+          ref={previewContainerRef}
+          className="flex-1 min-h-0 overflow-hidden relative select-none bg-[var(--bg-primary)]"
+          style={{ cursor: isDragging ? "grabbing" : "grab" }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+        >
           {/* Prev / Next overlays */}
           {hasPrev && (
-            <button onClick={goPrev} className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg" title="Previous (←)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+            <button onClick={goPrev} className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg active:scale-95" title="Previous (←)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
             </button>
           )}
           {hasNext && (
-            <button onClick={goNext} className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg" title="Next (→)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+            <button onClick={goNext} className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 border border-white/10 text-white hover:bg-black/80 transition-all shadow-lg active:scale-95" title="Next (→)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
             </button>
           )}
 
-          <div className="flex h-full divide-x divide-[var(--border-subtle)]">
-            {panels.map(({ key, label, url }) => (
-              <div key={key} className="flex-1 flex flex-col min-w-0">
-                {/* Panel label */}
-                <div className="px-3 py-1.5 text-[11px] font-medium text-[var(--text-muted)] text-center border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] shrink-0 tracking-wide uppercase">
-                  {label}
+          {/* Scalable / translatable canvas content */}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              transform: `translate(${viewState.x}px, ${viewState.y}px) scale(${viewState.zoom})`,
+              transformOrigin: "0 0",
+              pointerEvents: isDragging ? "none" : "auto",
+            }}
+          >
+            <div className="px-10 py-10 flex items-start gap-8" style={{ minWidth: 1084 }}>
+              {panels.map(({ key, label, url }) => (
+                <div key={key} className="flex flex-col gap-3.5 shrink-0" style={{ width: 340 }}>
+                  <p className="text-[11px] font-bold text-white/45 text-center tracking-wider uppercase">{label}</p>
+                  <div className="w-[340px] aspect-[8.5/11] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/8 bg-white p-3 flex items-center justify-center">
+                    {isGenerating || !url ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[11px] text-neutral-400">Rendering…</span>
+                      </div>
+                    ) : (
+                      <img
+                        src={url}
+                        alt={label}
+                        className="w-full h-full object-contain rounded-sm"
+                      />
+                    )}
+                  </div>
                 </div>
-                {/* Panel image */}
-                <div className="flex-1 overflow-auto bg-neutral-100 flex items-center justify-center p-3">
-                  {isGenerating || !url ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
-                      <span className="text-[11px] text-neutral-400">Rendering…</span>
-                    </div>
-                  ) : (
-                    <img
-                      src={url}
-                      alt={label}
-                      className="object-contain shadow-lg bg-white rounded-sm border border-neutral-200"
-                      style={
-                        zoom
-                          ? { width: `${zoom * 100}%`, minWidth: `${zoom * 100}%` }
-                          : { maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto" }
-                      }
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 

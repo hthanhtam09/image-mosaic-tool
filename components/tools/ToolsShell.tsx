@@ -3,6 +3,7 @@
 import { MosaciLogoMark } from '@/components/MosaciLogo'
 import ToolUserHeader from '@/components/tools/ToolUserHeader'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { type CSSProperties, type ReactNode, useState } from 'react'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
 
@@ -18,7 +19,6 @@ function getTabLabel(tab: string | null): string {
   switch (tab) {
     case 'image-import': return 'Image Import'
     case 'object-focus': return 'Object Focus'
-    case 'batch-upload': return 'Batch Upload'
     case 'before-after': return 'Before / After'
     case 'mark-practice': return 'Mark Practice'
     default: return tab.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
@@ -97,12 +97,68 @@ function SidebarLink({ item, expanded, hovering }: { item: NavItem; expanded: bo
 }
 
 export default function ToolsShell({ children }: { children: ReactNode }) {
+  const router = useRouter()
   const [hovering, setHovering] = useState(false)
 
   const projectFolder = useColorByNumberStore((state) => state.projectFolder)
   const showProjectList = useColorByNumberStore((state) => state.workspaceShowProjectList)
   const activeTab = useColorByNumberStore((state) => state.workspaceActiveTab)
   const workspaceStep = useColorByNumberStore((state) => state.workspaceStep)
+  const projects = useColorByNumberStore((state) => state.projects)
+
+  let activeStepId = 'import'
+  // Folder import mode: when at PDF step with no converted projects (directImages flow)
+  // Standard mode: full pipeline import → design → convert → pdf
+  const isFolderMode = projects.length === 0 && (workspaceStep === 2 || workspaceStep === 3)
+
+  if (activeTab !== null) {
+    // Show the specific tab name as the current "step" label
+    activeStepId = activeTab
+  } else if (workspaceStep === 'design-config') {
+    activeStepId = 'design'
+  } else if (workspaceStep === 1) {
+    activeStepId = projects.length === 0 ? 'import' : 'convert'
+  } else if (workspaceStep === 2 || workspaceStep === 3) {
+    activeStepId = 'pdf'
+  }
+
+  // All possible steps for each mode
+  const allSteps = isFolderMode
+    ? [
+        { id: 'import', label: 'Import images' },
+        { id: 'pdf', label: 'PDF' },
+      ]
+    : [
+        { id: 'import', label: 'Import images' },
+        { id: 'design', label: 'Design config' },
+        { id: 'convert', label: 'Convert' },
+        { id: 'pdf', label: 'PDF' },
+      ]
+
+  // Navigation handlers for each step (to navigate back)
+  const handleStepClick = (stepId: string) => {
+    if (!projectFolder) return
+    const s = toSlug(projectFolder.name)
+    const store = useColorByNumberStore.getState()
+    if (stepId === 'import') {
+      store.setWorkspaceActiveTab('image-import')
+      store.setWorkspaceStep(1)
+      router.replace(`${projectRoute(s)}/image-import`)
+    } else if (stepId === 'design') {
+      store.setWorkspaceActiveTab(null)
+      store.setWorkspaceStep('design-config')
+      router.replace(`${projectRoute(s)}?step=design-config`)
+    } else if (stepId === 'convert') {
+      store.setWorkspaceActiveTab(null)
+      store.setWorkspaceStep(1)
+      router.replace(`${projectRoute(s)}?step=convert`)
+    }
+    // 'pdf' is current — no nav needed
+  }
+
+  // Only show steps up to and including the current step (progressive disclosure)
+  const currentStepIndex = allSteps.findIndex((s) => s.id === activeStepId)
+  const visibleSteps = currentStepIndex >= 0 ? allSteps.slice(0, currentStepIndex + 1) : allSteps.slice(0, 1)
 
   const handleStudioClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -111,9 +167,7 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
     } else {
       useColorByNumberStore.getState().setWorkspaceShowProjectList(true)
       useColorByNumberStore.getState().setWorkspaceActiveTab(null)
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', PROJECTS_ROUTE)
-      }
+      router.replace(PROJECTS_ROUTE)
     }
   }
 
@@ -121,12 +175,14 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
     e.preventDefault()
     if (projectFolder) {
       const slug = toSlug(projectFolder.name)
-      const nextUrl = `${projectRoute(slug)}?step=design-config`
-      useColorByNumberStore.getState().setWorkspaceActiveTab(null)
-      useColorByNumberStore.getState().setWorkspaceStep('design-config')
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(window.history.state, '', nextUrl)
-      }
+      const activeProjects = useColorByNumberStore.getState().projects
+      const hasNoFiles = activeProjects.length === 0
+      const nextUrl = hasNoFiles
+        ? `${projectRoute(slug)}/image-import`
+        : `${projectRoute(slug)}?step=convert`
+      useColorByNumberStore.getState().setWorkspaceActiveTab(hasNoFiles ? 'image-import' : null)
+      useColorByNumberStore.getState().setWorkspaceStep(1)
+      router.replace(nextUrl)
     }
   }
 
@@ -135,78 +191,7 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
   const slug = projectFolder ? toSlug(projectFolder.name) : ''
   const projectBaseUrl = projectFolder ? projectRoute(slug) : ''
 
-  const stepsToRender: {
-    label: string
-    href?: string
-    onClick?: (e: React.MouseEvent) => void
-    isLeaf: boolean
-  }[] = []
-
-  if (projectFolder) {
-    const isDesignConfigLeaf = workspaceStep === 'design-config' && !activeTab
-    stepsToRender.push({
-      label: 'Design Config',
-      href: isDesignConfigLeaf ? undefined : `${projectBaseUrl}?step=design-config`,
-      onClick: isDesignConfigLeaf ? undefined : (e) => {
-        e.preventDefault()
-        useColorByNumberStore.getState().setWorkspaceActiveTab(null)
-        useColorByNumberStore.getState().setWorkspaceStep('design-config')
-        if (typeof window !== 'undefined') {
-          window.history.replaceState(window.history.state, '', `${projectBaseUrl}?step=design-config`)
-        }
-      },
-      isLeaf: isDesignConfigLeaf,
-    })
-
-    if (workspaceStep === 1 || workspaceStep === 2 || workspaceStep === 3 || activeTab) {
-      const isConvertLeaf = workspaceStep === 1 && !activeTab
-      stepsToRender.push({
-        label: 'Convert',
-        href: isConvertLeaf ? undefined : `${projectBaseUrl}?step=convert`,
-        onClick: isConvertLeaf ? undefined : (e) => {
-          e.preventDefault()
-          useColorByNumberStore.getState().setWorkspaceActiveTab(null)
-          useColorByNumberStore.getState().setWorkspaceStep(1)
-          if (typeof window !== 'undefined') {
-            window.history.replaceState(window.history.state, '', `${projectBaseUrl}?step=convert`)
-          }
-        },
-        isLeaf: isConvertLeaf,
-      })
-    }
-
-    if (workspaceStep === 2 || workspaceStep === 3) {
-      const isPdfSetupLeaf = workspaceStep === 2 && !activeTab
-      stepsToRender.push({
-        label: 'PDF Setup',
-        href: isPdfSetupLeaf ? undefined : `${projectBaseUrl}?step=pdf`,
-        onClick: isPdfSetupLeaf ? undefined : (e) => {
-          e.preventDefault()
-          useColorByNumberStore.getState().setWorkspaceActiveTab(null)
-          useColorByNumberStore.getState().setWorkspaceStep(2)
-          if (typeof window !== 'undefined') {
-            window.history.replaceState(window.history.state, '', `${projectBaseUrl}?step=pdf`)
-          }
-        },
-        isLeaf: isPdfSetupLeaf,
-      })
-    }
-
-    if (workspaceStep === 3) {
-      const isGeneratingLeaf = workspaceStep === 3 && !activeTab
-      stepsToRender.push({
-        label: 'Generating PDF',
-        isLeaf: isGeneratingLeaf,
-      })
-    }
-
-    if (activeTab) {
-      stepsToRender.push({
-        label: tabLabel,
-        isLeaf: true,
-      })
-    }
-  }
+  // stepsToRender removed, steps progress rendered in breadcrumbs instead.
 
   const sidebarWidth = hovering ? 220 : 56
 
@@ -273,39 +258,58 @@ export default function ToolsShell({ children }: { children: ReactNode }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                     </svg>
                     <a
-                      href={`${projectRoute(toSlug(projectFolder.name))}?step=design-config`}
+                      href={projectFolder && useColorByNumberStore.getState().projects.length === 0
+                        ? `${projectRoute(toSlug(projectFolder.name))}/image-import`
+                        : `${projectRoute(toSlug(projectFolder.name))}?step=convert`
+                      }
                       onClick={handleProjectClick}
                       className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
                     >
                       {projectFolder.name}
                     </a>
                   </li>
-                  {stepsToRender.map((step, idx) => (
-                    <li key={idx} className="flex items-center">
-                      <svg
-                        className="mx-1 h-3.5 w-3.5 text-[var(--text-muted)] opacity-60 md:mx-1.5"
-                        aria-hidden="true"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                      </svg>
-                      {step.isLeaf ? (
-                        <span className="text-[var(--text-primary)] font-semibold text-sm tracking-wide">
-                          {step.label}
+                  <li className="flex items-center">
+                    <svg
+                      className="mx-1 h-3.5 w-3.5 text-[var(--text-muted)] opacity-60 md:mx-1.5"
+                      aria-hidden="true"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <div className="flex items-center gap-1.5 text-sm">
+                      {activeTab && activeTab !== 'image-import' ? (
+                        // Non-pipeline tab (Object Focus, Before/After, Mark Practice): just show tab name
+                        <span className="text-[var(--text-primary)] font-semibold tracking-wide">
+                          {getTabLabel(activeTab)}
                         </span>
                       ) : (
-                        <a
-                          href={step.href}
-                          onClick={step.onClick}
-                          className="hover:text-[var(--text-primary)] transition-colors text-sm text-[var(--text-secondary)] tracking-wide"
-                        >
-                          {step.label}
-                        </a>
+                        // Pipeline steps: show only up to the current step, past steps are clickable
+                        visibleSteps.map((step, idx) => {
+                          const isCurrent = idx === visibleSteps.length - 1
+                          return (
+                            <div key={step.id} className="flex items-center gap-1.5">
+                              {idx > 0 && <span className="text-[var(--text-muted)] opacity-40 px-0.5">→</span>}
+                              {isCurrent ? (
+                                <span className="text-[var(--text-primary)] font-semibold tracking-wide">
+                                  {step.label}
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStepClick(step.id)}
+                                  className="tracking-wide text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+                                >
+                                  {step.label}
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })
                       )}
-                    </li>
-                  ))}
+                    </div>
+                  </li>
                 </>
               )}
             </ol>

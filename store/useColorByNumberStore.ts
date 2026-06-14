@@ -167,7 +167,7 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     const subPath = p.slice(PROJECTS_ROUTE.length + 1)
     const parts = subPath.split('/').map(decodeURIComponent)
     const tabCandidate = parts[1] || null
-    const VALID_TABS = ['image-import', 'object-focus', 'batch-upload', 'before-after', 'mark-practice']
+    const VALID_TABS = ['image-import', 'object-focus', 'before-after', 'mark-practice']
     return VALID_TABS.includes(tabCandidate || '') ? tabCandidate : null
   })() : null,
   workspaceStep: typeof window !== 'undefined' ? (() => {
@@ -177,6 +177,19 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
     if (stepParam === 'pdf' || stepParam === 'pdf-setup' || stepParam === '2') return 2
     if (stepParam === 'pdf-progress' || stepParam === '3') return 3
     if (stepParam === 'convert' || stepParam === '1') return 1
+    
+    // Check if the URL contains a tab like 'image-import'
+    const p = window.location.pathname
+    const PROJECTS_ROUTE = '/studio/projects'
+    if (p.startsWith(PROJECTS_ROUTE + '/')) {
+      const subPath = p.slice(PROJECTS_ROUTE.length + 1)
+      const parts = subPath.split('/').map(decodeURIComponent)
+      const tabCandidate = parts[1] || null
+      const VALID_TABS = ['image-import', 'object-focus', 'before-after', 'mark-practice']
+      if (VALID_TABS.includes(tabCandidate || '')) {
+        return 1
+      }
+    }
     return 'design-config'
   })() : 'design-config',
 
@@ -185,8 +198,9 @@ export const useColorByNumberStore = create<ColorByNumberState>((set, get) => ({
 
   // Global settings actions
   setGlobalCellSize: (size) => {
+    const clampedSize = Math.max(12, Math.min(36, size));
     set((state) => ({
-      globalCellSize: size,
+      globalCellSize: clampedSize,
       // Reset all completed projects to idle so they re-convert with new cell size
       projects: state.projects.map((p) =>
         p.status === "completed" ? { ...p, status: "idle" as const } : p,

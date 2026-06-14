@@ -43,7 +43,8 @@ import type {
   PageLayout,
 } from "@/lib/colorByNumber";
 
-import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT, getCustomLabel } from "@/lib/utils";
+import { LETTER_OUTPUT_WIDTH, LETTER_OUTPUT_HEIGHT, getCustomLabel, rgbToHex, parseHexToRGB } from "@/lib/utils";
+import { FIXED_PALETTE, findClosestFixedColorIndex } from "@/lib/palette";
 import { useBookDesignStore } from "@/store/useBookDesignStore";
 
 const STROKE_COLOR = "#000000";
@@ -67,8 +68,16 @@ const isWhiteColor = (hex: string): boolean => {
   return brightness >= WHITE_THRESHOLD;
 };
 
-const getCellFillColor = (cellColor: string, filled: boolean): string => {
-  if (filled || !isWhiteColor(cellColor)) return cellColor;
+const getCellFillColor = (
+  cellColor: string,
+  filled: boolean,
+  fixedPaletteIndex?: number,
+  removeBackground?: boolean,
+): string => {
+  const finalColor = fixedPaletteIndex !== undefined
+    ? rgbToHex(FIXED_PALETTE[fixedPaletteIndex])
+    : rgbToHex(FIXED_PALETTE[findClosestFixedColorIndex(parseHexToRGB(cellColor))]);
+  if (filled || !isWhiteColor(finalColor)) return finalColor;
   return DEFAULT_FILL_LIGHT;
 };
 
@@ -1235,7 +1244,7 @@ const CellTrapezoid = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -1335,7 +1344,7 @@ const CellFishScale = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -1421,7 +1430,7 @@ const CellIslamic = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -1505,7 +1514,7 @@ const CellPuzzle = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -1597,7 +1606,7 @@ const CellPentagon = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -1691,7 +1700,7 @@ const CellCircle = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -1775,7 +1784,7 @@ const CellSquare = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -1924,7 +1933,7 @@ const CellDiamond = ({
   if (removeBackground && isBgCell) return null;
 
   const fillColor = isCellColored
-    ? getCellFillColor(cell.color, filled)
+    ? getCellFillColor(cell.color, filled, cell.fixedPaletteIndex, removeBackground)
     : DEFAULT_FILL_LIGHT;
   const textFill = getTextColor(fillColor);
 
@@ -2129,7 +2138,7 @@ const PageGrid = ({
                 const fillColor = isMarkGridType(data.gridType)
                   ? "#ffffff"
                   : isCellColored
-                    ? getCellFillColor(cellColor, cellFilled)
+                    ? getCellFillColor(cellColor, cellFilled, cell?.fixedPaletteIndex, removeBackground)
                     : DEFAULT_FILL_LIGHT;
 
                 return data.gridType === "hexagon-mark" ? (

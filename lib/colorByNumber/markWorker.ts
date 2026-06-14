@@ -436,7 +436,7 @@ self.onmessage = (e: MessageEvent) => {
   );
 
   // 2b. Filter minor colors
-  rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
+  rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 3);
 
   // 2c. Remove background if requested (mark grids preserve cell keys for code assignment)
   let backgroundCellKeys: string[] | undefined;

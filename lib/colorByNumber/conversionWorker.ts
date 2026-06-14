@@ -8,7 +8,7 @@ import {
   type MosaicBlock,
 } from "../pixelate";
 import { quantizeImage } from "../quantize";
-import { FIXED_PALETTE } from "../palette";
+import { FIXED_PALETTE, findClosestFixedColorIndex } from "../palette";
 import {
   rgbToHex,
   paletteIndexToLabel,
@@ -17,30 +17,6 @@ import {
   type RGB,
 } from "../utils";
 import type { ConversionWorkerMessage } from "./types";
-
-/**
- * Pre-computed OKLab values for FIXED_PALETTE (computed once at module load).
- * rgbToLab() now uses OKLab math — see lib/pixelate.ts.
- */
-const FIXED_PALETTE_LAB = FIXED_PALETTE.map((c) => rgbToLab(c));
-
-/**
- * findClosestFixedColorIndex — uses pre-computed OKLab + Euclidean distance.
- * More accurate than CIEDE2000 for most perceptual color matching tasks.
- */
-const findClosestFixedColorIndex = (color: RGB): number => {
-  const colorLab = rgbToLab(color);
-  let minDist = Infinity;
-  let bestIdx = 0;
-  for (let i = 0; i < FIXED_PALETTE_LAB.length; i++) {
-    const d = deltaE2000(colorLab, FIXED_PALETTE_LAB[i]);
-    if (d < minDist) {
-      minDist = d;
-      bestIdx = i;
-    }
-  }
-  return bestIdx;
-};
 
 const codeForPalettePosition = (index: number, gridType: string): string =>
   gridType === "square-mark" ? String(index) : paletteIndexToLabel(index);
@@ -424,7 +400,7 @@ self.onmessage = (e: MessageEvent) => {
   const markGrid = isMarkGrid(gridType);
   const enhancedImageData = enhanceImage(rawImageData, {
     contrastStrength: 0,
-    saturation: 1,
+    saturation: 1.15,
     sharpen: true,
   });
 
@@ -449,25 +425,23 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   const paletteWeights = new Float64Array(initialPalette.length);
-  if (markGrid) {
-    const preliminaryBlocks = createMosaicBlocks(
-      enhancedImageData,
-      initialPalette,
-      cellSize,
-      false,
-      true,
-      gridType,
-    );
-    for (const block of preliminaryBlocks) {
-      paletteWeights[block.paletteIndex]++;
-    }
+  const preliminaryBlocks = createMosaicBlocks(
+    enhancedImageData,
+    initialPalette,
+    cellSize,
+    false,
+    true,
+    gridType,
+  );
+  for (const block of preliminaryBlocks) {
+    paletteWeights[block.paletteIndex]++;
   }
 
   // 1b. AGGLOMERATIVE MERGE
   const dynamicPalette = agglomerativeMerge(
     initialPalette,
     maxColors,
-    markGrid ? paletteWeights : undefined,
+    paletteWeights,
   );
 
   // 2. Create mosaic blocks (use enhanced image for better block averaging)
@@ -481,7 +455,7 @@ self.onmessage = (e: MessageEvent) => {
   );
 
   // 2b. FILTER MINOR COLORS
-  rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 10);
+  rawBlocks = mergeMinorColors(rawBlocks, dynamicPalette, 3);
 
   let backgroundCellKeys: string[] | undefined;
 
@@ -523,24 +497,41 @@ self.onmessage = (e: MessageEvent) => {
     dynamicPalette,
   );
 
-  // 4. Map to fixed palette
+  // 4. Map to fixed palette and build sequential code mapping (merging duplicates)
   const dynamicToFixedIndex = usedPalette.map((c) =>
     findClosestFixedColorIndex(c),
   );
 
-  // 5. Build sequential code mapping
   const indexIsWhite = usedPalette.map(
     (c) => !isMarkGrid(gridType) && isWhite(c),
   );
-  let seq = 0;
+
   const indexToCode = new Map<number, string>();
   if (!isMarkGrid(gridType)) {
+    // Find all unique fixed indices used by non-white dynamic entries
+    const nonWhiteFixedIndices = Array.from(
+      new Set(
+        usedPalette
+          .map((c, i) => indexIsWhite[i] ? -1 : dynamicToFixedIndex[i])
+          .filter((idx) => idx !== -1)
+      )
+    ).sort((a, b) => a - b);
+
+    // Map each unique fixed index to a sequential code
+    const fixedToCode = new Map<number, string>();
+    let seq = 0;
+    for (const fixedIdx of nonWhiteFixedIndices) {
+      fixedToCode.set(fixedIdx, codeForPalettePosition(seq, gridType));
+      seq++;
+    }
+
+    // Map each dynamic palette index to the sequential code
     for (let i = 0; i < usedPalette.length; i++) {
       if (indexIsWhite[i]) {
         indexToCode.set(i, "");
       } else {
-        indexToCode.set(i, codeForPalettePosition(seq, gridType));
-        seq++;
+        const fixedIdx = dynamicToFixedIndex[i];
+        indexToCode.set(i, fixedToCode.get(fixedIdx) ?? "");
       }
     }
   }
@@ -573,7 +564,11 @@ self.onmessage = (e: MessageEvent) => {
       x,
       y,
       code: markBlockCodes?.[blockOrdinal] ?? indexToCode.get(block.paletteIndex) ?? "",
-      color: rgbToHex(isMarkGrid(gridType) ? block.avgColor ?? block.color : block.color),
+      color: rgbToHex(
+        isMarkGrid(gridType)
+          ? block.avgColor ?? block.color
+          : FIXED_PALETTE[dynamicToFixedIndex[block.paletteIndex]]
+      ),
       fixedPaletteIndex: dynamicToFixedIndex[block.paletteIndex],
     };
   });

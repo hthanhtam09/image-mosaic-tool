@@ -7,7 +7,8 @@
 import { useMemo } from "react";
 import { useColorByNumberStore, useActiveProject } from "@/store/useColorByNumberStore";
 import { useBookDesignStore } from "@/store/useBookDesignStore";
-import { getCustomLabel } from "@/lib/utils";
+import { getCustomLabel, rgbToHex, parseHexToRGB } from "@/lib/utils";
+import { FIXED_PALETTE, findClosestFixedColorIndex } from "@/lib/palette";
 
 export default function ColorByNumberPalette() {
   const { isPaletteVisible, togglePaletteGlobal, setSelectedCode } = useColorByNumberStore();
@@ -29,8 +30,11 @@ export default function ColorByNumberPalette() {
 
     for (const cell of data.cells) {
       if (!cell.code) continue; // skip white cells (no code)
+      const cellColor = cell.fixedPaletteIndex !== undefined
+        ? rgbToHex(FIXED_PALETTE[cell.fixedPaletteIndex])
+        : rgbToHex(FIXED_PALETTE[findClosestFixedColorIndex(parseHexToRGB(cell.color))]);
       if (!codeToColor.has(cell.code)) {
-        codeToColor.set(cell.code, cell.color);
+        codeToColor.set(cell.code, cellColor);
       }
       codeToTotal.set(cell.code, (codeToTotal.get(cell.code) ?? 0) + 1);
       if (filled[`${cell.x},${cell.y}`]) {
@@ -53,7 +57,7 @@ export default function ColorByNumberPalette() {
       count: codeToCount.get(code) ?? 0,
       total: codeToTotal.get(code) ?? 0,
     }));
-  }, [data, filled]);
+  }, [data, filled, activeProject?.removeBackground]);
 
   if (!data || paletteRows.length === 0) {
     return (

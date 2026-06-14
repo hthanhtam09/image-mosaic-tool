@@ -13,6 +13,7 @@ import { THEMES, getThemeById } from '@/lib/colorByNumber/themes'
 import type { ColorByNumberGridType, ColorByNumberData, ColorByNumberCell } from '@/lib/colorByNumber'
 import { quantizeImage } from '@/lib/quantize'
 import { rgbToHex } from '@/lib/utils'
+import { getHexColorName } from '@/lib/palette'
 import { exportPaletteToCanvas, exportToCanvas } from '@/lib/colorByNumber/export'
 import { imageToColorByNumber } from '@/lib/colorByNumber/imageToColorByNumber'
 
@@ -530,6 +531,14 @@ export default function BookDesignConfigStep({
 
   const { projects, setGlobalTheme, setGlobalGridType, globalCellSize, setGlobalCellSize } = useColorByNumberStore()
 
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (globalCellSize < 12 || globalCellSize > 36) {
+      setGlobalCellSize(Math.max(12, Math.min(36, globalCellSize)))
+    }
+  }, [globalCellSize, setGlobalCellSize])
+
   const fontInputRef = useRef<HTMLInputElement>(null)
 
   const handleFontUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -565,6 +574,13 @@ export default function BookDesignConfigStep({
     return sampledColors
   }, [firstConvertedProject, sampledColors])
 
+  // Stable primitives from projects[0] — used as useEffect deps to avoid re-triggering on unrelated store updates
+  const firstProject = projects[0]
+  const firstProjectId = firstProject?.id
+  const firstProjectFile = firstProject?.originalFile
+  const firstProjectUseDithering = firstProject?.useDithering ?? true
+  const firstProjectRemoveBg = firstProject?.removeBackground ?? false
+
   const [realConvertedData, setRealConvertedData] = useState<ColorByNumberData | null>(null)
   const [isConvertingPreview, setIsConvertingPreview] = useState(() => {
     return projects.length > 0 && !!projects[0]?.originalFile
@@ -574,7 +590,7 @@ export default function BookDesignConfigStep({
   )
 
   // ── Figma-like canvas state ──────────────────────────────────────────────────
-  const [tool, setTool] = useState<CanvasTool>('select')
+  const [tool, setTool] = useState<CanvasTool>('hand')
   const [isDragging, setIsDragging] = useState(false)
   const [tempHand, setTempHand] = useState(false) // Space held
   const [viewState, setViewState] = useState({ zoom: 0.82, x: 0, y: 0 })
@@ -622,13 +638,11 @@ export default function BookDesignConfigStep({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Keyboard shortcuts: H / V / Space
+  // Keyboard shortcuts: Space / Digit0
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       if (e.code === 'Space' && !e.repeat) { e.preventDefault(); setTempHand(true) }
-      if (e.code === 'KeyH') setTool('hand')
-      if (e.code === 'KeyV') setTool('select')
       if ((e.ctrlKey || e.metaKey) && e.code === 'Digit0') {
         e.preventDefault()
         const el = previewContainerRef.current
@@ -649,7 +663,7 @@ export default function BookDesignConfigStep({
     }
   }, [commitView])
 
-  const isHandActive = tool === 'hand' || tempHand
+  const isHandActive = true
 
   // Toolbar zoom helpers (zoom toward container centre)
   const zoomBy = useCallback((factor: number) => {
@@ -693,8 +707,7 @@ export default function BookDesignConfigStep({
   }, [])
 
   useEffect(() => {
-    const firstProject = projects[0]
-    if (!firstProject || !firstProject.originalFile) {
+    if (!firstProjectId || !firstProjectFile) {
       setRealConvertedData(null)
       setIsConvertingPreview(false)
       return
@@ -705,11 +718,11 @@ export default function BookDesignConfigStep({
     let active = true
     const timer = setTimeout(() => {
       const isMark = coloringPattern === 'square-mark' || coloringPattern === 'hexagon-mark'
-      imageToColorByNumber(firstProject.originalFile, {
+      imageToColorByNumber(firstProjectFile, {
         gridType: coloringPattern === 'auto' ? 'standard' : coloringPattern,
         cellSize: globalCellSize,
-        useDithering: firstProject.useDithering ?? true,
-        removeWhiteBackground: firstProject.removeBackground || isMark,
+        useDithering: firstProjectUseDithering,
+        removeWhiteBackground: firstProjectRemoveBg || isMark,
       }).then((data) => {
         if (active) {
           setRealConvertedData(data)
@@ -728,7 +741,8 @@ export default function BookDesignConfigStep({
       active = false
       clearTimeout(timer)
     }
-  }, [projects, coloringPattern, globalCellSize])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstProjectId, firstProjectFile, coloringPattern, globalCellSize, firstProjectUseDithering, firstProjectRemoveBg])
 
   // Determine active project data to pass to exporters
   const activeData = useMemo(() => {
@@ -788,7 +802,7 @@ export default function BookDesignConfigStep({
   const [showSettings, setShowSettings] = useState(false)
 
   return (
-    <div className="flex-1 min-h-0 overflow-hidden relative bg-[var(--bg-primary)]">
+    <div className="flex-1 min-h-0 overflow-hidden relative bg-transparent">
       {/* Settings toggle button — always visible */}
       <button
         type="button"
@@ -873,33 +887,10 @@ export default function BookDesignConfigStep({
 
           {/* ── Figma-style bottom toolbar ─────────────────────────────────── */}
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 rounded-2xl border border-white/10 bg-[#18181c]/92 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.55)] px-2 py-1.5">
-            {/* Tool: Select */}
-            <button
-              type="button"
-              onClick={() => setTool('select')}
-              title="Select (V)"
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-150 ${
-                tool === 'select' && !tempHand
-                  ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
-                  : 'text-white/50 hover:text-white hover:bg-white/8'
-              }`}
-            >
-              {/* Cursor / arrow icon */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M5 3l14 9-7 1.5L9 21 5 3z" fill="currentColor"/>
-              </svg>
-            </button>
-
-            {/* Tool: Hand */}
-            <button
-              type="button"
-              onClick={() => setTool('hand')}
-              title="Hand / Pan (H)"
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-150 ${
-                tool === 'hand' || tempHand
-                  ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
-                  : 'text-white/50 hover:text-white hover:bg-white/8'
-              }`}
+            {/* Tool: Hand (Active always) */}
+            <div
+              title="Hand / Drag (Active)"
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--accent)]/20 text-[var(--accent)]"
             >
               {/* Hand icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -908,7 +899,7 @@ export default function BookDesignConfigStep({
                 <path d="M10 10.5V6a2 2 0 0 0-4 0v8"/>
                 <path d="M6 14a2 2 0 0 0-2 2c0 2.8 1.5 5 4 6h4a5 5 0 0 0 5-5v-3a2 2 0 0 0-4 0v0"/>
               </svg>
-            </button>
+            </div>
 
             {/* Separator */}
             <div className="w-px h-5 bg-white/10 mx-1.5" />
@@ -969,6 +960,21 @@ export default function BookDesignConfigStep({
           )}
 
           <div className={`w-[340px] h-full custom-scrollbar p-5 flex flex-col gap-6 pt-16 relative ${isConvertingPreview ? 'overflow-hidden pointer-events-none select-none' : 'overflow-y-auto'}`}>
+            {/* Settings Header with Reset Button */}
+            <div className="flex items-center justify-between pb-2 border-b border-white/8">
+              <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">Book Settings</span>
+              <button
+                type="button"
+                onClick={() => {
+                  useBookDesignStore.getState().resetToDefaults()
+                  setGlobalTheme('light')
+                  setGlobalGridType('standard')
+                }}
+                className="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-white/8 bg-white/5 text-white/50 hover:text-white hover:border-white/20 transition-all active:scale-[0.98]"
+              >
+                Reset to Defaults
+              </button>
+            </div>
             
             {/* Palette Configuration Card */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 flex flex-col gap-5">
@@ -1004,7 +1010,7 @@ export default function BookDesignConfigStep({
               {/* Swatch Options */}
               <div className="flex flex-col gap-3 border-t border-white/6 pt-4">
                 <Toggle checked={showWaterdropIcon} onChange={toggleWaterdropIcon} label="Show Waterdrop Icon 💧" />
-                <Toggle checked={showColorInput} onChange={toggleColorInput} label="Show Hex Color Input" />
+                <Toggle checked={showColorInput} onChange={toggleColorInput} label="Show Color Name" />
               </div>
 
               {/* Badge Background Image */}
@@ -1113,8 +1119,8 @@ export default function BookDesignConfigStep({
                       />
                       <div className="flex flex-col min-w-0">
                         <span className="text-[11px] font-bold text-white/80">Custom Color</span>
-                        <span className="text-[9px] text-white/40 font-mono">
-                          {coloringTheme.startsWith('#') ? coloringTheme.toUpperCase() : 'Choose...'}
+                        <span className="text-[9px] text-white/40 font-sans">
+                          {coloringTheme.startsWith('#') ? getHexColorName(coloringTheme) : 'Choose...'}
                         </span>
                       </div>
                       {coloringTheme.startsWith('#') && (
@@ -1208,7 +1214,21 @@ export default function BookDesignConfigStep({
               {/* Cell Size Slider */}
               <div className="flex flex-col gap-2.5 border-t border-white/6 pt-4">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-white/60">Cell Size</label>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-white/60">Cell Size</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsInfoModalOpen(true)}
+                      className="text-white/40 hover:text-white transition-colors focus:outline-none p-0.5 rounded-full hover:bg-white/5"
+                      title="Show cell size details"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="16" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                      </svg>
+                    </button>
+                  </div>
                   <div className="flex items-center gap-2">
                     {isConvertingPreview && (
                       <svg className="animate-spin shrink-0" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3">
@@ -1220,8 +1240,8 @@ export default function BookDesignConfigStep({
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="100"
+                  min="12"
+                  max="36"
                   value={globalCellSize}
                   disabled={isConvertingPreview}
                   onChange={(e) => {
@@ -1292,6 +1312,123 @@ export default function BookDesignConfigStep({
           </div>
         </div>
       </div>
+
+      {isInfoModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-[100] transition-opacity duration-300"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setIsInfoModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-5xl bg-[#18181b] border border-white/10 rounded-2xl p-6 flex flex-col shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Connecting background grid lines */}
+            <div
+              className="absolute inset-0 opacity-5 pointer-events-none"
+              style={{
+                backgroundImage: "radial-gradient(var(--text-primary) 1px, transparent 1px)",
+                backgroundSize: "16px 16px",
+              }}
+            />
+
+            <div className="relative z-10 flex flex-col w-full">
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="text-sm font-black uppercase tracking-widest text-[var(--accent)]">
+                  Cell Size & Difficulty Options
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setIsInfoModalOpen(false)}
+                  className="text-white/40 hover:text-white transition-colors focus:outline-none p-1 rounded-full hover:bg-white/5"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-white/15 bg-white/[0.02]">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-white/[0.04] text-white/50">
+                      <th className="p-3 font-semibold">Difficulty</th>
+                      <th className="p-3 font-semibold">Cell Size Range</th>
+                      <th className="p-3 font-semibold text-center">Recommend</th>
+                      <th className="p-3 font-semibold">Description</th>
+                      <th className="p-3 font-semibold">Best For</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-white/80">
+                    {[
+                      {
+                        difficulty: "Easy",
+                        range: "28–36 px",
+                        recommend: 29,
+                        desc: "Large cells, fewer details, quick and relaxing to complete.",
+                        bestFor: "Kids, beginners, casual users",
+                        colorClass: "text-emerald-400",
+                        isRecommended: true,
+                      },
+                      {
+                        difficulty: "Medium",
+                        range: "20–28 px",
+                        recommend: 24,
+                        desc: "Balanced detail and challenge. Most images look great at this level.",
+                        bestFor: "Most users",
+                        colorClass: "text-sky-400",
+                      },
+                      {
+                        difficulty: "Hard",
+                        range: "12–20 px",
+                        recommend: 16,
+                        desc: "Smaller cells with more detail and complexity.",
+                        bestFor: "Experienced users",
+                        colorClass: "text-amber-400",
+                      },
+                    ].map((row) => (
+                      <tr
+                        key={row.difficulty}
+                        onClick={() => {
+                          setGlobalCellSize(row.recommend)
+                          setIsInfoModalOpen(false)
+                        }}
+                        className={`transition-colors cursor-pointer ${
+                          row.isRecommended
+                            ? 'bg-emerald-500/10 hover:bg-emerald-500/20'
+                            : 'hover:bg-white/5'
+                        }`}
+                      >
+                        <td className="p-3">
+                          <span className={`font-black ${row.colorClass}`}>{row.difficulty}</span>
+                          {row.isRecommended && (
+                            <span className="ml-2 px-1.5 py-0.5 text-[9px] font-black bg-emerald-500/20 text-emerald-400 rounded border border-emerald-500/30 uppercase tracking-wider">
+                              Recommended
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 font-medium font-mono">{row.range}</td>
+                        <td className="p-3 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded bg-[var(--accent)]/15 text-[var(--accent)] font-bold font-mono">
+                            {row.recommend} px
+                          </span>
+                        </td>
+                        <td className="p-3 text-white/70 leading-relaxed min-w-[150px]">{row.desc}</td>
+                        <td className="p-3 text-white/60 min-w-[120px]">{row.bestFor}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-4 text-[10px] text-white/40 text-center leading-relaxed">
+                💡 Tip: Click any row to automatically apply its recommended cell size to your book configuration.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import type { ColorByNumberGridType, PartialColorMode } from '@/lib/colorByNumbe
 import type { ToolAccess } from '@/lib/tools/access'
 import { useColorByNumberStore } from '@/store/useColorByNumberStore'
 import { useBookDesignStore } from '@/store/useBookDesignStore'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmModal from '@/components/ConfirmModal'
 import { useToolPatterns } from '@/components/ToolFlagsProvider'
@@ -60,6 +61,7 @@ export default function MosaicWorkspace({
   activeTab?: TabType | null
   setActiveTab?: (tab: TabType | null) => void
 }) {
+  const router = useRouter()
   const {
     projects,
     convertAllIdleProjects,
@@ -73,6 +75,7 @@ export default function MosaicWorkspace({
     updateProject,
     removeAllProjects,
     removeProject,
+    projectFolder,
   } = useColorByNumberStore()
 
   const enabledPatterns = useToolPatterns()
@@ -130,31 +133,34 @@ export default function MosaicWorkspace({
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    const folderName = projectName || projectFolder?.name
+    if (!folderName) return
+    const slug = toSlug(folderName)
+    const basePath = activeTab 
+      ? `/studio/projects/${slug}/${activeTab}` 
+      : `/studio/projects/${slug}`
+
     const url = new URL(window.location.href)
-    if (currentStep === 'design-config') {
-      url.searchParams.set('step', 'design-config')
-    } else if (currentStep === 2) {
-      url.searchParams.set('step', 'pdf')
-    } else if (currentStep === 3) {
-      url.searchParams.set('step', 'pdf-progress')
-    } else if (currentStep === 1) {
-      if (projects.length > 0) {
+    if (activeTab !== null) {
+      url.searchParams.delete('step')
+    } else {
+      if (currentStep === 'design-config') {
+        url.searchParams.set('step', 'design-config')
+      } else if (currentStep === 2) {
+        url.searchParams.set('step', 'pdf')
+      } else if (currentStep === 3) {
+        url.searchParams.set('step', 'pdf-progress')
+      } else if (currentStep === 1) {
         url.searchParams.set('step', 'convert')
       } else {
         url.searchParams.delete('step')
       }
-    } else {
-      url.searchParams.delete('step')
     }
-    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
-  }, [currentStep, projects.length])
-
-  useEffect(() => {
-    // Only force currentStep to 1 if we are navigating into a sub-tab
-    if (activeTab !== null) {
-      setCurrentStep(1)
+    const nextUrl = basePath + url.search + url.hash
+    if (window.location.pathname + window.location.search + window.location.hash !== nextUrl) {
+      router.replace(nextUrl)
     }
-  }, [activeTab, setCurrentStep])
+  }, [currentStep, activeTab, projectName, projectFolder?.name, router])
 
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false)
   const splitColorRef = useRef<HTMLDivElement>(null)
@@ -201,11 +207,11 @@ export default function MosaicWorkspace({
     onImportSuccess: useCallback(() => {
       setActiveTab?.(null)
       if (projectName) {
-        window.history.replaceState(null, '', `/studio/projects/${toSlug(projectName)}`)
+        router.replace(`/studio/projects/${toSlug(projectName)}`)
       }
       // Show Design Config right after first import so user can configure before converting
       setCurrentStep('design-config')
-    }, [projectName, setActiveTab])
+    }, [projectName, setActiveTab, router])
   })
 
   const {
@@ -338,12 +344,14 @@ export default function MosaicWorkspace({
   }, [enabledPatterns])
   const isFolderModeActive = directImages.length > 0
   const shouldShowImportScreen =
-    currentStep !== 'design-config' && (
-      (activeTab !== null && activeTab !== 'image-import') ||
-      (activeTab === 'image-import' && projects.length === 0) ||
+    // Always show tab content when a tab is explicitly selected (overrides any step)
+    (activeTab !== null && activeTab !== 'image-import') ||
+    (activeTab === 'image-import' && projects.length === 0) ||
+    // Show import screen when no tab selected and not on design-config step
+    (activeTab === null && currentStep !== 'design-config' && (
       (projects.length === 0 && !isFolderModeActive && !beforeAfterJob) ||
       (isFolderModeActive && currentStep === 1)
-    )
+    ))
 
   const idleCount = projects.filter((p) => p.status === 'idle').length
   const selectedIdleCount = projects.filter((p) => selectedIds.has(p.id) && (p.status === 'idle' || p.status === 'error')).length
@@ -362,7 +370,7 @@ export default function MosaicWorkspace({
               onTabSelect={(tab) => {
                 setActiveTab?.(tab)
                 if (projectName) {
-                  window.history.replaceState(null, '', `/studio/projects/${toSlug(projectName)}/${tab}`)
+                  router.replace(`/studio/projects/${toSlug(projectName)}/${tab}`)
                 }
               }}
               handleImportClick={() => handleImportClick(projects.length)}
@@ -373,7 +381,7 @@ export default function MosaicWorkspace({
               handleBeforeAfterImageChange={handleBeforeAfterImageChange}
               beforeAfterGridType={beforeAfterGridType}
               setBeforeAfterGridType={setBeforeAfterGridType}
-              isProcessingFolder={isProcessingFolder}
+              isProcessingFolder={isProcessingFolder || beforeAfterHook.isProcessingFolder}
               uploadedFolders={uploadedFolders}
               imageInputRef={imageInputRef}
               handleImageFileChange={(e) => handleImageFileChange(e, projects.length)}
@@ -449,40 +457,7 @@ export default function MosaicWorkspace({
               </svg>
               <span className="text-sm font-medium pr-0.5 select-none">Back to Convert</span>
             </button>
-          ) : currentStep === 'design-config' ? (
-            onBack ? (
-              <button
-                type="button"
-                onClick={onBack}
-                disabled={isAnyActionRunning}
-                className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border-default)] bg-white/5 px-3.5 text-[var(--text-secondary)] transition-all duration-200 hover:bg-white/10 hover:text-[var(--text-primary)] hover:border-[var(--text-secondary)]/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Back to Projects"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                  <path d="M15 18l-6-6 6-6" />
-                </svg>
-                <span className="text-sm font-medium pr-0.5 select-none">Back to Projects</span>
-              </button>
-            ) : null
-          ) : (activeTab !== null && activeTab !== 'image-import') || (activeTab === 'image-import' && projects.length > 0) ? (
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab?.(null);
-                if (projectName) {
-                  window.history.replaceState(null, '', `/studio/projects/${toSlug(projectName)}`);
-                }
-              }}
-              disabled={isAnyActionRunning}
-              className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border-default)] bg-white/5 px-3.5 text-[var(--text-secondary)] transition-all duration-200 hover:bg-white/10 hover:text-[var(--text-primary)] hover:border-[var(--text-secondary)]/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Back to Convert"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-              <span className="text-sm font-medium pr-0.5 select-none">Back to Convert</span>
-            </button>
-          ) : projects.length > 0 ? (
+          ) : (currentStep === 1 && activeTab === null) ? (
             <button
               type="button"
               onClick={() => setCurrentStep('design-config')}
@@ -494,6 +469,45 @@ export default function MosaicWorkspace({
                 <path d="M15 18l-6-6 6-6" />
               </svg>
               <span className="text-sm font-medium pr-0.5 select-none">Back to Design Config</span>
+            </button>
+          ) : currentStep === 'design-config' ? (
+            <button
+              type="button"
+              onClick={() => {
+                removeAllProjects();
+                autoCycleIndexRef.current = 0;
+                setActiveTab?.('image-import');
+                setCurrentStep(1);
+                if (projectName) {
+                  router.replace(`/studio/projects/${toSlug(projectName)}/image-import`);
+                }
+              }}
+              disabled={isAnyActionRunning}
+              className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border-default)] bg-white/5 px-3.5 text-[var(--text-secondary)] transition-all duration-200 hover:bg-white/10 hover:text-[var(--text-primary)] hover:border-[var(--text-secondary)]/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Back to Import Images"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              <span className="text-sm font-medium pr-0.5 select-none">Back to Import Images</span>
+            </button>
+          ) : (activeTab !== null && activeTab !== 'image-import') || (activeTab === 'image-import' && projects.length > 0) ? (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab?.(null);
+                if (projectName) {
+                  router.replace(`/studio/projects/${toSlug(projectName)}`);
+                }
+              }}
+              disabled={isAnyActionRunning}
+              className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border-default)] bg-white/5 px-3.5 text-[var(--text-secondary)] transition-all duration-200 hover:bg-white/10 hover:text-[var(--text-primary)] hover:border-[var(--text-secondary)]/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Back to Convert"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              <span className="text-sm font-medium pr-0.5 select-none">Back to Convert</span>
             </button>
           ) : onBack ? (
             <button
@@ -653,17 +667,17 @@ export default function MosaicWorkspace({
                       Before/After
                     </button>
                   )}
-                  {/* Next: Setup PDF — goes directly to step 2 (Design Config is now pre-convert) */}
+                  {/* Next: PDF Book Setup — goes to pdf setup step */}
                   <button
                     onClick={handleNextToSetup}
                     disabled={isAnyActionRunning}
-                    className="flex h-10 items-center justify-center px-6 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl shadow-lg shadow-blue-500/15 active:scale-[0.98] transition-all duration-200 gap-2 min-w-[180px] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex h-10 items-center justify-center px-6 text-sm font-semibold text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl shadow-md shadow-[var(--accent)]/15 active:scale-[0.98] transition-all duration-200 gap-2 min-w-[180px] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPreparingStep2 ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <>
-                        <span>Next: Setup PDF</span>
+                        <span>Next: PDF Book Setup</span>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <polyline points="9 18 15 12 9 6" />
                         </svg>
@@ -680,23 +694,13 @@ export default function MosaicWorkspace({
           <div className="flex gap-3 items-center">
             <button
               type="button"
-              onClick={() => {
-                useBookDesignStore.getState().resetToDefaults()
-                setGlobalTheme('light')
-                setGlobalGridType('standard')
-              }}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-white/40 hover:text-white/80 border border-white/8 bg-white/5 transition-all active:scale-[0.98]"
-            >
-              Reset to Defaults
-            </button>
-            <button
-              type="button"
               onClick={() => setCurrentStep(1)}
-              className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs text-white
-                bg-gradient-to-r from-[var(--accent-deep)] to-[var(--accent)] hover:from-[var(--accent)] hover:to-[var(--accent-hover)]
-                shadow-lg shadow-[var(--accent)]/10 active:scale-[0.98] transition-all duration-200"
+              disabled={isAnyActionRunning}
+              className="flex h-10 items-center justify-center gap-2 px-6 rounded-xl text-sm font-semibold text-[var(--bg-primary)]
+                bg-[var(--accent)] hover:bg-[var(--accent-hover)]
+                shadow-md shadow-[var(--accent)]/15 active:scale-[0.98] transition-all duration-200 min-w-[180px] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Next: Convert
+              <span>Next: Convert Images</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 18 15 12 9 6"/>
               </svg>
@@ -849,7 +853,7 @@ export default function MosaicWorkspace({
           }
           setActiveTab?.('image-import')
           if (projectName) {
-            window.history.replaceState(null, '', `/studio/projects/${toSlug(projectName)}/image-import`)
+            router.replace(`/studio/projects/${toSlug(projectName)}/image-import`)
           }
         }}
         onCancel={() => setShowDeleteAllConfirm(false)}

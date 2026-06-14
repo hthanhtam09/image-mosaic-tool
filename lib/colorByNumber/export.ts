@@ -45,10 +45,8 @@ export type PartialColorMode =
   | "diagonal-tl-br"
   | "horizontal-middle"
   | "horizontal-sides";
-import { getPaletteColorName } from "@/lib/palette";
+import { getPaletteColorName, FIXED_PALETTE, findClosestFixedColorIndex } from "@/lib/palette";
 import {
-  rgbToExtendedColorName,
-  rgbToExportPaletteColor,
   paletteIndexToLabel,
   rgbToHex,
   getCustomLabel,
@@ -159,19 +157,29 @@ const getCodeMap = (
 
   // Collect unique codes and their colors (skip bg cells)
   const codeToColor = new Map<string, string>();
+  const codeToFixedIndex = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (removeBgColorCells) {
-      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
-      const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
+      const fixedIndex = cell.fixedPaletteIndex !== undefined
+        ? cell.fixedPaletteIndex
+        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const cellName = getPaletteColorName(fixedIndex);
+      const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(bgColor));
+      const bgName = getPaletteColorName(bgFixedIndex);
       if (
-        cellName === bgName ||
-        cell.color.toLowerCase() === bgColor.toLowerCase()
+        bgName === "White" &&
+        (cellName === "White" ||
+         cell.color.toLowerCase() === bgColor.toLowerCase())
       )
         continue;
     }
     if (!codeToColor.has(cell.code)) {
       codeToColor.set(cell.code, cell.color);
+      const fixedIndex = cell.fixedPaletteIndex !== undefined
+        ? cell.fixedPaletteIndex
+        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      codeToFixedIndex.set(cell.code, fixedIndex);
     }
   }
 
@@ -192,10 +200,7 @@ const getCodeMap = (
     let labelIdx = 0;
 
     for (const code of codes) {
-      const hex = codeToColor.get(code)!;
-      const rgb = parseHexToRGB(hex);
-      const exportColor = rgbToExportPaletteColor(rgb);
-      const colorName = exportColor.name;
+      const colorName = getPaletteColorName(codeToFixedIndex.get(code)!);
 
       if (nameToLabel.has(colorName)) {
         // Same restricted palette color as a previous code — reuse label
@@ -368,25 +373,31 @@ export const calculatePaletteLayout = (
     removeBgColorCells?: boolean;
   },
 ): PaletteLayout | null => {
-  // Build unique palette entries (skip white / empty codes)
-  // When removeBgColorCells is on (export palette mode), remap to 23 restricted colors
   const rawCodeToColor = new Map<string, string>();
   const rawCodeToCount = new Map<string, number>();
+  const rawCodeToFixedIndex = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
-      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
-      const bgName = rgbToExtendedColorName(
-        parseHexToRGB(options.bgColor),
-      ).name;
+      const fixedIndex = cell.fixedPaletteIndex !== undefined
+        ? cell.fixedPaletteIndex
+        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const cellName = getPaletteColorName(fixedIndex);
+      const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(options.bgColor));
+      const bgName = getPaletteColorName(bgFixedIndex);
       if (
-        cellName === bgName ||
-        cell.color.toLowerCase() === options.bgColor.toLowerCase()
+        bgName === "White" &&
+        (cellName === "White" ||
+         cell.color.toLowerCase() === options.bgColor.toLowerCase())
       )
         continue;
     }
     if (!rawCodeToColor.has(cell.code)) {
       rawCodeToColor.set(cell.code, cell.color);
+      const fixedIndex = cell.fixedPaletteIndex !== undefined
+        ? cell.fixedPaletteIndex
+        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      rawCodeToFixedIndex.set(cell.code, fixedIndex);
     }
     rawCodeToCount.set(cell.code, (rawCodeToCount.get(cell.code) ?? 0) + 1);
   }
@@ -396,7 +407,7 @@ export const calculatePaletteLayout = (
   const codeToName = new Map<string, string>();
 
   if (options?.removeBgColorCells) {
-    // Export palette mode: remap to 23 restricted colors and merge duplicates
+    // Export palette mode: remap to FIXED_PALETTE colors and merge duplicates
     codeToColor = new Map<string, string>();
     codeToCount = new Map<string, number>();
     const nameToCode = new Map<string, string>();
@@ -411,11 +422,9 @@ export const calculatePaletteLayout = (
     });
 
     for (const code of sortedRawCodes) {
-      const hex = rawCodeToColor.get(code)!;
-      const rgb = parseHexToRGB(hex);
-      const exportColor = rgbToExportPaletteColor(rgb);
-      const canonicalHex = rgbToHex(exportColor.rgb);
-      const colorName = exportColor.name;
+      const fixedIndex = rawCodeToFixedIndex.get(code)!;
+      const canonicalHex = rgbToHex(FIXED_PALETTE[fixedIndex]);
+      const colorName = getPaletteColorName(fixedIndex);
 
       if (nameToCode.has(colorName)) {
         const existingCode = nameToCode.get(colorName)!;
@@ -432,8 +441,12 @@ export const calculatePaletteLayout = (
       }
     }
   } else {
-    // Normal mode: use original colors
-    codeToColor = rawCodeToColor;
+    // Normal mode: use snapped colors
+    codeToColor = new Map<string, string>();
+    for (const [code, hex] of rawCodeToColor.entries()) {
+      const fixedIndex = rawCodeToFixedIndex.get(code)!;
+      codeToColor.set(code, rgbToHex(FIXED_PALETTE[fixedIndex]));
+    }
     codeToCount = rawCodeToCount;
   }
 
@@ -1331,19 +1344,24 @@ export const exportToCanvas = (
     if (isTransparentCell(data, cell, transparentBg)) return;
 
     if (removeBgColorCells && !isMarkGridType(data.gridType)) {
-      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
-      const bgName = rgbToExtendedColorName(parseHexToRGB(bgColor)).name;
+      const fixedIndex = cell.fixedPaletteIndex !== undefined
+        ? cell.fixedPaletteIndex
+        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const cellName = getPaletteColorName(fixedIndex);
+      const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(bgColor));
+      const bgName = getPaletteColorName(bgFixedIndex);
       if (
-        cellName === bgName ||
-        cell.color.toLowerCase() === bgColor.toLowerCase()
+        bgName === "White" &&
+        (cellName === "White" ||
+         cell.color.toLowerCase() === bgColor.toLowerCase())
       )
         return;
     }
 
-    // When export palette mode is on, remap cell colors to the 23 restricted palette colors
-    const effectiveCellColor = removeBgColorCells
-      ? rgbToHex(rgbToExportPaletteColor(parseHexToRGB(cell.color)).rgb)
-      : cell.color;
+    // Remap cell colors to the FIXED_PALETTE colors
+    const effectiveCellColor = cell.fixedPaletteIndex !== undefined
+      ? rgbToHex(FIXED_PALETTE[cell.fixedPaletteIndex])
+      : rgbToHex(FIXED_PALETTE[findClosestFixedColorIndex(parseHexToRGB(cell.color))]);
 
     const fillColor = isCellColored
       ? getCellFillColor(effectiveCellColor, filledCell)
@@ -1604,35 +1622,43 @@ export const exportPaletteToCanvas = (
     badgeStyle,
   );
 
-  // ── Collect palette data (restricted to 23 export palette colors) ──
+  // ── Collect palette data (restricted to FIXED_PALETTE colors) ──
   // Step 1: Collect raw code → color mappings (skip bg cells)
   const rawCodeToColor = new Map<string, string>();
   const rawCodeToCount = new Map<string, number>();
+  const rawCodeToFixedIndex = new Map<string, number>();
   for (const cell of data.cells) {
     if (!cell.code) continue;
     if (options?.removeBgColorCells && options?.bgColor) {
-      const cellName = rgbToExtendedColorName(parseHexToRGB(cell.color)).name;
-      const bgName = rgbToExtendedColorName(
-        parseHexToRGB(options.bgColor),
-      ).name;
+      const fixedIndex = cell.fixedPaletteIndex !== undefined
+        ? cell.fixedPaletteIndex
+        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      const cellName = getPaletteColorName(fixedIndex);
+      const bgFixedIndex = findClosestFixedColorIndex(parseHexToRGB(options.bgColor));
+      const bgName = getPaletteColorName(bgFixedIndex);
       if (
-        cellName === bgName ||
-        cell.color.toLowerCase() === options.bgColor.toLowerCase()
+        bgName === "White" &&
+        (cellName === "White" ||
+         cell.color.toLowerCase() === options.bgColor.toLowerCase())
       )
         continue;
     }
     if (!rawCodeToColor.has(cell.code)) {
       rawCodeToColor.set(cell.code, cell.color);
+      const fixedIndex = cell.fixedPaletteIndex !== undefined
+        ? cell.fixedPaletteIndex
+        : findClosestFixedColorIndex(parseHexToRGB(cell.color));
+      rawCodeToFixedIndex.set(cell.code, fixedIndex);
     }
     rawCodeToCount.set(cell.code, (rawCodeToCount.get(cell.code) ?? 0) + 1);
   }
 
-  // Step 2: Remap each code's color to the nearest restricted export palette color
+  // Step 2: Remap each code's color to the nearest FIXED_PALETTE color
   //         and merge codes that map to the same color name (no duplicate names)
   const codeToColor = new Map<string, string>();
   const codeToCount = new Map<string, number>();
-  const codeToName = new Map<string, string>(); // code → export palette color name (correct, computed during merge)
-  const nameToCode = new Map<string, string>(); // export palette name → first code that mapped to it
+  const codeToName = new Map<string, string>(); // code → fixed palette color name (correct, computed during merge)
+  const nameToCode = new Map<string, string>(); // fixed palette name → first code that mapped to it
 
   // Sort raw codes first so merging picks consistent representative codes
   const rawCodes = [...rawCodeToColor.keys()].sort((a, b) => {
@@ -1652,20 +1678,19 @@ export const exportPaletteToCanvas = (
       codeToName.set(code, code);
     }
   } else if (options?.forPreview) {
-    // Preview mode: use actual raw colors without snapping to 23-color palette
+    // Preview mode: use snapped colors to match the colored/uncolored previews, but keep all codes
     for (const code of rawCodes) {
-      const hex = rawCodeToColor.get(code)!;
-      codeToColor.set(code, hex);
+      const fixedIndex = rawCodeToFixedIndex.get(code)!;
+      const canonicalHex = rgbToHex(FIXED_PALETTE[fixedIndex]);
+      codeToColor.set(code, canonicalHex);
       codeToCount.set(code, rawCodeToCount.get(code) ?? 0);
-      codeToName.set(code, hex);
+      codeToName.set(code, getPaletteColorName(fixedIndex));
     }
   } else for (const code of rawCodes) {
     const hex = rawCodeToColor.get(code)!;
-    const rgb = parseHexToRGB(hex);
-    // Map to the nearest of the 23 allowed colors
-    const exportColor = rgbToExportPaletteColor(rgb);
-    const canonicalHex = rgbToHex(exportColor.rgb);
-    const colorName = exportColor.name;
+    const fixedIndex = rawCodeToFixedIndex.get(code)!;
+    const canonicalHex = rgbToHex(FIXED_PALETTE[fixedIndex]);
+    const colorName = getPaletteColorName(fixedIndex);
 
     if (nameToCode.has(colorName)) {
       // This color name already exists → merge count into the first code

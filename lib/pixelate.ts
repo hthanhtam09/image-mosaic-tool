@@ -40,7 +40,9 @@ export const deltaE2000 = (lab1: Lab, lab2: Lab): number => {
   const dL = lab1.L - lab2.L;
   const da = lab1.a - lab2.a;
   const db = lab1.b - lab2.b;
-  return Math.sqrt(dL * dL + da * da + db * db);
+  // Weight lightness difference less in OKLab space (dL^2 * 0.3) so hue and chroma dominate.
+  // This prevents colorful pixels from being incorrectly matched to gray or merged with neutral colors.
+  return Math.sqrt(dL * dL * 0.3 + da * da + db * db);
 };
 
 export const isNearWhite = (color: RGB): boolean =>
@@ -158,7 +160,7 @@ const bestPaletteIndexByMinTotalError = (
 
   for (const { L, a, b } of pixelLabs) {
     const chroma = Math.sqrt(a * a + b * b);
-    const weight = 1 + 2 * Math.min(1, chroma / 50);
+    const weight = 1 + 2 * Math.min(1, chroma / 0.1);
     sumL += L * weight;
     sumA += a * weight;
     sumB += b * weight;
@@ -190,7 +192,14 @@ const bestPaletteIndexByMinTotalError = (
     }
   }
 
-  if (secondDistance <= minDistance * 1.05 && secondDistance < Infinity) {
+  const blockChroma = Math.sqrt(
+    averageLab.a * averageLab.a + averageLab.b * averageLab.b,
+  );
+  if (
+    secondDistance <= minDistance * 1.05 &&
+    secondDistance < Infinity &&
+    blockChroma >= 0.03
+  ) {
     const bestHue = labHueDeg(paletteLab[bestIndex]);
     const secondHue = labHueDeg(paletteLab[secondIndex]);
     if (hueDistanceDeg(blockHue, secondHue) < hueDistanceDeg(blockHue, bestHue)) {

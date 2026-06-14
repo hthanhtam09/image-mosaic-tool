@@ -233,11 +233,31 @@ export function useImageImport({
           rd.readAsDataURL(f)
         })
 
+        // Count how many files we actually need to read
+        let filesToReadCount = solutionCollageFiles.length
+        for (const [_, g] of Object.entries(groups)) {
+          if (g.uncolor) {
+            filesToReadCount += 1
+            if (g.color) filesToReadCount += 1
+            if (g.palette) filesToReadCount += 1
+          }
+        }
+
+        let currentReadCount = 0
+        setImportProgress({ current: 0, total: filesToReadCount })
+
+        const readFileWithProgress = async (f: File): Promise<string> => {
+          const res = await readFile(f)
+          currentReadCount++
+          setImportProgress({ current: currentReadCount, total: filesToReadCount })
+          return res
+        }
+
         if (solutionCollageFiles.length > 0) {
           const sorted = solutionCollageFiles.sort((a, b) =>
             a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
           )
-          setSolutionCollagePages(await Promise.all(sorted.map(readFile)))
+          setSolutionCollagePages(await Promise.all(sorted.map(readFileWithProgress)))
         }
 
         const newDirectImages: DirectImage[] = []
@@ -245,9 +265,9 @@ export function useImageImport({
           if (g.uncolor) {
             newDirectImages.push({
               name,
-              colorUrl: g.color ? await readFile(g.color) : '',
-              uncolorUrl: await readFile(g.uncolor),
-              paletteUrl: g.palette ? await readFile(g.palette) : undefined,
+              colorUrl: g.color ? await readFileWithProgress(g.color) : '',
+              uncolorUrl: await readFileWithProgress(g.uncolor),
+              paletteUrl: g.palette ? await readFileWithProgress(g.palette) : undefined,
             })
           }
         }
@@ -267,6 +287,7 @@ export function useImageImport({
         toast.error('Folder upload failed')
       } finally {
         setIsProcessingFolder(false)
+        setImportProgress(null)
         e.target.value = ''
       }
     },

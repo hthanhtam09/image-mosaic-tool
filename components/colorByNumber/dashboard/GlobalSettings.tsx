@@ -6,6 +6,7 @@ import type { ColorByNumberGridType } from "@/lib/colorByNumber";
 import { useEffect, useRef, useState } from "react";
 import { useToolPatterns, useToolThemes } from "@/components/ToolFlagsProvider";
 import { PATTERNS } from "@/lib/colorByNumber/patterns";
+import { useBookDesignStore } from "@/store/useBookDesignStore";
 
 interface GlobalSettingsProps {
   showSettings: boolean;
@@ -169,8 +170,8 @@ export default function GlobalSettings({
             </div>
             <input
               type="range"
-              min={10}
-              max={100}
+              min={12}
+              max={36}
               step={1}
               value={globalCellSize}
               onChange={(e) => setGlobalCellSize(Number(e.target.value))}
@@ -283,6 +284,20 @@ export default function GlobalSettings({
               ))}
             </div>
           </div>
+
+          <div className="border-t border-[var(--border-subtle)]" />
+
+          {/* Reset to Defaults */}
+          <button
+            onClick={() => {
+              useBookDesignStore.getState().resetToDefaults();
+              setGlobalTheme("light");
+              setGlobalGridType("standard");
+            }}
+            className="w-full py-2 rounded-lg text-xs font-semibold text-white/40 hover:text-white/80 border border-white/8 bg-white/5 transition-all active:scale-[0.98]"
+          >
+            Reset to Defaults
+          </button>
         </div>
       )}
     </div>
