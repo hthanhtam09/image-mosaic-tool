@@ -5,6 +5,7 @@ import {
   useActiveProject,
   type Project,
 } from "@/store/useColorByNumberStore";
+import { useBookDesignStore } from "@/store/useBookDesignStore";
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import {
   canvasToDpiPngDataUrl,
@@ -59,6 +60,7 @@ export default function ProjectPreviewModal({
 }: ProjectPreviewModalProps) {
   const { setActiveProject, setZoom, setPan, removeProject, globalShowNumbers, globalCellSize, globalTheme } =
     useColorByNumberStore();
+  const { coloringDisplayMode } = useBookDesignStore();
 
   // Build sorted navigable list
   const navigable = projects
@@ -199,7 +201,8 @@ export default function ProjectPreviewModal({
         const uncolorCanvas = exportToCanvas(activeProject.data!, activeProject.filled, {
           showCodes: globalShowNumbers,
           colored: false,
-          showPalette: false,
+          showPalette: activeProject.removeBackground ? false : coloringDisplayMode === "side-by-side",
+          partialColorMode: activeProject.partialColorMode,
           bgColor: theme.backgroundColor,
           tightCrop,
           removeBgColorCells: true,
@@ -225,6 +228,7 @@ export default function ProjectPreviewModal({
     globalShowNumbers,
     globalTheme,
     globalCellSize,
+    coloringDisplayMode,
   ]);
 
   if (!activeProject || !activeProject.data) return null;
@@ -253,8 +257,12 @@ export default function ProjectPreviewModal({
     if (activeProject.partialColorMode === "none" && !activeProject.removeBackground) {
       setTimeout(() => {
         const c2 = exportToCanvas(activeProject.data!, activeProject.filled, {
-          showCodes: globalShowNumbers, colored: false, showPalette: false,
-          bgColor: theme.backgroundColor, removeBgColorCells: true,
+          showCodes: globalShowNumbers,
+          colored: false,
+          showPalette: coloringDisplayMode === "side-by-side",
+          partialColorMode: activeProject.partialColorMode,
+          bgColor: theme.backgroundColor,
+          removeBgColorCells: true,
         });
         downloadCanvas(c2, `uncolored-${base}.png`);
       }, 500);

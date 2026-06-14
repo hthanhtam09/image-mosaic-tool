@@ -1221,14 +1221,39 @@ export const exportToCanvas = (
   })();
 
   const needsPalette = showPalette;
-  const padX = showPalette ? getPagePaddingX(data) : cropSettings.padX;
   const padY = showPalette ? PAGE_PADDING_Y : cropSettings.padY;
 
   const pageW = cropSettings.pageW;
   const pageH = cropSettings.pageH;
 
-  const safeW = pageW - padX * 2;
+  const basePadX = showPalette ? getPagePaddingX(data) : cropSettings.padX;
+  let padLeft = basePadX;
+  let padRight = basePadX;
+
   const safeH = pageH - padY * 2;
+  const contentSafeH = Math.max(0, safeH - CONTENT_SAFE_INSET * 2);
+
+  if (!showPalette && !tightCrop) {
+    const c_left = 1.4;
+    const c_right = 0.4;
+    const visualBounds = getVisualGridBounds(data);
+    const gridAvailableH = contentSafeH - GRID_CLIP_PADDING * 2;
+    const scaleHeightLimit = gridAvailableH / visualBounds.height;
+    const boxW_heightLimit = pageW - 2 * basePadX - (c_left + c_right) * data.cellSize * scaleHeightLimit;
+    const scaleWidthLimit_temp = boxW_heightLimit / visualBounds.width;
+
+    let scale: number;
+    if (scaleHeightLimit <= scaleWidthLimit_temp) {
+      scale = scaleHeightLimit;
+    } else {
+      scale = (pageW - 2 * basePadX) / (visualBounds.width + (c_left + c_right) * data.cellSize);
+    }
+
+    padLeft = Math.round(basePadX + c_left * data.cellSize * scale);
+    padRight = Math.round(basePadX + c_right * data.cellSize * scale);
+  }
+
+  const safeW = pageW - padLeft - padRight;
   const contentSafeW = Math.max(
     0,
     safeW -
@@ -1236,7 +1261,6 @@ export const exportToCanvas = (
       CONTENT_SAFE_INSET_LEFT_EXTRA -
       CONTENT_SAFE_INSET,
   );
-  const contentSafeH = Math.max(0, safeH - CONTENT_SAFE_INSET * 2);
 
   // 2. Calculate palette layout (vertical)
   let layout: PaletteLayout | null = null;
@@ -1268,7 +1292,9 @@ export const exportToCanvas = (
   // 5. Position the grid flush against the KDP-safe box.
   const firstCell = getCellLayout(0, 0, data);
   const gridVisualTop = padY + CONTENT_SAFE_INSET + GRID_CLIP_PADDING;
-  const gridVisualTopPos = gridVisualTop + gridLayout.offsetY;
+  const gridVisualTopPos = needsPalette
+    ? gridVisualTop
+    : gridVisualTop + gridLayout.offsetY;
   const gridFirstRowCenterY = gridVisualTopPos + firstCell.cy * gridLayout.scale;
 
   // Swatch center in palette coordinate space is sTop + sSW/2
@@ -1296,7 +1322,7 @@ export const exportToCanvas = (
   if (needsPalette && layout) {
     ctx.save();
     const paletteX =
-      padX +
+      padLeft +
       CONTENT_SAFE_INSET_LEFT +
       CONTENT_SAFE_INSET_LEFT_EXTRA +
       PALETTE_X_OFFSET;
@@ -1314,7 +1340,7 @@ export const exportToCanvas = (
   ctx.save();
   // Grid starts after Palette + Gap; shift right by clip-padding so overhangs don't clip
   const gridStartX =
-    padX +
+    padLeft +
     CONTENT_SAFE_INSET_LEFT +
     CONTENT_SAFE_INSET_LEFT_EXTRA +
     (paletteWidth > 0 ? PALETTE_X_OFFSET : 0) +

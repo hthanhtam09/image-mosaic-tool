@@ -15,6 +15,7 @@ import {
   getCellLayout,
   hitTestCell,
   getGridDimensions,
+  getVisualGridBounds,
   TRAPEZOID_SLANT_FACTOR,
 } from "@/lib/colorByNumber/layoutCalculator";
 import {
@@ -1987,6 +1988,8 @@ interface PageGridLayout {
   gridVisualTop: number;
   paletteVisualTop: number;
   gridVisualLeftOffset: number;
+  gridPageXOffset?: number;
+  gridClipPadding?: number;
 }
 
 const PageGrid = ({
@@ -2031,12 +2034,13 @@ const PageGrid = ({
                   ? CellTrapezoid
                   : CellSquare;
   const gridPageX =
-    pagePaddingX +
+    (layout.gridPageXOffset !== undefined ? layout.gridPageXOffset : pagePaddingX) +
     CONTENT_SAFE_INSET_LEFT +
     (paletteLayout && !removeBackground ? PALETTE_X_OFFSET : 0) +
     (paletteLayout && !removeBackground
       ? paletteLayout.palColW + PALETTE_GAP
       : 0) +
+    (layout.gridClipPadding || 0) +
     gridLayout.offsetX +
     (layout.gridVisualLeftOffset || 0);
   const gridPageY = gridVisualTop;
@@ -2200,7 +2204,10 @@ export default function ColorByNumberGrid({
     activeProject?.removeBackground,
     globalShowNumbers,
   );
-  const showPalette = false;
+  const { coloringDisplayMode } = useBookDesignStore();
+  const showPalette = activeProject?.removeBackground
+    ? false
+    : coloringDisplayMode === "side-by-side";
   const partialColorMode = (activeProject?.partialColorMode ??
     "none") as PartialColorMode;
   const theme = getThemeById(globalTheme);
@@ -2243,16 +2250,54 @@ export default function ColorByNumberGrid({
     if (!data) return null;
 
     // 1. Determine "Safe Area" based on fixed margins
-    const padX = getPagePaddingX(data);
+    const basePadX = getPagePaddingX(data);
     const padY = PAGE_PADDING_Y;
 
-    const safeW = LETTER_OUTPUT_WIDTH - padX * 2;
+    let padLeft = basePadX;
+    let padRight = basePadX;
+
     const safeH = LETTER_OUTPUT_HEIGHT - padY * 2;
+    const contentSafeH = Math.max(0, safeH - CONTENT_SAFE_INSET * 2);
+
+    let maxGridH = contentSafeH;
+    let gridVisualTopOffset = 0;
+
+    // Keep a little extra air in Object Focus mode so the subject is not clipped.
+    if (shouldUseTightCrop(data, activeProject?.removeBackground)) {
+      const padRatio = 0.16;
+      maxGridH = contentSafeH * (1 - padRatio * 2);
+      gridVisualTopOffset = contentSafeH * padRatio;
+    }
+
+    const GRID_CLIP_PADDING =
+      data.gridType === "puzzle" ? data.cellSize * 0.22 : 0;
+
+    const tightCrop = shouldUseTightCrop(data, activeProject?.removeBackground);
+    if (!showPalette && !tightCrop) {
+      const c_left = 1.4;
+      const c_right = 0.4;
+      const visualBounds = getVisualGridBounds(data);
+      const gridAvailableH = maxGridH - GRID_CLIP_PADDING * 2;
+      const scaleHeightLimit = gridAvailableH / visualBounds.height;
+      const boxW_heightLimit = LETTER_OUTPUT_WIDTH - 2 * basePadX - (c_left + c_right) * data.cellSize * scaleHeightLimit;
+      const scaleWidthLimit_temp = boxW_heightLimit / visualBounds.width;
+
+      let scale: number;
+      if (scaleHeightLimit <= scaleWidthLimit_temp) {
+        scale = scaleHeightLimit;
+      } else {
+        scale = (LETTER_OUTPUT_WIDTH - 2 * basePadX) / (visualBounds.width + (c_left + c_right) * data.cellSize);
+      }
+
+      padLeft = Math.round(basePadX + c_left * data.cellSize * scale);
+      padRight = Math.round(basePadX + c_right * data.cellSize * scale);
+    }
+
+    const safeW = LETTER_OUTPUT_WIDTH - padLeft - padRight;
     const contentSafeW = Math.max(
       0,
       safeW - CONTENT_SAFE_INSET_LEFT - CONTENT_SAFE_INSET,
     );
-    const contentSafeH = Math.max(0, safeH - CONTENT_SAFE_INSET * 2);
 
     let pLayout: PaletteLayout | null = null;
 
@@ -2274,28 +2319,26 @@ export default function ColorByNumberGrid({
       contentSafeW -
         paletteWidth -
         (paletteWidth > 0 ? PALETTE_GAP : 0) -
-        (paletteWidth > 0 ? PALETTE_X_OFFSET : 0),
+        (paletteWidth > 0 ? PALETTE_X_OFFSET : 0) -
+        GRID_CLIP_PADDING * 2,
     );
 
-    let maxGridH = contentSafeH;
-
     let gridVisualLeftOffset = 0;
-    let gridVisualTopOffset = 0;
 
     // Keep a little extra air in Object Focus mode so the subject is not clipped.
-    if (shouldUseTightCrop(data, activeProject?.removeBackground)) {
+    if (tightCrop) {
       const padRatio = 0.16;
       maxGridW = contentSafeW * (1 - padRatio * 2);
-      maxGridH = contentSafeH * (1 - padRatio * 2);
       gridVisualLeftOffset = contentSafeW * padRatio;
-      gridVisualTopOffset = contentSafeH * padRatio;
     }
 
-    const gridLayout = getPageLayout(data, maxGridW, maxGridH);
+    const gridLayout = getPageLayout(data, maxGridW, maxGridH - GRID_CLIP_PADDING * 2);
 
     const gridVisualTop =
-      PAGE_PADDING_Y + CONTENT_SAFE_INSET + gridVisualTopOffset;
-    const gridVisualTopPos = gridVisualTop + gridLayout.offsetY;
+      PAGE_PADDING_Y + CONTENT_SAFE_INSET + gridVisualTopOffset + GRID_CLIP_PADDING;
+    const gridVisualTopPos = showPalette
+      ? gridVisualTop
+      : gridVisualTop + gridLayout.offsetY;
 
     // Vertical positioning: align palette swatches with grid rows (matching export.ts)
     const firstCell = getCellLayout(0, 0, data);
@@ -2313,6 +2356,8 @@ export default function ColorByNumberGrid({
       gridVisualTop: gridVisualTopPos,
       paletteVisualTop,
       gridVisualLeftOffset,
+      gridPageXOffset: padLeft,
+      gridClipPadding: GRID_CLIP_PADDING,
     };
   }, [data, showPalette, activeProject?.removeBackground]);
 
@@ -2428,13 +2473,16 @@ export default function ColorByNumberGrid({
         paletteLayout,
         gridVisualTop,
         gridVisualLeftOffset = 0,
+        gridPageXOffset,
+        gridClipPadding = 0,
       } = pageLayout;
       const gridXOffset =
-        getPagePaddingX(data) +
+        (gridPageXOffset !== undefined ? gridPageXOffset : getPagePaddingX(data)) +
         CONTENT_SAFE_INSET_LEFT +
         (paletteLayout
           ? PALETTE_X_OFFSET + paletteLayout.palColW + PALETTE_GAP
           : 0) +
+        gridClipPadding +
         gridLayout.offsetX +
         gridVisualLeftOffset;
       const gridYOffset = gridVisualTop;
